@@ -1,4 +1,5 @@
 import {
+  memo,
   startTransition,
   useCallback,
   useEffect,
@@ -50,7 +51,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
  * albums, artists, smart lists). The glass bar shows the filled glyph on
  * every tab, as iOS 26 does, and colors only the selected one; Solid keeps
  * Android's outline at rest. The Collections tab's id stays 'more', so saved
- * start-tab choices keep working. Equalizer lives in Settings.
+ * start-tab choices keep working; so does Home's ('home'). Equalizer lives in Settings.
  */
 const TABS: { id: Tab; label: string; icon: IconName; iconSelected: IconName }[] = [
   { id: 'home', label: 'Home', icon: 'home-outline', iconSelected: 'home' },
@@ -97,6 +98,11 @@ const CIRCLE_OUT = () => {
     },
   };
 };
+/**
+ * Every round glass piece and the bar share this height. Declared before the
+ * field animations, which Reanimated on web runs while this file loads.
+ */
+const SLOT = 56;
 /** The field starts where the search circle sits and slides open to the left. */
 const FIELD_IN = (values: EntryAnimationsValues) => {
   'worklet';
@@ -140,8 +146,6 @@ const POP_SPRING = { damping: 9, stiffness: 260, mass: 0.6 };
 const SWAP_IN = FadeIn.duration(180).easing(EASE_OUT);
 const SWAP_OUT = FadeOut.duration(120).easing(EASE_OUT);
 
-/** Every round glass piece and the bar share this height. */
-const SLOT = 56;
 const GAP = 8;
 const SIDE = 14;
 /** The pill's inner padding around the tab row. */
@@ -185,10 +189,10 @@ type BarProps = {
 };
 
 /** Frosted and Full blur float as glass; Solid is a classic bar on the edge. */
-export function BottomTabs(props: BarProps) {
+export const BottomTabs = memo(function BottomTabs(props: BarProps) {
   const glass = useGlassColors();
   return glass.style === 'solid' ? <SolidBar {...props} /> : <GlassBar {...props} />;
-}
+});
 
 /** Equalizer lives in Settings, so Settings stays lit while it is open. */
 const shownTabFor = (activeTab: Tab) => (activeTab === 'equalizer' ? 'settings' : activeTab);

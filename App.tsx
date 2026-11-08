@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ACCENT_KEY, AMOLED_KEY, FULL_SCREEN_KEY, THEME_KEY } from './src/constants';
 import { ACCENT_OPTIONS, type Accent, type Appearance, ThemeContext } from './src/theme/theme';
 import { MuseApp } from './src/MuseApp';
-import { usePlayback } from './src/playback/usePlayback';
+import { useCurrentTrackId } from './src/playback/usePlayback';
 import { usePreferences } from './src/settings/preferences';
 import { accentForCover } from './src/theme/dynamicAccent';
 import { getArtworkColor } from './modules/muse-audio-metadata';
@@ -135,7 +135,9 @@ export default function App() {
   // keeps the last cover's color while the next one is read, so it never
   // flashes back to the chosen accent between songs.
   const { dynamicAccent } = usePreferences();
-  const playingTrackId = usePlayback().currentTrack?.id ?? null;
+  // The id only: the whole snapshot re-rendered this root on every play,
+  // pause and buffering change.
+  const playingTrackId = useCurrentTrackId();
   const [coverAccent, setCoverAccent] = useState<Accent | null>(null);
   useEffect(() => {
     if (!dynamicAccent || !playingTrackId) {
@@ -152,11 +154,18 @@ export default function App() {
     };
   }, [accent, dynamicAccent, playingTrackId]);
   const shownAccent = dynamicAccent && playingTrackId && coverAccent ? coverAccent : accent;
+  // Every component reads this (useAppStyles). A new object each render made
+  // the whole app, memoized parts and hidden tabs included, re-render on any
+  // change here; now only a real theme or accent change does.
+  const themeValue = useMemo(
+    () => ({ theme, accent: shownAccent, isAmoled }),
+    [isAmoled, shownAccent, theme],
+  );
 
   return (
     // Gestures do nothing, with no error, unless this wraps the app.
     <GestureHandlerRootView style={rootStyles.root}>
-      <ThemeContext.Provider value={{ theme, accent: shownAccent, isAmoled }}>
+      <ThemeContext.Provider value={themeValue}>
         <SafeAreaProvider>
           <MuseApp
             theme={theme}

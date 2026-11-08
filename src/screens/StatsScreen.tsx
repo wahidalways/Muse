@@ -27,9 +27,14 @@ import { formatHour, formatListeningTime, percentChange } from '../utils/format'
 import { useAppStyles } from '../theme/styles';
 import { EASE_OUT } from '../motion/motion';
 import { SectionHeading } from './HomeTab';
+import { usePulse } from '../settings/pulse';
+import { RecapStory, dateFromKey, recapCard, shortRange, useRecap } from './pulse/RecapStory';
+import { ShareSheet } from './pulse/ShareSheet';
+import { cardFromStats } from './pulse/ShareCard';
+import { Ionicons } from '@expo/vector-icons';
 
 const RANGES: { id: StatsRange; label: string; period: string }[] = [
-  { id: '7d', label: '7 days', period: 'last week' },
+  { id: 'week', label: 'This week', period: 'the same days last week' },
   { id: '30d', label: '30 days', period: 'the 30 days before' },
   { id: 'all', label: 'All time', period: '' },
 ];
@@ -61,14 +66,18 @@ export function StatsScreen({
   onBack: () => void;
 }) {
   const styles = useAppStyles();
-  const [range, setRange] = useState<StatsRange>('7d');
+  const [range, setRange] = useState<StatsRange>('week');
+  const { weekStart } = usePulse();
+  const [isRecapOpen, setIsRecapOpen] = useState(false);
+  // Which card the share sheet makes: the range on screen, or last week's recap.
+  const [sharing, setSharing] = useState<'range' | 'recap' | null>(null);
   // Charts rebuild at low priority, so playback stays quick while they do.
   const history = useDeferredValue(liveHistory);
   const lookup = (trackId: string) => tracksById.get(trackId);
 
   const stats = useMemo(
-    () => computeStats(history, range, (id) => tracksById.get(id)),
-    [range, tracksById, history],
+    () => computeStats(history, range, (id) => tracksById.get(id), undefined, weekStart),
+    [range, tracksById, history, weekStart],
   );
   const calendar = useMemo(
     () => getCalendar(history, (id) => tracksById.get(id), CALENDAR_WEEKS),
@@ -81,6 +90,8 @@ export function StatsScreen({
     [goalSeconds, tracksById, history],
   );
   const coverage = useMemo(() => getLibraryCoverage(history, tracks), [tracks, history]);
+  // The latest recap stays here even after its Home tile is hidden.
+  const recap = useRecap(history, tracksById, goalSeconds, weekStart);
 
   const rangeInfo = RANGES.find((item) => item.id === range) ?? RANGES[0];
   const change = stats.previous ? percentChange(stats.seconds, stats.previous.seconds) : null;
@@ -108,6 +119,17 @@ export function StatsScreen({
         <Text accessibilityRole="header" style={styles.statsTitle}>
           Your stats
         </Text>
+        {historyLoaded && stats.plays > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Share ${rangeInfo.label.toLowerCase()} as an image`}
+            hitSlop={8}
+            onPress={() => setSharing('range')}
+            style={[styles.headerBackButton, { marginLeft: 'auto' }]}
+          >
+            <Ionicons accessible={false} name="share-outline" size={18} color={String(styles.statsTitle.color)} />
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.statsSegment} accessibilityRole="tablist">
@@ -128,6 +150,21 @@ export function StatsScreen({
           );
         })}
       </View>
+
+      {recap && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Play your week in music, ${recap.range}`}
+          onPress={() => setIsRecapOpen(true)}
+          style={[styles.homeCard, styles.homeCardHeader]}
+        >
+          <View style={styles.homeSongCopy}>
+            <Text style={styles.homeSongTitle}>Your week in music</Text>
+            <Text style={styles.homeSongHint}>{recap.range}</Text>
+          </View>
+          <Text style={styles.homeLinkLabel}>Play ›</Text>
+        </Pressable>
+      )}
 
       {!historyLoaded ? (
         <Text style={[styles.homeMutedText, styles.statsTopGap]}>Loading your history...</Text>
@@ -171,7 +208,7 @@ export function StatsScreen({
                   label: stats.bucketUnit === 'week' ? `Week of ${bucket.label}` : bucket.label,
                   value: bucket.seconds,
                 }))}
-                kind={range === '7d' ? 'bars' : 'area'}
+                kind={range === 'week' ? 'bars' : 'area'}
                 formatValue={formatListeningTime}
                 readoutPrefix={stats.bucketUnit === 'week' ? 'This week' : 'Today'}
                 height={130}
@@ -512,6 +549,47 @@ export function StatsScreen({
             </Text>
           )}
         </>
+      )}
+      {recap && (
+        <RecapStory
+          visible={isRecapOpen}
+          recap={recap}
+          tracksById={tracksById}
+          goalSeconds={goalSeconds}
+          onPlayTrack={onPlayTrack}
+          onClose={() => setIsRecapOpen(false)}
+          onShare={() => {
+            setIsRecapOpen(false);
+            setSharing('recap');
+          }}
+        />
+      )}
+      {sharing && (
+        <ShareSheet
+          visible
+          title={sharing === 'recap' ? 'Share your week' : `Share ${rangeInfo.label.toLowerCase()}`}
+          data={
+            sharing === 'recap' && recap
+              ? recapCard(recap, tracksById, goalSeconds)
+              : cardFromStats(stats, tracksById, {
+                  kicker: range === 'week' ? 'My week in music' : range === '30d' ? 'My last 30 days' : 'My music so far',
+                  range: shortRange(
+                    dateFromKey(stats.buckets[0].key),
+                    range === 'week' ? dateFromKey(stats.buckets[6].key) : new Date(),
+                  ),
+                  issue: range === 'week' ? 'Weekly' : range === '30d' ? 'Monthly' : 'All time',
+                  short: shortRange(
+                    dateFromKey(stats.buckets[0].key),
+                    range === 'week' ? dateFromKey(stats.buckets[6].key) : new Date(),
+                  ),
+                  goal:
+                    goalMinutes > 0
+                      ? { value: `${goalDaysMet} of ${stats.dayCount}`, sub: `${formatListeningTime(goalSeconds)} a day`, emoji: '🎯' }
+                      : null,
+                })
+          }
+          onClose={() => setSharing(null)}
+        />
       )}
     </View>
   );

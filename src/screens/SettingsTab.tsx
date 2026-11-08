@@ -5,6 +5,9 @@ import Animated from 'react-native-reanimated';
 import { ACCENT_OPTIONS, type Accent, type Appearance, type Theme } from '../theme/theme';
 import { opticalSize } from '../components/icons';
 import { GoalPicker } from '../components/GoalPicker';
+import { setWeekStart, usePulse } from '../settings/pulse';
+import type { WeekStart } from '../history/stats';
+import { WEEK_STARTS } from './pulse/CustomizeSheet';
 import {
   Segmented,
   SettingsBlock,
@@ -531,6 +534,8 @@ function LibraryPage({ accent, isLoading, onManageFolders, onRefresh, onOpenPerm
 function ListeningPage({ goalMinutes, onChangeGoal }: Props) {
   const styles = useAppStyles();
   return (
+    <>
+    <PulseWeekSection />
     <SettingsSection title="Daily goal" footer="Track your progress on Home.">
       <SettingsBlock
         icon="trophy"
@@ -540,6 +545,23 @@ function ListeningPage({ goalMinutes, onChangeGoal }: Props) {
         <View style={styles.goalPickerWrap}>
           <GoalPicker goalMinutes={goalMinutes} onChange={onChangeGoal} />
         </View>
+      </SettingsBlock>
+    </SettingsSection>
+    </>
+  );
+}
+
+function PulseWeekSection() {
+  const { weekStart } = usePulse();
+  return (
+    <SettingsSection title="Home" footer="Sets This week on Home and when your weekly recap arrives.">
+      <SettingsBlock icon="calendar" tint={TILE.blue} title="Week starts on">
+        <Segmented
+          label="Week starts on"
+          options={WEEK_STARTS}
+          value={String(weekStart)}
+          onChange={(value) => setWeekStart(Number(value) as WeekStart)}
+        />
       </SettingsBlock>
     </SettingsSection>
   );

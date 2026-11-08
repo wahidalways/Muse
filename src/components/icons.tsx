@@ -113,6 +113,8 @@ const OPTICAL_SCALE: Partial<Record<IoniconName, number>> = {
   repeat: 1.15,
   search: 0.9,
   settings: 0.95,
+  'stats-chart': 0.85,
+  'stats-chart-outline': 0.85,
   'settings-outline': 0.95,
   shuffle: 1.1,
   'sparkles-outline': 0.75,

@@ -5,7 +5,8 @@ import type { ListeningEvent, MusicTrack } from '../types';
  * no runtime imports, so `scripts/check-stats.mjs` can run them in plain Node.
  */
 
-export type StatsRange = '7d' | '30d' | 'all';
+/** 'week' is the calendar week from the chosen start day; the others are rolling. */
+export type StatsRange = 'week' | '7d' | '30d' | 'all';
 
 const DAY_MS = 86_400_000;
 /** A play under this many seconds (or 80% of a short song) counts as a skip. */
@@ -94,8 +95,11 @@ export function isSkip(event: ListeningEvent): boolean {
   return event.listenedSeconds < limit;
 }
 
-function rangeStart(history: ListeningEvent[], range: StatsRange, now: number): number {
+function rangeStart(history: ListeningEvent[], range: StatsRange, now: number, weekStart: WeekStart): number {
   const today = startOfDay(now);
+  if (range === 'week') {
+    return addDays(today, -((new Date(today).getDay() - weekStart + 7) % 7));
+  }
   if (range === '7d') {
     return addDays(today, -6);
   }
@@ -132,17 +136,21 @@ export function computeStats(
   range: StatsRange,
   lookup: Lookup,
   now = Date.now(),
+  weekStart: WeekStart = 6,
 ): ListeningStats {
-  const start = rangeStart(history, range, now);
+  const start = rangeStart(history, range, now, weekStart);
   const end = addDays(startOfDay(now), 1);
   const dayCount = Math.max(1, Math.round((end - start) / DAY_MS));
   const inRange = history.filter((event) => event.playedAt >= start && event.playedAt < end);
 
   let previous: ListeningStats['previous'] = null;
   if (range !== 'all') {
-    const previousStart = addDays(start, -dayCount);
+    // A calendar week compares with the same days of the week before, so a
+    // half-finished week is never set against a whole one.
+    const previousStart = addDays(start, range === 'week' ? -7 : -dayCount);
+    const previousEnd = addDays(previousStart, dayCount);
     const before = history.filter(
-      (event) => event.playedAt >= previousStart && event.playedAt < start,
+      (event) => event.playedAt >= previousStart && event.playedAt < previousEnd,
     );
     previous = {
       plays: before.length,
@@ -164,7 +172,9 @@ export function computeStats(
     bucketUnit === 'week' ? addDays(start, -weekday(start)) : start;
   const bucketDays = bucketUnit === 'week' ? 7 : 1;
   const buckets: Bucket[] = [];
-  for (let time = bucketStart; time < end; time = addDays(time, bucketDays)) {
+  // A calendar week shows all seven days; the ones still to come stay empty.
+  const bucketEnd = range === 'week' ? addDays(start, 7) : end;
+  for (let time = bucketStart; time < bucketEnd; time = addDays(time, bucketDays)) {
     buckets.push({
       key: dayKey(time),
       label:
@@ -301,6 +311,31 @@ export function getDailySeconds(history: ListeningEvent[], lookup: Lookup): Map<
     totals.set(key, (totals.get(key) ?? 0) + listenedSeconds(event, lookup));
   });
   return totals;
+}
+
+/** The day a calendar week starts on, as Date.getDay(): 6 Saturday, 0 Sunday, 1 Monday. */
+export type WeekStart = 0 | 1 | 6;
+
+/**
+ * The calendar week that holds `now`, from `weekStart`. Days after today have
+ * null seconds. `previousSeconds` covers the same days of the week before, so a
+ * half-finished week is never compared with a whole one.
+ */
+export function getWeek(history: ListeningEvent[], lookup: Lookup, weekStart: WeekStart, now = Date.now()) {
+  const today = startOfDay(now);
+  const start = addDays(today, -((new Date(today).getDay() - weekStart + 7) % 7));
+  const daily = getDailySeconds(history, lookup);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const time = addDays(start, index);
+    return { time, seconds: time > today ? null : (daily.get(dayKey(time)) ?? 0) };
+  });
+  const sofar = days.filter((day) => day.seconds !== null);
+  return {
+    start,
+    days,
+    seconds: sofar.reduce((sum, day) => sum + (day.seconds ?? 0), 0),
+    previousSeconds: sofar.reduce((sum, day) => sum + (daily.get(dayKey(addDays(day.time, -7))) ?? 0), 0),
+  };
 }
 
 /** Today's progress toward a daily goal, and the days the goal was met. */

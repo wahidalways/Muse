@@ -16,6 +16,18 @@ export function usePlayback(): PlaybackSnapshot {
 }
 
 /**
+ * Only the current song's id. For code high up the tree (the app root):
+ * it re-renders on a song change, never on play, pause or buffering.
+ */
+export function useCurrentTrackId(): string | null {
+  const controller = getPlaybackController();
+  return useSyncExternalStore(
+    controller.subscribe,
+    () => controller.getSnapshot().currentTrack?.id ?? null,
+  );
+}
+
+/**
  * Position and duration. Updates every status tick, so only small
  * components (progress bars, time labels) should use it.
  */

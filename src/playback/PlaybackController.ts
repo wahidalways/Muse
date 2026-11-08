@@ -35,8 +35,16 @@ export const PLAYBACK_STATE_KEY = '@muse/playback-state/v1';
  */
 const CAN_USE_LOCK_SCREEN = !isRunningInExpoGo();
 
-const TRACKS_BEHIND = 2;
-const TRACKS_AHEAD = 5;
+// Every add or remove is a blocking call, so a tap on a song costs one per
+// slot. Three ahead still carries the lock screen's Next while JS is slow.
+const TRACKS_BEHIND = 1;
+const TRACKS_AHEAD = 3;
+/**
+ * After this controller edits the native queue, reports already on their way
+ * describe the old layout. For this long they are skipped without asking the
+ * player (each question is another blocking call); a fresh report follows.
+ */
+const STALE_REPORT_MS = 1000;
 const SAVE_INTERVAL_MS = 10_000;
 const STATUS_INTERVAL_MS = 1000;
 /** Loading shows only when the player has been buffering at least this long. */
@@ -106,7 +114,11 @@ export class PlaybackController {
   private nativeIndex = 0;
   private originalQueue: MusicTrack[] = [];
   private isLockScreenActive = false;
+  /** The song the lock screen shows, so a resume does not resend it. */
+  private lockScreenTrack: MusicTrack | null = null;
   private artworkRequest = 0;
+  /** When this controller last changed the native queue or its position. */
+  private windowEditedAt = 0;
   private hasCountedCurrentListen = false;
   /**
    * After a play or pause, the state the player was told to reach. Until it
@@ -154,7 +166,7 @@ export class PlaybackController {
     // by `dispose`, when development code reloads replace it.
     this.subscriptions = [
       this.player.addListener('playlistStatusUpdate', this.handleStatus),
-      this.player.addListener('trackChanged', this.syncWithNativeTrack),
+      this.player.addListener('trackChanged', this.handleTrackChanged),
       AppState.addEventListener('change', this.handleAppStateChange),
       // A song's saved speed can change (or load) at any time.
       { remove: subscribeTrackSpeeds(this.applyTrackSpeed) },
@@ -163,6 +175,7 @@ export class PlaybackController {
 
   /** Stops and releases the native player. Development reloads only. */
   dispose() {
+    this.pendingLoad = null;
     this.subscriptions.forEach((subscription) => subscription.remove());
     this.subscriptions = [];
     if (this.expectedPlayingTimer) {
@@ -309,6 +322,7 @@ export class PlaybackController {
     }
 
     this.setError('');
+    this.flushPendingLoad();
     try {
       await this.ensureAudioMode();
 
@@ -335,10 +349,17 @@ export class PlaybackController {
         ? [track, ...shuffleTracks(orderedTracks.slice(1))]
         : orderedTracks;
 
+      // The screen shows the new song (and Pause) first; the native queue, a
+      // run of blocking calls, loads once that frame is up, so a tap never
+      // looks stuck. Reports until then describe the old queue.
+      this.windowEditedAt = Date.now();
       this.showTrack({ queue, queueIndex: 0, currentTrack: track, queueSource: source ?? null });
-      this.loadWindowAt(0);
       this.hasCountedCurrentListen = false;
-      this.startPlayback();
+      this.expectPlaying(true);
+      this.deferLoad(() => {
+        this.loadWindowAt(0);
+        this.startPlayback();
+      });
     } catch (error) {
       this.setError(
         error instanceof Error ? error.message : 'Could not play this song.',
@@ -346,12 +367,45 @@ export class PlaybackController {
     }
   };
 
+  /** A queue load waiting for the frame that shows its song. */
+  private pendingLoad: (() => void) | null = null;
+
+  private deferLoad(load: () => void) {
+    this.pendingLoad = load;
+    // Two frames: the first mounts the new screen, the second has drawn it.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (this.pendingLoad === load) {
+          this.flushPendingLoad();
+        }
+      }),
+    );
+  }
+
+  /**
+   * Runs a load still waiting for its frame. Every other action calls this
+   * first, so nothing ever acts on a half-loaded queue.
+   */
+  private flushPendingLoad() {
+    const load = this.pendingLoad;
+    if (!load) {
+      return;
+    }
+    this.pendingLoad = null;
+    try {
+      load();
+    } catch (error) {
+      this.setError(error instanceof Error ? error.message : 'Could not play this song.');
+    }
+  }
+
   /**
    * Android pauses by itself when headphones or Bluetooth audio disconnect.
    * With "Pause on disconnect" off, this plays on, through the speaker, but
    * only if music was actually playing when it happened.
    */
   resumeAfterDisconnect = () => {
+    this.flushPendingLoad();
     if (!this.snapshot.currentTrack || Date.now() - this.lastPlayingAt > 2000) {
       return;
     }
@@ -383,6 +437,7 @@ export class PlaybackController {
   getPlaybackSpeed = () => this.speed;
 
   togglePlayback = () => {
+    this.flushPendingLoad();
     if (this.snapshot.isPlaying) {
       this.player.pause();
       this.expectPlaying(false);
@@ -402,6 +457,7 @@ export class PlaybackController {
   };
 
   pause = () => {
+    this.flushPendingLoad();
     this.player.pause();
     this.expectPlaying(false);
   };
@@ -423,6 +479,7 @@ export class PlaybackController {
   };
 
   skipNext = () => {
+    this.flushPendingLoad();
     const { queue, queueIndex } = this.snapshot;
     if (!this.trackAfterSkip(1)) {
       return;
@@ -432,6 +489,7 @@ export class PlaybackController {
   };
 
   skipPrevious = () => {
+    this.flushPendingLoad();
     const { queue, queueIndex } = this.snapshot;
     if (!this.trackAfterSkip(-1)) {
       this.pendingSeek = null;
@@ -443,6 +501,7 @@ export class PlaybackController {
 
   /** `play` false loads the song at its start and leaves it paused. */
   skipToQueueIndex = (queueIndex: number, play = true) => {
+    this.flushPendingLoad();
     // A skip you chose cuts over at once; only a song ending on its own fades.
     this.resetFade();
     const track = this.snapshot.queue[queueIndex];
@@ -457,6 +516,7 @@ export class PlaybackController {
     } else {
       this.player.skipTo(nativePosition);
       this.nativeIndex = nativePosition;
+      this.windowEditedAt = Date.now();
       this.showTrack({ queueIndex, currentTrack: track });
       this.refillWindow();
     }
@@ -479,6 +539,7 @@ export class PlaybackController {
   };
 
   toggleShuffle = () => {
+    this.flushPendingLoad();
     this.syncWithNativeTrack();
     const { queue, queueIndex, currentTrack, shuffle } = this.snapshot;
     const nextShuffle = !shuffle;
@@ -518,6 +579,7 @@ export class PlaybackController {
   };
 
   cycleRepeatMode = () => {
+    this.flushPendingLoad();
     this.syncWithNativeTrack();
     const { repeatMode } = this.snapshot;
     const nextMode: RepeatMode =
@@ -532,6 +594,7 @@ export class PlaybackController {
   };
 
   seekToRatio = (ratio: number) => {
+    this.flushPendingLoad();
     const { duration } = this.progress;
     if (duration <= 0) {
       return;
@@ -596,6 +659,7 @@ export class PlaybackController {
    * current song never moves, so playback is not interrupted.
    */
   moveQueueItem = (from: number, to: number) => {
+    this.flushPendingLoad();
     this.syncWithNativeTrack();
     const { queue, queueIndex, shuffle } = this.snapshot;
     const isUpcoming = (index: number) => index > queueIndex && index < queue.length;
@@ -616,6 +680,7 @@ export class PlaybackController {
 
   /** Takes one upcoming song out of the queue. It stays in the library. */
   removeFromQueue = (index: number) => {
+    this.flushPendingLoad();
     this.syncWithNativeTrack();
     const { queue, queueIndex, shuffle } = this.snapshot;
     if (index <= queueIndex || index >= queue.length) {
@@ -636,6 +701,7 @@ export class PlaybackController {
    * takes its place, and keeps playing if music was on.
    */
   removeTrack = (trackId: string) => {
+    this.flushPendingLoad();
     this.syncWithNativeTrack();
     const { queue, queueIndex, currentTrack, isPlaying } = this.snapshot;
     const index = queue.findIndex((track) => track.id === trackId);
@@ -653,6 +719,7 @@ export class PlaybackController {
     if (nextQueue.length === 0) {
       this.player.pause();
       this.player.clear();
+      this.windowEditedAt = Date.now();
       this.window = [];
       this.nativeIndex = 0;
       this.update({ queue: [], queueIndex: 0, currentTrack: null, isPlaying: false });
@@ -763,17 +830,16 @@ export class PlaybackController {
     }
 
     if (status.currentIndex !== this.nativeIndex) {
+      // Queued while this controller edited the queue: about the old layout.
+      if (this.isStaleReport()) {
+        return;
+      }
       this.syncWithNativeTrack();
-    }
-    // About another song while the player itself agrees with us: a report
-    // from before a skip that was already on its way. A fresh one follows
-    // within a second. (Only checked on a mismatch: reading the live index
-    // is a native call.)
-    if (
-      status.currentIndex !== this.nativeIndex &&
-      this.player.currentIndex === this.nativeIndex
-    ) {
-      return;
+      // Still about another song while the player agrees with us: a report
+      // from before a skip. A fresh one follows within a second.
+      if (status.currentIndex !== this.nativeIndex) {
+        return;
+      }
     }
 
     // Count steady playback only. A seek or song change moves the position by
@@ -896,8 +962,21 @@ export class PlaybackController {
     this.save();
   };
 
+  /** Clears, adds and skips fire these too; only a real song change needs a look. */
+  private handleTrackChanged = () => {
+    if (!this.isStaleReport()) {
+      this.syncWithNativeTrack();
+    }
+  };
+
+  private isStaleReport() {
+    return Date.now() - this.windowEditedAt < STALE_REPORT_MS;
+  }
+
   private handleAppStateChange = (state: AppStateStatus) => {
     if (state !== 'active') {
+      // Frames stop in the background, so a waiting load runs now.
+      this.flushPendingLoad();
       this.save();
     }
   };
@@ -968,6 +1047,7 @@ export class PlaybackController {
     );
     this.nativeIndex = Math.max(0, nativePosition);
     this.player.skipTo(this.nativeIndex);
+    this.windowEditedAt = Date.now();
   }
 
   /** Keeps the current song playing and rebuilds the songs around it. */
@@ -984,6 +1064,7 @@ export class PlaybackController {
     this.window = [this.snapshot.queueIndex];
     this.nativeIndex = 0;
     this.refillWindow();
+    this.windowEditedAt = Date.now();
   }
 
   /** Trims played songs and tops the window up behind and ahead. */
@@ -1019,6 +1100,7 @@ export class PlaybackController {
       this.player.add({ uri: track.uri, name: track.title });
       this.window.push(next);
     }
+    this.windowEditedAt = Date.now();
   }
 
   // ---------------------------------------------------------------------------
@@ -1135,38 +1217,38 @@ export class PlaybackController {
     this.update({ playRequestId: this.snapshot.playRequestId + 1 });
   }
 
+  /** Only when the song (or its details) changed: a resume needs nothing new. */
   private updateLockScreen(track: MusicTrack) {
-    if (this.isLockScreenActive) {
-      this.player.updateLockScreenMetadata(lockScreenMetadata(track));
+    if (this.isLockScreenActive && track !== this.lockScreenTrack) {
       this.loadLockScreenArtwork(track);
     }
   }
 
   /**
-   * Shows the title right away, then adds album art once a cached file of it
-   * is ready. Library artwork uses content:// uris, which the lock screen
-   * cannot load, so it gets a file:// copy instead.
+   * One update per song, title and cover together, once the cover file is
+   * ready. Sent after the tap's own work, not during it: each update is a
+   * blocking call and rebuilds the media notification, and a title-only
+   * update first would clear the cover and make it decode again. Library
+   * artwork uses content:// uris, which the lock screen cannot load, so it
+   * gets a file:// copy instead.
    */
   private loadLockScreenArtwork(track: MusicTrack) {
+    this.lockScreenTrack = track;
     const request = ++this.artworkRequest;
-    void getArtworkFile(track.id).then((artworkUrl) => {
-      if (
-        !artworkUrl ||
-        request !== this.artworkRequest ||
-        !this.isLockScreenActive ||
-        this.snapshot.currentTrack?.id !== track.id
-      ) {
-        return;
-      }
-      try {
-        this.player.updateLockScreenMetadata({
-          ...lockScreenMetadata(track),
-          artworkUrl,
-        });
-      } catch {
-        // Artwork is optional. The title and controls are already showing.
-      }
-    });
+    void getArtworkFile(track.id)
+      .catch(() => null)
+      .then((artworkUrl) => {
+        if (request !== this.artworkRequest || !this.isLockScreenActive) {
+          return;
+        }
+        try {
+          this.player.updateLockScreenMetadata(
+            artworkUrl ? { ...lockScreenMetadata(track), artworkUrl } : lockScreenMetadata(track),
+          );
+        } catch {
+          // The controls are already showing; the details catch up next song.
+        }
+      });
   }
 
   private save() {

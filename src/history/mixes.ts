@@ -52,7 +52,7 @@ export function getMixes(
       tracks: tracks.filter((track) => favorites.has(track.id)),
       shuffle: false,
     },
-    { id: 'repeat', title: 'On repeat', tracks: ranked([...recentPlays]).slice(0, 25), shuffle: false },
+    { id: 'repeat', title: 'Heavy rotation', tracks: ranked([...recentPlays]).slice(0, 25), shuffle: false },
     {
       id: 'added',
       title: 'Recently added',

@@ -73,3 +73,15 @@ export const DEMO_TRACKS: MusicTrack[] = DEMOS.map((demo, index) => ({
   dateModified: NOW - demo.addedDaysAgo * DAY - index * 60,
   duration: demo.duration,
 }));
+
+/**
+ * The same songs played from files on the phone. In Expo Go a bundled sound
+ * is streamed from the dev server over Wi-Fi on every play, which no real
+ * build does; downloading once (cached after) keeps tap-to-play timing honest.
+ */
+export async function loadLocalDemoTracks(): Promise<MusicTrack[]> {
+  const assets = await Promise.all(
+    DEMOS.map((demo) => Asset.fromModule(demo.file).downloadAsync().catch(() => null)),
+  );
+  return DEMO_TRACKS.map((track, index) => ({ ...track, uri: assets[index]?.localUri ?? track.uri }));
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { isRunningInExpoGo } from 'expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationBar } from 'expo-navigation-bar';
@@ -20,6 +20,7 @@ import { sidewaysDragLock } from './motion/gestureLock';
 import { setBarMinimized, useBarScroll } from './motion/barScroll';
 import Animated, {
   FadeIn,
+  FadeOut,
   FadeInDown,
   Extrapolation,
   FadeOutDown,
@@ -36,7 +37,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getPermissionsAsync, requestPermissionsAsync } from 'expo-media-library';
 import type { LibrarySort, SortDirection } from './library/sortTracks';
 import { getPlaybackController, shuffleTracks } from './playback/PlaybackController';
-import { usePlayerTransition } from './player/playerTransition';
+import { settlePlayer, usePlayerTransition } from './player/playerTransition';
 import { addAudioBecomingNoisyListener, getLibraryVersion } from '../modules/muse-audio-metadata';
 import { usePlayback } from './playback/usePlayback';
 import type {
@@ -105,7 +106,7 @@ import {
   saveLibraryCache,
   writeLibraryCache,
 } from './library/library';
-import { DEMO_FOLDER, DEMO_TRACKS } from './library/demoTracks'; // Expo Go test songs: remove before shipping
+import { DEMO_FOLDER, DEMO_TRACKS, loadLocalDemoTracks } from './library/demoTracks'; // Expo Go test songs: remove before shipping
 import { useAppStyles } from './theme/styles';
 import {
   EASE_OUT,
@@ -129,8 +130,9 @@ const FULL_CHECK_INTERVAL_MS = 5 * 60_000;
 // is uninvited, so it is quick, and it leaves faster than it arrived.
 /** The dock slides onto the keyboard; nothing else about it animates. */
 const DOCK_LIFT = { duration: 200, easing: EASE_OUT };
-/** Setup screens and search fade in instead of popping in. Tabs fade in TabLayer. */
+/** Setup screens fade in instead of popping in. Tabs cross-fade in TabLayer. */
 const PAGE_FADE = FadeIn.duration(180).easing(EASE_OUT);
+const SEARCH_FADE_OUT = FadeOut.duration(180).easing(EASE_OUT);
 /** The tabs in tab-bar order, for swiping between them. */
 const SWIPE_TABS: Tab[] = ['home', 'library', 'more', 'settings'];
 /** How far a tapped tab's page slides in from, in points. */
@@ -276,6 +278,27 @@ export function MuseApp({
   if (!currentTrack && isFullPlayerOpen) {
     setIsFullPlayerOpen(false);
   }
+  // The mini player <-> full player morph, shared by both (UI thread).
+  const playerTransition = usePlayerTransition();
+  /**
+   * Opens or closes the full player. The morph starts now, on the UI thread,
+   * and React redraws behind it at low priority, so the sheet never waits for
+   * the app to re-render first. A drag already started its own spring (with
+   * the finger's speed), so that one is left running.
+   */
+  const changePlayerOpen = useCallback(
+    (open: boolean) => {
+      if (playerTransition.target.get() !== (open ? 1 : 0)) {
+        settlePlayer(playerTransition, open);
+      }
+      startTransition(() => setIsFullPlayerOpen(open));
+    },
+    [playerTransition],
+  );
+  // Closed, the full player catches up at low priority, so a song change
+  // paints the list and the mini player first. Open, it follows live.
+  const deferredPlayback = useDeferredValue(playback);
+  const sheetPlayback = isFullPlayerOpen ? playback : deferredPlayback;
   /** Set when Equalizer was opened from the full player: the tab to reopen it over. */
   const [playerReturnTab, setPlayerReturnTab] = useState<Tab | null>(null);
   /** The Settings category page that is open, or null for the main list. */
@@ -672,10 +695,10 @@ export function MuseApp({
   const openIfCurrent = useCallback(
     (track: MusicTrack) => {
       if (playbackController.getSnapshot().currentTrack?.id === track.id) {
-        setIsFullPlayerOpen(true);
+        changePlayerOpen(true);
       }
     },
-    [playbackController],
+    [changePlayerOpen, playbackController],
   );
 
   const playTrack = useCallback(
@@ -794,6 +817,8 @@ export function MuseApp({
     if (isRunningInExpoGo()) {
       setFolders([DEMO_FOLDER]);
       setTracks(DEMO_TRACKS);
+      // Played from the phone once downloaded, as a real build would.
+      void loadLocalDemoTracks().then(setTracks);
       setBlockedFolderIds([]);
       setHasSavedFolderRules(true);
       setScreen('app');
@@ -933,7 +958,7 @@ export function MuseApp({
         activeTab !== 'home'
       : screen !== 'welcome' && screen !== 'starting');
 
-  const openFullPlayer = useCallback(() => setIsFullPlayerOpen(true), []);
+  const openFullPlayer = useCallback(() => changePlayerOpen(true), [changePlayerOpen]);
 
   const goBack = useCallback(() => {
     if (isLoading) {
@@ -942,8 +967,8 @@ export function MuseApp({
 
     if (screen === 'app') {
       if (isFullPlayerOpen) {
-        // The player morphs back into the mini player on its own.
-        setIsFullPlayerOpen(false);
+        // The player morphs back into the mini player.
+        changePlayerOpen(false);
         return;
       }
       if (isSearchOpen) {
@@ -963,7 +988,7 @@ export function MuseApp({
         if (playerReturnTab) {
           setActiveTab(playerReturnTab);
           setPlayerReturnTab(null);
-          setIsFullPlayerOpen(true);
+          changePlayerOpen(true);
         } else {
           setActiveTab(equalizerBackTab);
         }
@@ -994,6 +1019,7 @@ export function MuseApp({
     }
   }, [
     cancelFolderChanges,
+    changePlayerOpen,
     equalizerBackTab,
     settingsPage,
     hasSavedFolderRules,
@@ -1025,14 +1051,14 @@ export function MuseApp({
     [activeTab],
   );
 
-  const openSearch = () => setIsSearchOpen(true);
+  const openSearch = useCallback(() => setIsSearchOpen(true), []);
   /** From a search result to its page in More, which search then gives way to. */
-  const openSearchResult = (route: MoreRoute) => {
+  const openSearchResult = useCallback((route: MoreRoute) => {
     setIsSearchOpen(false);
     setIsStatsOpen(false);
     setMoreStack([route]);
     setActiveTab('more');
-  };
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
@@ -1171,13 +1197,10 @@ export function MuseApp({
         Math.abs(projected) > windowWidth * 0.3 &&
         Math.sign(projected) === Math.sign(x)
       ) {
-        swipeX.set(
-          withTiming(-direction * windowWidth, { duration: 170, easing: EASE_OUT }, (finished) => {
-            if (finished) {
-              scheduleOnRN(commitSwipe, direction);
-            }
-          }),
-        );
+        // The new page starts rendering now, while this one slides away, so
+        // there is no empty gap after the slide waiting for it.
+        swipeX.set(withTiming(-direction * windowWidth, { duration: 170, easing: EASE_OUT }));
+        scheduleOnRN(commitSwipe, direction);
       } else {
         swipeX.set(withSpring(0, { ...SNAP_BACK_SPRING, velocity: event.velocityX }));
       }
@@ -1190,21 +1213,16 @@ export function MuseApp({
 
   // Stats slides over Home like a pushed page; switching tabs just fades.
   const statsDirection = useNavDirection(isStatsOpen ? 1 : 0, activeTab);
-  // The mini player <-> full player morph, shared by both (UI thread).
-  const playerTransition = usePlayerTransition();
   const reduceMotion = useReducedMotion();
   // The app recedes behind the opening player, as behind an iOS sheet.
   const recedeStyle = useAnimatedStyle(() => {
     const open = reduceMotion
       ? 0
       : interpolate(playerTransition.progress.get(), [0, 1], [0, 1], Extrapolation.CLAMP);
-    return open === 0
-      ? { transform: [{ scale: 1 }], borderRadius: 0 }
-      : {
-          transform: [{ scale: interpolate(open, [0, 1], [1, 0.94]) }],
-          borderRadius: interpolate(open, [0, 1], [0, 18]),
-          overflow: 'hidden',
-        };
+    // Scale only. Rounded, clipped corners cost a clip of the whole app every
+    // frame and wait behind React (not transform/opacity), and over the same
+    // color behind they barely showed.
+    return { transform: [{ scale: interpolate(open, [0, 1], [1, 0.94]) }] };
   });
   // Library and More are virtualized lists with their own scrolling; the
   // other tabs share this padding inside a plain scroll view.
@@ -1237,6 +1255,59 @@ export function MuseApp({
     [menuTrackId, visibleHistory],
   );
 
+  // Stable, so the memoized full player, mini player and bar skip the re-renders
+  // that tab switches, search typing and history updates would otherwise cause.
+  const closeSearch = useCallback(() => setIsSearchOpen(false), []);
+  const openSleepTimer = useCallback(() => setIsSleepTimerOpen(true), []);
+  const openPlayerGroup = useCallback(
+    (route: MoreRoute) => {
+      // The player morphs closed while the page opens behind it.
+      changePlayerOpen(false);
+      openSearchResult(route);
+    },
+    [changePlayerOpen, openSearchResult],
+  );
+  const openEqualizerFromPlayer = useCallback(() => {
+    selectTab('equalizer');
+    // Back from Equalizer reopens the player over this tab.
+    setPlayerReturnTab(activeTab);
+  }, [activeTab, selectTab]);
+  const deleteFromPlayer = useCallback((track: MusicTrack) => void deleteSong(track), [deleteSong]);
+  const openCurrentTrackMenu = useCallback(() => {
+    if (currentTrack) {
+      openTrackMenu(currentTrack);
+    }
+  }, [currentTrack, openTrackMenu]);
+  const nowPlaying = useMemo(
+    () =>
+      currentTrack
+        ? {
+            track: currentTrack,
+            isPlaying: playback.isPlaying,
+            isBuffering: playback.isBuffering,
+            onTogglePlayback: togglePlayback,
+            onNext: skipNext,
+            onPrevious: skipPrevious,
+            trackAfterSkip: playbackController.trackAfterSkip,
+            onOpenPlayer: openFullPlayer,
+            onOpenChange: changePlayerOpen,
+            transition: playerTransition,
+          }
+        : null,
+    [
+      changePlayerOpen,
+      currentTrack,
+      openFullPlayer,
+      playback.isBuffering,
+      playback.isPlaying,
+      playbackController,
+      playerTransition,
+      skipNext,
+      skipPrevious,
+      togglePlayback,
+    ],
+  );
+
   return (
     <View style={styles.screen}>
       <StatusBar
@@ -1260,7 +1331,7 @@ export function MuseApp({
         <Animated.View style={[styles.mainScroll, swipeStyle]}>
         {screen === 'app' ? (
           <>
-            <TabLayer active={!isSearchOpen && activeTab === 'home'} warm={warmTabs > 0}>
+            <TabLayer active={!isSearchOpen && activeTab === 'home'} warm={warmTabs > 0} swipe={pendingSwipe}>
               <ScrollView
                 // A new scroll view per page, so Stats opens at the top.
                 key={isStatsOpen ? 'stats' : 'main'}
@@ -1270,7 +1341,7 @@ export function MuseApp({
                 onScroll={homeBarScroll}
                 scrollEventThrottle={32}
               >
-                {!isStatsOpen && <Header showBack={false} onBack={goBack} />}
+                {/* Home draws its own logo row, with its buttons on it. */}
                 <View style={styles.screenBody}>
                   {isStatsOpen ? (
                     <Animated.View entering={statsDirection === 'forward' ? PUSH_IN : undefined}>
@@ -1303,7 +1374,6 @@ export function MuseApp({
                         onPlayTrack={playTrack}
                         onPlayMix={playMix}
                         onOpenPlayer={openFullPlayer}
-                        onOpenSearch={openSearch}
                         onOpenStats={() => setIsStatsOpen(true)}
                         goalMinutes={goalMinutes}
                         onChangeGoal={changeGoal}
@@ -1316,7 +1386,7 @@ export function MuseApp({
               </ScrollView>
             </TabLayer>
 
-            <TabLayer active={!isSearchOpen && activeTab === 'library'} warm={warmTabs > 1}>
+            <TabLayer active={!isSearchOpen && activeTab === 'library'} warm={warmTabs > 1} swipe={pendingSwipe}>
               <LibraryTab
                 onSearchEverywhere={(query) => {
                   setSearchQuery(query);
@@ -1344,7 +1414,7 @@ export function MuseApp({
               />
             </TabLayer>
 
-            <TabLayer active={!isSearchOpen && activeTab === 'more'} warm={warmTabs > 2}>
+            <TabLayer active={!isSearchOpen && activeTab === 'more'} warm={warmTabs > 2} swipe={pendingSwipe}>
               <MoreTab
                 stack={moreStack}
                 onPush={pushMore}
@@ -1362,7 +1432,7 @@ export function MuseApp({
               />
             </TabLayer>
 
-            <TabLayer active={!isSearchOpen && activeTab === 'settings'} warm={warmTabs > 3}>
+            <TabLayer active={!isSearchOpen && activeTab === 'settings'} warm={warmTabs > 3} swipe={pendingSwipe}>
               <ScrollView
                 style={styles.mainScroll}
                 contentContainerStyle={appPageContent}
@@ -1403,14 +1473,16 @@ export function MuseApp({
               </ScrollView>
             </TabLayer>
 
-            <TabLayer active={!isSearchOpen && activeTab === 'equalizer'}>
+            <TabLayer active={!isSearchOpen && activeTab === 'equalizer'} swipe={pendingSwipe}>
               {/* Its own scroll view: the gesture-handler one, so band sliders win drags. */}
               <EqualizerTab accent={accent} onBack={goBack} contentContainerStyle={appPageContent} />
             </TabLayer>
 
-            {/* Search sits over the hidden tabs, so closing it lands where you were. */}
+            {/* Search sits over the hidden tabs, so closing it lands where you were.
+                Opening, it shows at once under the page dissolving away (TabLayer);
+                closing, it dissolves over the page coming back. */}
             {isSearchOpen && (
-              <Animated.View entering={PAGE_FADE} style={styles.mainScroll}>
+              <Animated.View exiting={SEARCH_FADE_OUT} style={styles.screen}>
                 <SearchScreen
                   query={searchQuery}
                   tracks={playableTracks}
@@ -1555,8 +1627,8 @@ export function MuseApp({
             trackAfterSkip={playbackController.trackAfterSkip}
             onTogglePlayback={togglePlayback}
             onOpenPlayer={openFullPlayer}
-            onOpenChange={setIsFullPlayerOpen}
-            onOpenMenu={() => openTrackMenu(currentTrack)}
+            onOpenChange={changePlayerOpen}
+            onOpenMenu={openCurrentTrackMenu}
             isCovered={isFullPlayerOpen}
             transition={playerTransition}
             blurTarget={blurTarget}
@@ -1573,47 +1645,28 @@ export function MuseApp({
           isSearching={isSearchOpen}
           query={searchQuery}
           onChangeQuery={setSearchQuery}
-          onCloseSearch={() => setIsSearchOpen(false)}
+          onCloseSearch={closeSearch}
           bottomInset={insets.bottom}
-          nowPlaying={
-            currentTrack
-              ? {
-                  track: currentTrack,
-                  isPlaying: playback.isPlaying,
-                  isBuffering: playback.isBuffering,
-                  onTogglePlayback: togglePlayback,
-                  onNext: skipNext,
-                  onPrevious: skipPrevious,
-                  trackAfterSkip: playbackController.trackAfterSkip,
-                  onOpenPlayer: openFullPlayer,
-                  onOpenChange: setIsFullPlayerOpen,
-                  transition: playerTransition,
-                }
-              : null
-          }
+          nowPlaying={nowPlaying}
         />
         </Animated.View>
         )}
       </Animated.View>
       {playerTrack && (
         <FullPlayer
-          track={playerTrack}
-          queue={playback.queue}
-          currentIndex={playback.queueIndex}
-          isPlaying={playback.isPlaying}
-          isBuffering={playback.isBuffering}
-          shuffle={playback.shuffle}
-          repeatMode={playback.repeatMode}
-          error={playback.error}
+          track={sheetPlayback.currentTrack ?? playerTrack}
+          queue={sheetPlayback.queue}
+          currentIndex={sheetPlayback.queueIndex}
+          isPlaying={sheetPlayback.isPlaying}
+          isBuffering={sheetPlayback.isBuffering}
+          shuffle={sheetPlayback.shuffle}
+          repeatMode={sheetPlayback.repeatMode}
+          error={sheetPlayback.error}
           isOpen={isFullPlayerOpen}
           playCount={playCount}
-          onOpenGroup={(route) => {
-            // The player morphs closed while the page opens behind it.
-            setIsFullPlayerOpen(false);
-            openSearchResult(route);
-          }}
+          onOpenGroup={openPlayerGroup}
           showAudioDetails={preferences.showAudioDetails}
-          onOpenChange={setIsFullPlayerOpen}
+          onOpenChange={changePlayerOpen}
           transition={playerTransition}
           onTogglePlayback={togglePlayback}
           onPrevious={skipPrevious}
@@ -1624,18 +1677,14 @@ export function MuseApp({
           onSelectQueueTrack={skipToQueueIndex}
           onMoveQueueItem={moveQueueItem}
           onRemoveFromQueue={removeFromQueue}
-          onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
-          onOpenEqualizer={() => {
-            selectTab('equalizer');
-            // Back from Equalizer reopens the player over this tab.
-            setPlayerReturnTab(activeTab);
-          }}
-          onDeleteTrack={(track) => void deleteSong(track)}
+          onOpenSleepTimer={openSleepTimer}
+          onOpenEqualizer={openEqualizerFromPlayer}
+          onDeleteTrack={deleteFromPlayer}
           totalPlays={playerTotalPlays}
           trackAfterSkip={playbackController.trackAfterSkip}
-          queueSource={playback.queueSource}
+          queueSource={sheetPlayback.queueSource}
           equalizerPreset={equalizerPresetName}
-          sleepTimerEndsAt={playback.sleepTimerEndsAt}
+          sleepTimerEndsAt={sheetPlayback.sleepTimerEndsAt}
         />
       )}
       <SongMenu

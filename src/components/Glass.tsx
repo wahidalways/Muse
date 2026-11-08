@@ -6,10 +6,10 @@ import { useGlassStyle, type GlassStyle } from '../theme/glassStyle';
 
 /**
  * Divided by 4 on Android (expo-blur's default), so 100 is the strongest blur.
- * It also scales the tint overlay, so frosted stays light: shapes behind it
- * still read, instead of a milky (light) or muddy grey (dark) smear.
+ * Frosted (light theme only) is milky: colors behind it show as a soft wash,
+ * shapes do not, so icons stay clear on any artwork.
  */
-const BLUR: Record<GlassStyle, number> = { frosted: 28, full: 100, solid: 0 };
+const BLUR: Record<GlassStyle, number> = { frosted: 60, full: 100, solid: 0 };
 
 /**
  * Theme colors for glass. Kept out of styles.ts on purpose: its theme
@@ -28,11 +28,12 @@ export function useGlassColors() {
     return {
       style,
       tint: 'light' as const,
-      fill: `rgba(255, 255, 255, ${style === 'frosted' ? 0.5 : style === 'full' ? 0.78 : 1})`,
+      fill: `rgba(255, 255, 255, ${style === 'frosted' ? 0.65 : style === 'full' ? 0.78 : 1})`,
       edge: 'rgba(0, 0, 0, 0.08)',
       rim: 'rgba(255, 255, 255, 0.95)',
       shadow: '0px 8px 24px rgba(0, 0, 0, 0.12), inset 0px 1px 0px rgba(255, 255, 255, 0.7)',
-      capsule: 'rgba(118, 118, 128, 0.14)',
+      // The selected tab: a brighter, raised piece of the same glass, not a grey dip.
+      capsule: 'rgba(255, 255, 255, 0.7)',
       capsuleEdge: 'rgba(255, 255, 255, 0.95)',
       capsuleShadow: '0px 1px 4px rgba(0, 0, 0, 0.12)',
       // The pressed lens: nearly clear, bright rim, lifted shadow.

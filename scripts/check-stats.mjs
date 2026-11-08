@@ -7,10 +7,12 @@ import {
   getGoalSummary,
   getRecentTracks,
   getStreaks,
+  getWeek,
   isSkip,
   withListenedSeconds,
 } from '../src/history/stats.ts';
 import { getMixes } from '../src/history/mixes.ts';
+import { DEFAULT_PULSE, packRows, parsePulse } from '../src/settings/pulseBoard.ts';
 import { groupTracks, smartList, sortGroups } from '../src/library/browse.ts';
 import { sortMusicTracks } from '../src/library/sortTracks.ts';
 import { createSavedStore } from '../src/library/savedStore.ts';
@@ -343,6 +345,45 @@ assert.equal(titles(sortGroups(albums, 'artist', 'ascending')), 'Zulu,Alpha,Unkn
 const artists = groupTracks(groupSongs, 'artist');
 assert.equal(titles(sortGroups(artists, 'songCount', 'descending')), 'Bo,Amy,Unknown artist');
 
+}
+
+// Calendar week from the chosen start day; same-days comparison.
+{
+  const sat = getWeek(history, lookup, 6, now); // Wed 4 Nov: week is Sat 31 Oct – Fri 6 Nov
+  assert.equal(new Date(sat.start).getDay(), 6);
+  assert.equal(new Date(sat.start).getDate(), 31);
+  assert.equal(sat.seconds, 100 + 200 + 190, 'Sun b, Tue a, today a + skipped b');
+  assert.equal(sat.days[5].seconds, null, 'Thursday is still to come');
+  assert.equal(sat.previousSeconds, 200, 'only Sat–Wed of last week counts');
+  const mon = getWeek(history, lookup, 1, now);
+  assert.equal(new Date(mon.start).getDate(), 2);
+  assert.equal(mon.seconds, 200 + 190);
+  // computeStats' calendar week: all 7 days bucketed, previous = same days last week.
+  const thisWeek = computeStats(history, 'week', lookup, now, 6);
+  assert.equal(thisWeek.buckets.length, 7, 'future days are still shown');
+  assert.equal(thisWeek.seconds, 490);
+  assert.equal(thisWeek.dayCount, 5, 'Sat to Wed so far');
+  assert.equal(thisWeek.previous.seconds, 200);
+  // A past week, as the recap asks for it: pass its last day as now.
+  const lastWeek = computeStats(history, 'week', lookup, now - 6 * DAY, 6); // Thu 29 Oct
+  assert.equal(new Date(lastWeek.buckets[0].key).getDate(), 24, 'week of Sat 24 Oct');
+  assert.equal(lastWeek.seconds, 200, 'the Monday 26 Oct play');
+}
+
+// Pulse board: saved layouts are cleaned up; squares pair without holes.
+{
+  const ids = (rows) => rows.map((row) => row.map((item) => item.id).join('+')).join(' / ');
+  assert.equal(ids(packRows(DEFAULT_PULSE.board)), 'recap / mixes / jump / week / goal+streak / artist+hour / repeat / genre+explore');
+  const sq = (id) => ({ id, on: true, size: 'square' });
+  assert.equal(ids(packRows([sq('goal'), { id: 'week', on: true, size: 'wide' }, sq('streak')])), 'goal+streak / week');
+  assert.equal(ids(packRows([sq('goal'), { ...sq('streak'), on: false }])), 'goal', 'hidden widgets take no space');
+  const parsed = parsePulse({ board: [{ id: 'gone', on: true }, { id: 'goal', on: false, size: 'wide' }], weekStart: 3 });
+  assert.equal(parsed.weekStart, 6, 'unknown week start falls back to Saturday');
+  assert.equal(parsed.board.length, DEFAULT_PULSE.board.length, 'missing widgets come back');
+  const goal = parsed.board.find((item) => item.id === 'goal');
+  assert.deepEqual([goal.on, goal.size], [false, 'square'], 'kept hidden; goal cannot be wide');
+  assert.equal(parsed.board[0].id, 'recap', 'missing widgets return to their default place');
+  assert.deepEqual([parsed.recapSeen, parsed.recapHidden], [null, null]);
 }
 
 console.log('stats checks passed');

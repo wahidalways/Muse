@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type ComponentProps, type ComponentRef, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useRef, type ComponentProps, type ComponentRef, type RefObject } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Glass } from '../components/Glass';
 import { useGlassStyle } from '../theme/glassStyle';
@@ -24,7 +24,7 @@ export const MINI_ART_RADIUS = 12;
 /** Long enough for a card or pill to finish sliding in before it is measured. */
 export const SETTLED_MS = 320;
 
-export function MiniPlayer({
+export const MiniPlayer = memo(function MiniPlayer({
   track,
   isPlaying,
   isBuffering,
@@ -202,7 +202,7 @@ export function MiniPlayer({
     </Shell>
     </Animated.View>
   );
-}
+});
 
 /**
  * A thin progress line along the card's bottom edge. The times live in the

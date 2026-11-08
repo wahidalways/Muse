@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, useState, type ComponentRef } from 'react';
+import { memo, useCallback, useContext, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -49,7 +49,6 @@ import { parseLyrics, type Lyrics } from '../library/lyrics';
 import { getPlaybackController } from '../playback/PlaybackController';
 import type { MoreRoute } from '../screens/MoreTab';
 import { VolumeSlider, canShowVolumeSlider } from './VolumeSlider';
-import { MINI_ART_RADIUS } from './MiniPlayer';
 import { LyricsSheet } from './LyricsSheet';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { SPEED_OPTIONS, setTrackSpeed, useTrackSpeed } from '../library/trackSpeeds';
@@ -90,7 +89,7 @@ const ARTWORK_SPRING = { duration: 500, dampingRatio: 0.72, reduceMotion: Reduce
  * slow drag settles back. Sideways drags on the artwork change the song.
  * All motion runs on the UI thread.
  */
-export function FullPlayer({
+export const FullPlayer = memo(function FullPlayer({
   track,
   queue,
   currentIndex,
@@ -305,10 +304,10 @@ export function FullPlayer({
       ? card.x - transition.origin.get().x + card.width / 2 - windowWidth / 2
       : 0;
     const scaleX = interpolate(open, [0, 1], [startScale, 1], Extrapolation.CLAMP);
+    // Transform and opacity only: corners stay fixed (sheetLayout.card), as an
+    // animated radius waits behind React and stutters while the player opens.
     return {
       opacity: interpolate(open, [0, 0.25], [0, 1], Extrapolation.CLAMP),
-      borderRadius:
-        interpolate(open, [0, 1], [MINI_CARD_RADIUS, 0], Extrapolation.CLAMP) / scaleX,
       transform: [
         { translateY: sheetTop(open) },
         { translateX: interpolate(open, [0, 1], [startShift, 0], Extrapolation.CLAMP) },
@@ -436,12 +435,14 @@ export function FullPlayer({
 
   // The cover in flight: from the mini player's cover to the big one, along
   // with the sheet. Drawn once at full size and scaled, so it stays sharp.
+  // Its corners are the big cover's, fixed: an animated radius would pull this
+  // view's transform off the fast path too, and the cover would hitch.
   const heroRadius = Math.min(24, Math.max(10, artworkSize * 0.085));
   const flyStyle = useAnimatedStyle(() => {
     const open = progress.get();
     const hero = heroArt.get();
     if (hero.size === 0 || open <= 0.001 || open >= 0.999) {
-      return { opacity: 0, borderRadius: heroRadius, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }] };
+      return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }] };
     }
     const mini = transition.miniArt.get();
     const origin = transition.origin.get();
@@ -453,10 +454,8 @@ export function FullPlayer({
     const fromCy = hasMini ? mini.y - origin.y + mini.height / 2 : heroCy;
     const fromScale = hasMini ? mini.width / artworkSize : artworkScale.get();
     const scale = interpolate(open, [0, 1], [fromScale, artworkScale.get()]);
-    const radius = interpolate(open, [0, 1], [hasMini ? MINI_ART_RADIUS : heroRadius, heroRadius]);
     return {
       opacity: 1,
-      borderRadius: radius / scale,
       transform: [
         { translateX: interpolate(open, [0, 1], [fromCx, heroCx]) - artworkSize / 2 },
         { translateY: interpolate(open, [0, 1], [fromCy, heroCy]) - artworkSize / 2 },
@@ -822,13 +821,13 @@ export function FullPlayer({
       )}
       <Animated.View
         pointerEvents="none"
-        style={[sheetLayout.flyingArt, { width: artworkSize, height: artworkSize }, flyStyle]}
+        style={[sheetLayout.flyingArt, { width: artworkSize, height: artworkSize, borderRadius: heroRadius }, flyStyle]}
       >
         <AlbumArtwork track={shown} size={artworkSize} radius={0} />
       </Animated.View>
     </Animated.View>
   );
-}
+});
 
 /**
  * "1.5× · Sleep 12:30" under the header title, only while the speed is
@@ -956,6 +955,8 @@ const sheetLayout = StyleSheet.create({
   },
   card: {
     overflow: 'hidden',
+    // Fixed, like a sheet's: animating it would make the morph stutter.
+    borderRadius: MINI_CARD_RADIUS,
   },
   flyingArt: {
     position: 'absolute',
