@@ -1,0 +1,14 @@
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'expo.modules.musemetadata'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.musemetadata"
+}
+
+dependencies {
+  // Compile-time only: expo-audio ships ExoPlayer; the effects read its audio session.
+  compileOnly "androidx.media3:media3-exoplayer:1.9.1"
+}

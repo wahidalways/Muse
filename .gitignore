@@ -1,0 +1,66 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+.eas/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env.*
+!.env.example
+.env*.local
+
+# build artifacts
+*.apk
+*.aab
+*.ipa
+coverage/
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Local design reviews, never committed
+artifacts/
+
+# Nested local repositories
+/Muse Music/
+
+# Installed agent tooling: reinstall from skills-lock.json. Its design mocks stay local.
+/.agents/
+/.github/agents/
+/.github/hooks/
+/.github/prompts/
+/.github/skills/
+/.impeccable/

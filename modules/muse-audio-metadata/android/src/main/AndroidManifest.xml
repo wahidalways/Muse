@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android 11+ hides other apps; these let Muse find the phone's Dolby app. -->
+  <queries>
+    <package android:name="com.dolby.daxappui" />
+    <package android:name="com.dolby.dax2appUI" />
+    <package android:name="com.dolby.ds1appUI" />
+    <package android:name="com.motorola.dolby.dolbyui" />
+  </queries>
+</manifest>

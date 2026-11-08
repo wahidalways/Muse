@@ -1,0 +1,9 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": [
+      "expo.modules.musemetadata.MuseAudioMetadataModule",
+      "expo.modules.musemetadata.MuseAudioEffectsModule"
+    ]
+  }
+}
