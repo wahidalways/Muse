@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -151,7 +151,9 @@ export default function App() {
     let isActive = true;
     void coverColor(playingTrackId).then((color) => {
       if (isActive) {
-        setCoverAccent(accentForCover(color, accent, ACCENT_OPTIONS));
+        // Re-colors the whole app, hidden tabs included: at low priority, so
+        // taps and the song change's own animations go first.
+        startTransition(() => setCoverAccent(accentForCover(color, accent, ACCENT_OPTIONS)));
       }
     });
     return () => {

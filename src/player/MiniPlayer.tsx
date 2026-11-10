@@ -125,7 +125,8 @@ export const MiniPlayer = memo(function MiniPlayer({
     return () => clearTimeout(timer);
   }, [isBarFolded, measure]);
   // Solid sits flush on the bar as one block; glass styles float as a card.
-  const Shell = useGlassStyle() === 'solid' ? SolidShell : Glass;
+  const isSolid = useGlassStyle() === 'solid';
+  const Shell = isSolid ? SolidShell : Glass;
 
   return (
     <Animated.View ref={cardRef} onLayout={measure} collapsable={false} style={handOffStyle}>
@@ -149,7 +150,8 @@ export const MiniPlayer = memo(function MiniPlayer({
                 <MarqueeText
                   text={shown.title}
                   style={styles.miniPlayerTitle}
-                  paused={!isPlaying || isCovered}
+                  // Also while a folded glass bar hides this card (HideWhenBarFolded).
+                  paused={!isPlaying || isCovered || (isBarFolded && !isSolid)}
                 />
               </View>
               {error.length > 0 ? (

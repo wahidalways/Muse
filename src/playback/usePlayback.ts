@@ -16,6 +16,15 @@ export function usePlayback(): PlaybackSnapshot {
 }
 
 /**
+ * One value from the snapshot, re-rendering only when that value changes.
+ * `select` must return a snapshot field or a primitive, never a new object.
+ */
+export function usePlaybackValue<T>(select: (snapshot: PlaybackSnapshot) => T): T {
+  const controller = getPlaybackController();
+  return useSyncExternalStore(controller.subscribe, () => select(controller.getSnapshot()));
+}
+
+/**
  * Only the current song's id. For code high up the tree (the app root):
  * it re-renders on a song change, never on play, pause or buffering.
  */

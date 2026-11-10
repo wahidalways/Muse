@@ -1,4 +1,14 @@
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentRef,
+} from 'react';
 import { isRunningInExpoGo } from 'expo';
 import { hideAsync as hideSplash } from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,7 +50,7 @@ import type { LibrarySort, SortDirection } from './library/sortTracks';
 import { getPlaybackController, shuffleTracks } from './playback/PlaybackController';
 import { settlePlayer, usePlayerTransition } from './player/playerTransition';
 import { addAudioBecomingNoisyListener, addHeadphonesConnectedListener, getLibraryVersion, setAppIcon } from '../modules/muse-audio-metadata';
-import { usePlayback } from './playback/usePlayback';
+import { usePlayback, usePlaybackValue } from './playback/usePlayback';
 import type {
   MusicTrack,
   CachedLibrary,
@@ -302,8 +312,16 @@ export function MuseApp({
     [blockedFolderIds, folders],
   );
   const playbackController = getPlaybackController();
-  const playback = usePlayback();
-  const { currentTrack } = playback;
+  // Field by field: the app re-renders when one of these changes, not on
+  // queue edits (reorder, add, shuffle, repeat), which only the player shows.
+  const currentTrack = usePlaybackValue((snapshot) => snapshot.currentTrack);
+  const isPlaying = usePlaybackValue((snapshot) => snapshot.isPlaying);
+  const isBuffering = usePlaybackValue((snapshot) => snapshot.isBuffering);
+  const playbackError = usePlaybackValue((snapshot) => snapshot.error);
+  const queueSource = usePlaybackValue((snapshot) => snapshot.queueSource);
+  const playRequestId = usePlaybackValue((snapshot) => snapshot.playRequestId);
+  const sleepTimerEndsAt = usePlaybackValue((snapshot) => snapshot.sleepTimerEndsAt);
+  const sleepsAtTrackEnd = usePlaybackValue((snapshot) => snapshot.sleepAtTrackEnd);
   /** Joined: the mini player and the tab pill are one frosted card (not while searching). */
   const isDockJoined = !isSolidBar && preferences.miniDock === 'joined' && Boolean(currentTrack) && !isSearchOpen;
   const {
@@ -339,10 +357,6 @@ export function MuseApp({
     },
     [playerTransition],
   );
-  // Closed, the full player catches up at low priority, so a song change
-  // paints the list and the mini player first. Open, it follows live.
-  const deferredPlayback = useDeferredValue(playback);
-  const sheetPlayback = isFullPlayerOpen ? playback : deferredPlayback;
   /** Set when Equalizer was opened from the full player: the tab to reopen it over. */
   const [playerReturnTab, setPlayerReturnTab] = useState<Tab | null>(null);
   /**
@@ -522,7 +536,7 @@ export function MuseApp({
   // before the effect below, which moves `currentListenAt` to the new play.
   useEffect(() => {
     const playedAt = currentListenAt.current;
-    if (playback.playRequestId === 0 || playedAt === null) {
+    if (playRequestId === 0 || playedAt === null) {
       return;
     }
     const seconds = playbackController.getFinishedListenSeconds();
@@ -531,22 +545,22 @@ export function MuseApp({
       // The next play is not recorded, so its time must not land on this one.
       currentListenAt.current = null;
     }
-  }, [playback.playRequestId, playbackController]);
+  }, [playRequestId, playbackController]);
 
   useEffect(() => {
     if (
       // Settings › Listening › Pause history: plays are not written down. Turning
       // it back on mid-song records that song from then on.
       historyPaused ||
-      !playback.isPlaying ||
+      !isPlaying ||
       !currentTrack ||
-      playback.playRequestId === 0 ||
-      recordedPlayRequest.current === playback.playRequestId
+      playRequestId === 0 ||
+      recordedPlayRequest.current === playRequestId
     ) {
       return;
     }
 
-    recordedPlayRequest.current = playback.playRequestId;
+    recordedPlayRequest.current = playRequestId;
     const playedAt = Date.now();
     currentListenAt.current = playedAt;
     setListeningHistory((history) =>
@@ -566,7 +580,7 @@ export function MuseApp({
         ...history,
       ].slice(0, MAX_LISTENING_EVENTS),
     );
-  }, [currentTrack, historyPaused, playback.isPlaying, playback.playRequestId]);
+  }, [currentTrack, historyPaused, isPlaying, playRequestId]);
 
   // Save the time heard so far whenever playback pauses or the app leaves the
   // screen, so a closed app keeps most of the current listen.
@@ -609,10 +623,10 @@ export function MuseApp({
   }, [playbackController]);
 
   useEffect(() => {
-    if (!playback.isPlaying) {
+    if (!isPlaying) {
       saveCurrentListen();
     }
-  }, [playback.isPlaying, saveCurrentListen]);
+  }, [isPlaying, saveCurrentListen]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -1491,27 +1505,36 @@ export function MuseApp({
   // that tab switches, search typing and history updates would otherwise cause.
   const closeSearch = useCallback(() => setIsSearchOpen(false), []);
   const openSleepTimer = useCallback(() => setIsSleepTimerOpen(true), []);
+  // The tab state, read when the player's buttons are pressed rather than
+  // baked into them, so their callbacks (and the player) stay the same
+  // across tab switches.
+  const latestTabs = useRef({ activeTab, moreStack, selectTab });
+  useEffect(() => {
+    latestTabs.current = { activeTab, moreStack, selectTab };
+  });
   const openPlayerGroup = useCallback(
     (route: MoreRoute) => {
+      const { activeTab: tab, moreStack: openPages } = latestTabs.current;
       // The player morphs closed while the page opens behind it.
       changePlayerOpen(false);
       setIsSearchOpen(false);
       setIsStatsOpen(false);
       // Over Collections the page goes on top, so Back passes through what was open.
-      const stack = activeTab === 'more' ? [...moreStack, route] : [route];
+      const stack = tab === 'more' ? [...openPages, route] : [route];
       setMoreStack(stack);
       setActiveTab('more');
-      setPlayerReturnTab(activeTab);
+      setPlayerReturnTab(tab);
       setPlayerReturnDepth(stack.length);
     },
-    [activeTab, changePlayerOpen, moreStack],
+    [changePlayerOpen],
   );
   const openEqualizerFromPlayer = useCallback(() => {
-    selectTab('equalizer');
+    const { activeTab: tab, selectTab: openTab } = latestTabs.current;
+    openTab('equalizer');
     // Back from Equalizer reopens the player over this tab.
-    setPlayerReturnTab(activeTab);
+    setPlayerReturnTab(tab);
     setPlayerReturnDepth(null);
-  }, [activeTab, selectTab]);
+  }, []);
   const deleteFromPlayer = useCallback((track: MusicTrack) => void deleteSongs([track]), [deleteSongs]);
   const deleteFromLibrary = useCallback((list: MusicTrack[]) => void deleteSongs(list), [deleteSongs]);
   const openCurrentTrackMenu = useCallback(() => {
@@ -1524,8 +1547,8 @@ export function MuseApp({
       currentTrack
         ? {
             track: currentTrack,
-            isPlaying: playback.isPlaying,
-            isBuffering: playback.isBuffering,
+            isPlaying,
+            isBuffering,
             onTogglePlayback: togglePlayback,
             onNext: skipNext,
             onPrevious: skipPrevious,
@@ -1539,8 +1562,8 @@ export function MuseApp({
       changePlayerOpen,
       currentTrack,
       openFullPlayer,
-      playback.isBuffering,
-      playback.isPlaying,
+      isBuffering,
+      isPlaying,
       playbackController,
       playerTransition,
       skipNext,
@@ -1611,10 +1634,10 @@ export function MuseApp({
                         history={visibleHistory}
                         historyLoaded={isHistoryLoaded}
                         historyError={historyError}
-                        playbackError={playback.error}
+                        playbackError={playbackError}
                         currentTrack={currentTrack}
-                        isPlaying={playback.isPlaying}
-                        queueSource={playback.queueSource}
+                        isPlaying={isPlaying}
+                        queueSource={queueSource}
                         // On screen: the launch screen is gone and Home is the page showing.
                         revealed={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen}
                         // Can be seen right now: loops and live numbers only run then.
@@ -1645,7 +1668,7 @@ export function MuseApp({
                 tracks={tracks}
                 blockedFolderIds={blockedFolderIds}
                 currentTrackId={currentTrack?.id ?? null}
-                isPlaying={playback.isPlaying}
+                isPlaying={isPlaying}
                 onPlayTrack={playFromList}
                 onPlayAll={playMix}
                 onOpenGroup={openSearchResult}
@@ -1672,7 +1695,7 @@ export function MuseApp({
                 tracks={playableTracks}
                 history={visibleHistory}
                 currentTrackId={currentTrack?.id ?? null}
-                isPlaying={playback.isPlaying}
+                isPlaying={isPlaying}
                 onPlayFromList={playFromList}
                 onOpenTrackMenu={openTrackMenu}
                 contentContainerStyle={[
@@ -1748,7 +1771,7 @@ export function MuseApp({
                   folders={searchFolders}
                   history={visibleHistory}
                   currentTrackId={currentTrack?.id ?? null}
-                  isPlaying={playback.isPlaying}
+                  isPlaying={isPlaying}
                   onPlaySong={playFromList}
                   onOpenRoute={openSearchResult}
                   contentContainerStyle={[
@@ -1880,9 +1903,9 @@ export function MuseApp({
           <HideWhenBarFolded enabled={!isSolidBar}>
           <MiniPlayer
             track={currentTrack}
-            isPlaying={playback.isPlaying}
-            isBuffering={playback.isBuffering}
-            error={playback.error}
+            isPlaying={isPlaying}
+            isBuffering={isBuffering}
+            error={playbackError}
             onPrevious={skipPrevious}
             onNext={skipNext}
             trackAfterSkip={playbackController.trackAfterSkip}
@@ -1917,15 +1940,8 @@ export function MuseApp({
         )}
       </Animated.View>
       {playerTrack && (
-        <FullPlayer
-          track={sheetPlayback.currentTrack ?? playerTrack}
-          queue={sheetPlayback.queue}
-          currentIndex={sheetPlayback.queueIndex}
-          isPlaying={sheetPlayback.isPlaying}
-          isBuffering={sheetPlayback.isBuffering}
-          shuffle={sheetPlayback.shuffle}
-          repeatMode={sheetPlayback.repeatMode}
-          error={sheetPlayback.error}
+        <FullPlayerHost
+          fallbackTrack={playerTrack}
           isOpen={isFullPlayerOpen}
           playCount={playCount}
           onOpenGroup={openPlayerGroup}
@@ -1946,10 +1962,7 @@ export function MuseApp({
           onDeleteTrack={deleteFromPlayer}
           totalPlays={playerTotalPlays}
           trackAfterSkip={playbackController.trackAfterSkip}
-          queueSource={sheetPlayback.queueSource}
           equalizerPreset={equalizerPresetName}
-          sleepTimerEndsAt={sheetPlayback.sleepTimerEndsAt}
-          sleepAtTrackEnd={sheetPlayback.sleepAtTrackEnd}
           recentTracks={recentTracks}
         />
       )}
@@ -1966,8 +1979,8 @@ export function MuseApp({
       />
       <SleepTimerModal
         visible={isSleepTimerOpen}
-        endsAt={playback.sleepTimerEndsAt}
-        atTrackEnd={playback.sleepAtTrackEnd}
+        endsAt={sleepTimerEndsAt}
+        atTrackEnd={sleepsAtTrackEnd}
         onClose={() => setIsSleepTimerOpen(false)}
         onSelectMinutes={startSleepTimer}
         onSelectTrackEnd={sleepAtTrackEnd}
@@ -1976,5 +1989,49 @@ export function MuseApp({
       {/* On top of everything while a slow library restore is still running. */}
       {isLaunchShown && <LaunchScreen />}
     </View>
+  );
+}
+
+type PlaybackProp =
+  | 'track'
+  | 'queue'
+  | 'currentIndex'
+  | 'isPlaying'
+  | 'isBuffering'
+  | 'shuffle'
+  | 'repeatMode'
+  | 'error'
+  | 'queueSource'
+  | 'sleepTimerEndsAt'
+  | 'sleepAtTrackEnd';
+
+/**
+ * The full player with the whole playback snapshot. It subscribes here, not
+ * in MuseApp, so a queue edit re-renders the player alone. Closed, it
+ * catches up at low priority, so a song change paints the list and the mini
+ * player first. Open, it follows live.
+ */
+function FullPlayerHost({
+  fallbackTrack,
+  ...props
+}: Omit<ComponentProps<typeof FullPlayer>, PlaybackProp> & { fallbackTrack: MusicTrack }) {
+  const live = usePlayback();
+  const deferred = useDeferredValue(live);
+  const playback = props.isOpen ? live : deferred;
+  return (
+    <FullPlayer
+      {...props}
+      track={playback.currentTrack ?? fallbackTrack}
+      queue={playback.queue}
+      currentIndex={playback.queueIndex}
+      isPlaying={playback.isPlaying}
+      isBuffering={playback.isBuffering}
+      shuffle={playback.shuffle}
+      repeatMode={playback.repeatMode}
+      error={playback.error}
+      queueSource={playback.queueSource}
+      sleepTimerEndsAt={playback.sleepTimerEndsAt}
+      sleepAtTrackEnd={playback.sleepAtTrackEnd}
+    />
   );
 }
