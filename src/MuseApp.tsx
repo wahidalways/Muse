@@ -1284,23 +1284,28 @@ export function MuseApp({
     setActiveTab('more');
   }, []);
 
+  // Android asks the newest Back listener first. This one is added once, so
+  // it is always the oldest and runs last: a part that handles Back itself
+  // (Library's selection, the player's Lyrics and Up Next) adds its listener
+  // later and is asked first. Re-adding it on every change would jump it ahead.
+  const handleBackPress = useRef<() => boolean>(() => false);
   useEffect(() => {
-    const subscription = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        if (isLoading) {
-          // Keep Muse open mid-scan; only the first-run screens may quit.
-          return screen !== 'onboarding' && screen !== 'starting';
-        }
-        if (!canGoBack) {
-          return false;
-        }
-        goBack();
-        return true;
-      },
-    );
-    return () => subscription.remove();
+    handleBackPress.current = () => {
+      if (isLoading) {
+        // Keep Muse open mid-scan; only the first-run screens may quit.
+        return screen !== 'onboarding' && screen !== 'starting';
+      }
+      if (!canGoBack) {
+        return false;
+      }
+      goBack();
+      return true;
+    };
   }, [canGoBack, goBack, isLoading, screen]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => handleBackPress.current());
+    return () => subscription.remove();
+  }, []);
 
   const refreshLibrary = useCallback(async () => {
     setIsLoading(true);

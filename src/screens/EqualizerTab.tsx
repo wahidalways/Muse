@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ScrollView } from 'react-native-gesture-handler';
 import { ACCENT_OPTIONS, type Accent } from '../theme/theme';
@@ -13,6 +13,7 @@ import { editSound, setEqualizerEnabled, useEqualizer } from '../equalizer/equal
 import { BandSliders, EqSlider } from '../equalizer/ui/Sliders';
 import { PresetSheet } from '../equalizer/ui/EqualizerSheets';
 import { useBarScroll } from '../motion/barScroll';
+import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 
 /** On/off, a preset, 10 bands and a bass boost; the phone's own equalizer one tap away. */
 export function EqualizerTab({
@@ -32,9 +33,16 @@ export function EqualizerTab({
   const presetLabel = sound.presetName ?? 'Custom';
   const flat = sound.gains.every((gain) => gain === 0);
 
+  const [notice, setNotice] = useState<ConfirmRequest | null>(null);
   const openPhone = () => {
     if (!openPhoneEqualizer()) {
-      Alert.alert('Could not open the phone equalizer', 'Open your phone settings and look for Sound quality and effects.');
+      setNotice({
+        eyebrow: 'EQUALIZER',
+        title: 'Could not open the phone equalizer',
+        message: 'Open your phone settings and look for Sound quality and effects.',
+        confirmLabel: 'OK',
+        cancelLabel: null,
+      });
     }
   };
 
@@ -142,6 +150,7 @@ export function EqualizerTab({
       </View>
 
       <PresetSheet visible={presetsOpen} onClose={() => setPresetsOpen(false)} />
+      <ConfirmSheet request={notice} onClose={() => setNotice(null)} />
     </ScrollView>
   );
 }

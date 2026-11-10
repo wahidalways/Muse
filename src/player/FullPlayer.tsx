@@ -1,6 +1,7 @@
 import { memo, useCallback, useContext, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Pressable,
   StyleSheet,
   Text,
@@ -518,6 +519,18 @@ export const FullPlayer = memo(function FullPlayer({
       }),
     );
   }, [isOpen, mode, modeProgress]);
+  // Back from Lyrics or Up Next shows the cover; Back again closes the player
+  // (MuseApp). Added after MuseApp's listener, so it is asked first.
+  useEffect(() => {
+    if (!isOpen || mode === 'cover') {
+      return;
+    }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setMode('cover');
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isOpen, mode]);
   const chooseMode = (next: Exclude<PlayerMode, 'cover'>) => {
     if (next === 'lyrics' && hasNoLyrics && mode !== 'lyrics') {
       showToast('No lyrics in this file', { detail: 'Lyrics in a song’s tags show up here', icon: 'lyrics' });

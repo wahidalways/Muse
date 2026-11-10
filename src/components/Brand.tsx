@@ -12,12 +12,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useAppStyles } from '../theme/styles';
+import appConfig from '../../app.json';
 
 export const CREDIT_NAME = 'wahidalways';
 export const CREDIT_URL = 'https://github.com/wahidalways';
 export const MUSE_MOTTO = 'All your music. Right on your phone.';
-/** Shown in Settings. Keep in step with "version" in app.json. */
-export const APP_VERSION = '1.0';
+/** Shown in Settings and compared with GitHub releases: app.json's version, the one the APK is built with. */
+export const APP_VERSION: string = appConfig.expo.version;
 
 /**
  * Bar heights of the Muse mark at its base size of 22: a level-meter rhythm,

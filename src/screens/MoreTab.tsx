@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  Alert,
   Pressable,
   Text,
   View,
@@ -82,6 +81,7 @@ import { hapticSelection } from '../utils/haptics';
 import { useBarScroll } from '../motion/barScroll';
 import { useAppStyles } from '../theme/styles';
 import { EASE_OUT, POP_IN, PUSH_IN, useNavDirection } from '../motion/motion';
+import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 
 /** Where you are inside Collections (tab id 'more'). An empty stack is its main page. */
 export type MoreRoute =
@@ -1264,19 +1264,20 @@ function PlaylistActions({
   onDeleted?: () => void;
 }) {
   const close = () => onSheet(null);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const confirmDelete = () => {
     close();
-    Alert.alert('Delete playlist?', `"${playlist.name}" will be removed. Your songs stay on your phone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          onDeleted?.();
-          deletePlaylist(playlist.id);
-        },
+    setConfirm({
+      eyebrow: 'PLAYLIST',
+      title: 'Delete playlist?',
+      message: `"${playlist.name}" will be removed. Your songs stay on your phone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => {
+        onDeleted?.();
+        deletePlaylist(playlist.id);
       },
-    ]);
+    });
   };
   const run = (action: () => void) => () => {
     close();
@@ -1312,6 +1313,7 @@ function PlaylistActions({
           close();
         }}
       />
+      <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
     </>
   );
 }
