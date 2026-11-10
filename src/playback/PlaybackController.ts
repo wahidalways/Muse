@@ -87,6 +87,8 @@ type SavedPlaybackState = {
   /** Queue order before shuffling, so turning shuffle off restores it. */
   originalTrackIds?: string[];
   queueSource?: string;
+  /** The current song's spot, since a song can be in the queue twice. Missing in older saves. */
+  queueIndex?: number;
 };
 
 type Listener = () => void;
@@ -334,7 +336,13 @@ export class PlaybackController {
     }
 
     this.setError('');
-    this.flushPendingLoad();
+    if (!freshQueue && this.snapshot.currentTrack?.id === track.id) {
+      this.flushPendingLoad();
+    } else {
+      // A quick second tap replaces the first one's load, still waiting for
+      // its frame, instead of paying for both.
+      this.pendingLoad = null;
+    }
     try {
       await this.ensureAudioMode();
 
@@ -426,13 +434,24 @@ export class PlaybackController {
       this.pausedForDisconnectAt = Date.now();
       return;
     }
-    // After the player's own pause lands, so it does not undo this.
-    setTimeout(() => {
-      if (!this.player.playing) {
-        this.player.play();
-        this.expectPlaying(true);
-      }
-    }, 400);
+    // Plays again after the player's own pause lands, so it does not undo
+    // this: on that pause's report (reports still arrive in the background),
+    // or on this timer when the pause landed first.
+    this.keepPlayingUntil = Date.now() + 2000;
+    setTimeout(this.keepPlayingAfterDisconnect, 400);
+  };
+
+  /** Until when a pause is the headphones' and should be played through; 0 when not. */
+  private keepPlayingUntil = 0;
+
+  private keepPlayingAfterDisconnect = () => {
+    // Timers wait while Muse is in the background. Hours later, this must not
+    // start the speaker.
+    if (Date.now() < this.keepPlayingUntil && !this.player.playing) {
+      this.keepPlayingUntil = 0;
+      this.player.play();
+      this.expectPlaying(true);
+    }
   };
 
   /**
@@ -469,6 +488,7 @@ export class PlaybackController {
     this.flushPendingLoad();
     // A tap of your own replaces any pause the headphones caused.
     this.pausedForDisconnectAt = null;
+    this.keepPlayingUntil = 0;
     if (this.snapshot.isPlaying) {
       this.player.pause();
       this.expectPlaying(false);
@@ -490,6 +510,7 @@ export class PlaybackController {
   pause = () => {
     this.flushPendingLoad();
     this.pausedForDisconnectAt = null;
+    this.keepPlayingUntil = 0;
     this.player.pause();
     this.expectPlaying(false);
   };
@@ -526,6 +547,8 @@ export class PlaybackController {
     const { queue, queueIndex } = this.snapshot;
     if (!this.trackAfterSkip(-1)) {
       this.pendingSeek = null;
+      // At once, not at the next report: the sleep check reads a jump from the end to 0 as a loop.
+      this.updateProgress({ currentTime: 0, duration: this.progress.duration });
       void this.player.seekTo(0);
       return;
     }
@@ -821,21 +844,24 @@ export class PlaybackController {
   };
 
   /**
-   * Takes a deleted song out of the queue. If it was playing, the next song
-   * takes its place, and keeps playing if music was on.
+   * Takes deleted songs out of the queue, all in one go: one native rebuild
+   * and one save, however many went (a removed SD card can take hundreds).
+   * If the playing song went, the next one takes its place, and keeps
+   * playing if music was on.
    */
-  removeTrack = (trackId: string) => {
+  removeTracks = (trackIds: ReadonlySet<string>) => {
     this.flushPendingLoad();
     this.syncWithNativeTrack();
     const { queue, queueIndex, currentTrack, isPlaying } = this.snapshot;
-    const index = queue.findIndex((track) => track.id === trackId);
-    this.originalQueue = this.originalQueue.filter((track) => track.id !== trackId);
-    if (index < 0) {
+    this.originalQueue = this.originalQueue.filter((track) => !trackIds.has(track.id));
+    const nextQueue = queue.filter((track) => !trackIds.has(track.id));
+    if (nextQueue.length === queue.length) {
       return;
     }
-    const nextQueue = queue.filter((track) => track.id !== trackId);
-    if (currentTrack?.id !== trackId) {
-      this.update({ queue: nextQueue, queueIndex: index < queueIndex ? queueIndex - 1 : queueIndex });
+    // Where the current spot lands once the songs before it are gone.
+    const kept = queue.slice(0, queueIndex).filter((track) => !trackIds.has(track.id)).length;
+    if (!currentTrack || !trackIds.has(currentTrack.id)) {
+      this.update({ queue: nextQueue, queueIndex: kept });
       this.resetWindowAroundCurrent();
       this.save();
       return;
@@ -846,11 +872,20 @@ export class PlaybackController {
       this.windowEditedAt = Date.now();
       this.window = [];
       this.nativeIndex = 0;
+      this.pendingSeek = null;
+      if (this.isLockScreenActive) {
+        // Otherwise the media notification keeps showing a song that is gone.
+        this.artworkRequest += 1;
+        this.player.setActiveForLockScreen(false);
+        this.isLockScreenActive = false;
+        this.lockScreenTrack = null;
+      }
       this.update({ queue: [], queueIndex: 0, currentTrack: null, isPlaying: false });
       this.updateProgress({ currentTime: 0, duration: 0 });
       return;
     }
-    const nextIndex = Math.min(index, nextQueue.length - 1);
+    // The next song still there takes the spot (or the last one, at the end).
+    const nextIndex = Math.min(kept, nextQueue.length - 1);
     this.showTrack({ queue: nextQueue, queueIndex: nextIndex, currentTrack: nextQueue[nextIndex] });
     this.loadWindowAt(nextIndex);
     this.hasCountedCurrentListen = false;
@@ -891,17 +926,25 @@ export class PlaybackController {
           .map((trackId) => availableTracks.get(trackId))
           .filter((track): track is MusicTrack => track !== undefined);
       const queue = toTracks(savedState.trackIds);
-      const queueIndex = queue.findIndex(
-        (track) => track.id === savedState.currentTrackId,
-      );
-      if (queueIndex < 0) {
+      // The saved spot, not the first match: a song played again from Up Next
+      // is in the queue twice.
+      const savedIndex =
+        savedState.queueIndex !== undefined &&
+        savedState.trackIds[savedState.queueIndex] === savedState.currentTrackId
+          ? savedState.queueIndex
+          : savedState.trackIds.indexOf(savedState.currentTrackId);
+      if (savedIndex < 0 || !availableTracks.has(savedState.currentTrackId)) {
         return;
       }
+      // Songs gone since the save shift the spot back.
+      const queueIndex = toTracks(savedState.trackIds.slice(0, savedIndex)).length;
 
       const track = queue[queueIndex];
+      // A song that had played to its end starts over: seeking to its end
+      // would end it again on the first Play.
       const position =
-        track.duration > 0
-          ? Math.min(savedState.position, track.duration)
+        track.duration > 0 && savedState.position >= track.duration - 0.5
+          ? 0
           : savedState.position;
       this.originalQueue =
         savedState.shuffle && savedState.originalTrackIds
@@ -914,7 +957,7 @@ export class PlaybackController {
         currentTrack: track,
         shuffle: savedState.shuffle,
         repeatMode: savedState.repeatMode,
-        queueSource: typeof savedState.queueSource === 'string' ? savedState.queueSource : null,
+        queueSource: savedState.queueSource ?? null,
       });
       this.loadWindowAt(queueIndex);
       this.applyTrackSpeed();
@@ -947,10 +990,28 @@ export class PlaybackController {
       this.update({ sleepTimerEndsAt: null });
     } else if (sleepTimerEndsAt !== null && Date.now() >= sleepTimerEndsAt) {
       this.player.pause();
+      this.expectPlaying(false);
       this.update({
         sleepTimerEndsAt: null,
         error: 'Sleep timer ended. Playback paused.',
       });
+    }
+
+    if (!status.playing && Date.now() < this.keepPlayingUntil) {
+      // The headphones' pause landed: play on through the speaker.
+      this.keepPlayingAfterDisconnect();
+    }
+
+    if (
+      this.snapshot.sleepAtTrackEnd &&
+      !status.playing &&
+      status.duration > 0 &&
+      status.currentTime >= status.duration - 0.5 &&
+      status.currentIndex === this.nativeIndex
+    ) {
+      // The last song ended with nothing after it: no song change will come
+      // to fire "End of this song", and it must not stay armed for later.
+      this.update({ sleepAtTrackEnd: false });
     }
 
     if (
@@ -979,6 +1040,11 @@ export class PlaybackController {
       }
     }
 
+    // Sent before this controller's last queue edit: its time can belong to
+    // the song that was playing before (both often sit at the same native
+    // index, and a tapped song's load waits two frames).
+    const isStale = this.isStaleReport();
+
     // Count steady playback only. A seek or song change moves the position by
     // a different amount than the clock did, so it is left out. Comparing with
     // the clock, not a fixed step, keeps slower background updates counted.
@@ -987,6 +1053,7 @@ export class PlaybackController {
     const clockStep = (now - this.lastStatusAt) / 1000;
     this.lastStatusAt = now;
     if (
+      !isStale &&
       status.playing &&
       this.snapshot.isPlaying &&
       step > 0 &&
@@ -996,7 +1063,10 @@ export class PlaybackController {
     }
 
     const pendingSeek = this.pendingSeek;
-    if (pendingSeek === null) {
+    if (isStale) {
+      // Keep the fade going on the position this controller knows.
+      this.applyFade(this.progress.currentTime, status.playing);
+    } else if (pendingSeek === null) {
       this.updateProgress({
         currentTime: status.currentTime,
         duration: status.duration,
@@ -1089,7 +1159,10 @@ export class PlaybackController {
     }
 
     this.nativeIndex = liveIndex;
-    const isNewSong = track.id !== this.snapshot.currentTrack?.id;
+    // The player moved by itself (skips set the native index themselves), so
+    // a song ended. Another queue spot is a new song even with the same id,
+    // and a one-song queue on repeat-all plays the same spot again.
+    const isNewSong = queueIndex !== this.snapshot.queueIndex || this.snapshot.queue.length === 1;
     this.showTrack({ queueIndex, currentTrack: track });
     this.refillWindow();
     if (isNewSong && this.snapshot.sleepAtTrackEnd && this.snapshot.isPlaying) {
@@ -1103,6 +1176,8 @@ export class PlaybackController {
       this.fadeInCurrent = this.isFadingOut;
       this.isFadingOut = false;
       this.hasCountedCurrentListen = false;
+      // A broken song the player skipped by itself: the next one plays fine.
+      this.setError('');
       this.updateLockScreen(track);
       if (this.snapshot.isPlaying) {
         this.countListen();
@@ -1436,7 +1511,7 @@ export class PlaybackController {
   }
 
   private save() {
-    const { queue, currentTrack, shuffle, repeatMode } = this.snapshot;
+    const { queue, queueIndex, currentTrack, shuffle, repeatMode } = this.snapshot;
     if (!this.canPersist || !currentTrack || queue.length === 0) {
       return;
     }
@@ -1444,6 +1519,7 @@ export class PlaybackController {
     const savedState: SavedPlaybackState = {
       trackIds: queue.map((track) => track.id),
       currentTrackId: currentTrack.id,
+      queueIndex,
       position: Math.max(0, this.progress.currentTime),
       shuffle,
       repeatMode,
@@ -1511,6 +1587,10 @@ function parseSavedPlaybackState(value: string): SavedPlaybackState {
     repeatMode: state.repeatMode,
     ...(isIdList(state.originalTrackIds)
       ? { originalTrackIds: state.originalTrackIds }
+      : {}),
+    ...(typeof state.queueSource === 'string' ? { queueSource: state.queueSource } : {}),
+    ...(Number.isInteger(state.queueIndex) && (state.queueIndex as number) >= 0
+      ? { queueIndex: state.queueIndex as number }
       : {}),
   };
 }

@@ -68,7 +68,13 @@ export function createSavedStore<T>(
       };
     },
     update(change: (value: T) => T) {
-      current = change(current);
+      const next = change(current);
+      // Nothing changed: no re-render and no write. Before the load, the
+      // change is still kept, since it may not be a no-op on the saved copy.
+      if (loaded && next === current) {
+        return;
+      }
+      current = next;
       notify();
       if (loaded) {
         if (!readFailed) {

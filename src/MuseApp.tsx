@@ -416,10 +416,10 @@ export function MuseApp({
     // moment before the first load, not a library with nothing in it.
     if (tracks.length > 0) {
       const present = new Set(tracks.map((track) => track.id));
-      playbackController
-        .getSnapshot()
-        .queue.filter((track) => !present.has(track.id))
-        .forEach((track) => playbackController.removeTrack(track.id));
+      const gone = playbackController.getSnapshot().queue.filter((track) => !present.has(track.id));
+      if (gone.length > 0) {
+        playbackController.removeTracks(new Set(gone.map((track) => track.id)));
+      }
     }
   }, [playbackController, tracks]);
 
@@ -889,10 +889,10 @@ export function MuseApp({
         return;
       }
       const gone = new Set(list.map((track) => track.id));
+      playbackController.removeTracks(gone);
+      removeFromAllPlaylists(gone);
       const perFolder = new Map<string, number>();
       list.forEach((track) => {
-        playbackController.removeTrack(track.id);
-        removeFromAllPlaylists(track.id);
         perFolder.set(track.folderId, (perFolder.get(track.folderId) ?? 0) + 1);
       });
       if (list.length > 1) {

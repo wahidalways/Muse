@@ -97,18 +97,22 @@ export function removeFromPlaylist(playlistId: string, trackId: string) {
 }
 
 /** Takes a song deleted from the phone out of every playlist. */
-export function removeFromAllPlaylists(trackId: string) {
-  store.update((playlists) =>
-    playlists.map((playlist) =>
-      playlist.trackIds.includes(trackId)
+/** Deleted songs leave every playlist, in one save. */
+export function removeFromAllPlaylists(trackIds: ReadonlySet<string>) {
+  store.update((playlists) => {
+    const next = playlists.map((playlist) =>
+      playlist.trackIds.some((id) => trackIds.has(id))
         ? {
             ...playlist,
-            trackIds: playlist.trackIds.filter((id) => id !== trackId),
-            coverTrackId: playlist.coverTrackId === trackId ? null : playlist.coverTrackId,
+            trackIds: playlist.trackIds.filter((id) => !trackIds.has(id)),
+            coverTrackId:
+              playlist.coverTrackId !== null && trackIds.has(playlist.coverTrackId) ? null : playlist.coverTrackId,
           }
         : playlist,
-    ),
-  );
+    );
+    // The same list when no playlist held them, so nothing re-renders or saves.
+    return next.every((playlist, index) => playlist === playlists[index]) ? playlists : next;
+  });
 }
 
 /** Uses a song's album art as the cover, or the automatic cover with null. */
