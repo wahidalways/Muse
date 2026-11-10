@@ -27,14 +27,18 @@ export function useCurrentTrackId(): string | null {
   );
 }
 
+const ignoreTicks = () => () => undefined;
+
 /**
  * Position and duration. Updates every status tick, so only small
- * components (progress bars, time labels) should use it.
+ * components (progress bars, time labels) should use it. With `live` false
+ * (hidden, such as the closed player) ticks no longer re-render it; it reads
+ * the position whenever it renders anyway, and follows ticks again once live.
  */
-export function usePlaybackProgress(): PlaybackProgress {
+export function usePlaybackProgress(live = true): PlaybackProgress {
   const controller = getPlaybackController();
   return useSyncExternalStore(
-    controller.subscribeProgress,
+    live ? controller.subscribeProgress : ignoreTicks,
     controller.getProgress,
   );
 }

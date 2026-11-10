@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { StyleSheet } from 'react-native';
-import { type Accent, ThemeContext } from './theme';
+import { type Accent, type Theme, ThemeContext } from './theme';
 
 export const colors = {
   background: '#11130F',
@@ -4850,52 +4850,34 @@ const styleDefinitions = {
   },
 } as const;
 
-/**
- * Accent-filled buttons and the text on them: the accent's action color and its readable label color.
- * Declared before the theme styles below, which are built while this file loads.
- */
+/** Accent-filled buttons and the text on them: the accent's action color and its readable label color. */
 const ACTION_FILLS = new Set(['primaryButton', 'sheetDone', 'coverSearchButton']);
 const ACTION_LABELS = new Set(['primaryButtonLabel', 'buttonArrow', 'sheetDoneText', 'coverSearchButtonText']);
 
-const lightThemeStyles = {
-  lime: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'lime')),
-  muse: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'muse')),
-  ocean: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'ocean')),
-  sunset: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'sunset')),
-  rose: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'rose')),
-  coral: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'coral')),
-  teal: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'teal')),
-  red: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'red')),
-};
+function buildStyles(theme: Theme, accent: Accent, isAmoled: boolean) {
+  return StyleSheet.create(
+    theme === 'light'
+      ? createLightStyleDefinitions(styleDefinitions, accent)
+      : createDarkStyleDefinitions(styleDefinitions, accent, isAmoled),
+  );
+}
 
-const darkThemeStyles = {
-  lime: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'lime', false)),
-  muse: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'muse', false)),
-  ocean: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'ocean', false)),
-  sunset: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'sunset', false)),
-  rose: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'rose', false)),
-  coral: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'coral', false)),
-  teal: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'teal', false)),
-  red: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'red', false)),
-};
-
-const amoledThemeStyles = {
-  lime: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'lime', true)),
-  muse: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'muse', true)),
-  ocean: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'ocean', true)),
-  sunset: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'sunset', true)),
-  rose: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'rose', true)),
-  coral: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'coral', true)),
-  teal: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'teal', true)),
-  red: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'red', true)),
-};
+/**
+ * Each look (theme, accent, AMOLED) is built the first time it is shown and
+ * kept. Building all 24 while the app loaded made about 20,000 styles before
+ * the first frame, though only one look is on screen.
+ */
+const builtStyles = new Map<string, ReturnType<typeof buildStyles>>();
 
 export function useAppStyles() {
   const { theme, accent, isAmoled } = useContext(ThemeContext);
-  if (theme === 'light') {
-    return lightThemeStyles[accent];
+  const key = [theme, theme === 'dark' && isAmoled ? 'amoled' : '', accent].join(':');
+  let styles = builtStyles.get(key);
+  if (!styles) {
+    styles = buildStyles(theme, accent, isAmoled);
+    builtStyles.set(key, styles);
   }
-  return isAmoled ? amoledThemeStyles[accent] : darkThemeStyles[accent];
+  return styles;
 }
 
 function createDarkStyleDefinitions<T extends Record<string, object>>(

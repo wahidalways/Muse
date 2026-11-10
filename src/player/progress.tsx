@@ -48,8 +48,8 @@ const SCRUB_FEEDBACK = { duration: 120, easing: EASE_OUT };
  * player reports its own. Re-renders once per status tick, so it is only used
  * for text: time labels and accessibility values.
  */
-function useTrackProgress(fallbackDuration: number) {
-  const { currentTime, duration } = usePlaybackProgress();
+function useTrackProgress(fallbackDuration: number, live = true) {
+  const { currentTime, duration } = usePlaybackProgress(live);
   return {
     currentTime,
     duration: duration > 0 ? duration : fallbackDuration,
@@ -68,6 +68,8 @@ function useTrackProgress(fallbackDuration: number) {
 function useSmoothProgress(
   fallbackDuration: number,
   isScrubbing?: SharedValue<boolean>,
+  /** False while hidden (the closed player): the bar steps once a report instead of gliding every frame. */
+  live = true,
 ): { ratio: SharedValue<number>; resync: () => void } {
   const ratio = useSharedValue(0);
   const glideDuration = useRef<number | null>(null);
@@ -89,7 +91,7 @@ function useSmoothProgress(
       }
 
       const actual = clamp(currentTime / duration, 0, 1);
-      if (!controller.getSnapshot().isPlaying) {
+      if (!live || !controller.getSnapshot().isPlaying) {
         glideDuration.current = null;
         cancelAnimation(ratio);
         ratio.set(actual);
@@ -125,7 +127,7 @@ function useSmoothProgress(
       unsubscribeState();
       cancelAnimation(ratio);
     };
-  }, [fallbackDuration, isScrubbing, ratio]);
+  }, [fallbackDuration, isScrubbing, live, ratio]);
 
   // A scrub cancels the glide, so it must restart even when nothing drifted.
   const resync = useCallback(() => {
@@ -234,7 +236,7 @@ export function ProgressSlider({
   const [layoutWidth, setLayoutWidth] = useState(0);
   const width = useSharedValue(0);
   const isScrubbing = useSharedValue(false);
-  const { ratio, resync } = useSmoothProgress(fallbackDuration, isScrubbing);
+  const { ratio, resync } = useSmoothProgress(fallbackDuration, isScrubbing, animate);
   const durationValue = useSharedValue(fallbackDuration);
   const shownSecond = useSharedValue(-1);
   /** The time under the finger while dragging, or null. */
@@ -414,6 +416,7 @@ export function ProgressSlider({
           width.set(next);
           setLayoutWidth(next);
         }}
+        live={animate}
       >
         {layoutWidth > 0 && (
           <Svg width={layoutWidth} height={size.height} pointerEvents="none">
@@ -457,7 +460,7 @@ export function ProgressSlider({
         />
       </SeekArea>
       {variant === 'full' && (
-        <SliderTimes fallbackDuration={fallbackDuration} scrubSeconds={scrubSeconds} />
+        <SliderTimes fallbackDuration={fallbackDuration} scrubSeconds={scrubSeconds} live={animate} />
       )}
     </View>
   );
@@ -474,6 +477,7 @@ function SeekArea({
   fallbackDuration,
   onSeek,
   onWidth,
+  live,
   children,
 }: {
   gesture: ReturnType<typeof useCompetingGestures>;
@@ -481,9 +485,11 @@ function SeekArea({
   fallbackDuration: number;
   onSeek: (ratio: number) => void;
   onWidth: (width: number) => void;
+  /** False while hidden: position ticks do not re-render it. */
+  live: boolean;
   children: ReactNode;
 }) {
-  const { currentTime, duration } = useTrackProgress(fallbackDuration);
+  const { currentTime, duration } = useTrackProgress(fallbackDuration, live);
   const seekBy = (seconds: number) => {
     if (duration > 0) {
       onSeek(clamp((currentTime + seconds) / duration, 0, 1));
@@ -520,12 +526,15 @@ function SeekArea({
 function SliderTimes({
   fallbackDuration,
   scrubSeconds,
+  live,
 }: {
   fallbackDuration: number;
   scrubSeconds: number | null;
+  /** False while hidden: position ticks do not re-render it. */
+  live: boolean;
 }) {
   const styles = useAppStyles();
-  const { currentTime, duration } = useTrackProgress(fallbackDuration);
+  const { currentTime, duration } = useTrackProgress(fallbackDuration, live);
   const { showTimeRemaining } = usePreferences();
   const shown = scrubSeconds ?? currentTime;
   const left = Math.max(0, duration - shown);
