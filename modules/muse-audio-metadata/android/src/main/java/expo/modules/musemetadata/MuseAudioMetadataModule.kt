@@ -47,6 +47,8 @@ private const val ARTWORK_SIZE = 512
 private const val FULL_ARTWORK_SIZE = 4096
 /** Pictures with more pixels than this (4000 x 4000) are scaled down: Android cannot draw bitmaps over about 100 MB. */
 private const val MAX_FULL_PIXELS = 16_000_000L
+/** Longest side of the lock screen's picture. Android shows it at about 1000 px at most. */
+private const val LOCK_SCREEN_SIZE = 1440
 private val ALBUM_ART_URI: Uri = Uri.parse("content://media/external/audio/albumart")
 /** Launcher aliases made by plugins/withAppIcons.js; keep in step with plugins/app-icons.json. */
 private val APP_ICON_IDS = listOf("muse", "light", "lime", "mono", "paper", "ocean")
@@ -164,9 +166,17 @@ class MuseAudioMetadataModule : Module() {
         return@OnStartObserving
       }
       val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        // Every system setting lands here (auto brightness writes many a
+        // minute); only a new media volume is sent to JS.
+        private var lastVolume = -1.0
+
         override fun onChange(selfChange: Boolean) {
           val audio = audioManager() ?: return
-          sendEvent("onVolumeChange", mapOf("volume" to mediaVolume(audio)))
+          val volume = mediaVolume(audio)
+          if (volume != lastVolume) {
+            lastVolume = volume
+            sendEvent("onVolumeChange", mapOf("volume" to volume))
+          }
         }
       }
       context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, observer)
@@ -284,6 +294,13 @@ class MuseAudioMetadataModule : Module() {
     // The main hue of any image file, such as a cover picked for a song.
     AsyncFunction("getImageColor") { uri: String ->
       Uri.parse(uri).path?.let { path -> colorOf(path) }
+    }
+
+    // A file:// picture the lock screen can take: expo-audio decodes it at full size.
+    AsyncFunction("getLockScreenCover") { uri: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Muse cannot access the Android media library.")
+      Uri.parse(uri).path?.let { path -> lockScreenCopy(context.cacheDir, File(path)) }
     }
   }
 
@@ -500,11 +517,9 @@ class MuseAudioMetadataModule : Module() {
     }
 
     val bitmap = loadArtworkBitmap(resolver, trackRowId, albumIdOf(resolver, trackId)) ?: return null
-    return if (writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }) {
-      Uri.fromFile(file).toString()
-    } else {
-      null
-    }
+    val saved = writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+    bitmap.recycle()
+    return if (saved) Uri.fromFile(file).toString() else null
   }
 
   private fun albumIdOf(resolver: ContentResolver, trackId: String): Long? =
@@ -562,11 +577,9 @@ class MuseAudioMetadataModule : Module() {
     }
     val best = bestPicture(picturesOf(resolver, trackId)) ?: return readArtworkFile(resolver, cacheDir, trackId)
     val bitmap = decodeScaled(best.bytes, ARTWORK_SIZE) ?: return readArtworkFile(resolver, cacheDir, trackId)
-    return if (writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }) {
-      Uri.fromFile(file).toString()
-    } else {
-      null
-    }
+    val saved = writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+    bitmap.recycle()
+    return if (saved) Uri.fromFile(file).toString() else null
   }
 
   /**
@@ -589,7 +602,9 @@ class MuseAudioMetadataModule : Module() {
     }
     val bitmap = albumArtBitmap(resolver, trackId) ?: return null
     val file = File(directory, "$name.jpg")
-    return if (writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }) describeImage(file) else null
+    val saved = writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+    bitmap.recycle()
+    return if (saved) describeImage(file) else null
   }
 
   /** Every picture in the file at full size, in file order, for Change cover. */
@@ -629,6 +644,60 @@ class MuseAudioMetadataModule : Module() {
       BitmapFactory.decodeByteArray(picture.bytes, 0, picture.bytes.size, options)
     }.getOrNull() ?: return false
     return writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }.also { bitmap.recycle() }
+  }
+
+  /**
+   * The picture at most LOCK_SCREEN_SIZE on its longest side: itself when it
+   * already is, else a JPEG copy in cache/muse-artwork/lock, made once. Null
+   * when it cannot be read.
+   */
+  private fun lockScreenCopy(cacheDir: File, source: File): String? {
+    if (!source.isFile) {
+      return null
+    }
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(source.path, bounds)
+    val longest = maxOf(bounds.outWidth, bounds.outHeight)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+      return null
+    }
+    if (longest <= LOCK_SCREEN_SIZE) {
+      return Uri.fromFile(source).toString()
+    }
+    // Named by folder, name and change time, so a replaced picture gets a new copy.
+    val file = File(
+      artworkDirectory(cacheDir, "lock"),
+      "${source.parentFile?.name}-${source.nameWithoutExtension}-${source.lastModified()}.jpg",
+    )
+    if (file.exists() && file.length() > 0) {
+      return Uri.fromFile(file).toString()
+    }
+    // Halves first (cheap, while decoding), then the exact size.
+    var sample = 1
+    while (longest / (sample * 2) >= LOCK_SCREEN_SIZE) {
+      sample *= 2
+    }
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    val decoded = runCatching { BitmapFactory.decodeFile(source.path, options) }.getOrNull() ?: return null
+    val scale = LOCK_SCREEN_SIZE.toFloat() / maxOf(decoded.width, decoded.height)
+    val bitmap = if (scale < 1f) {
+      runCatching {
+        Bitmap.createScaledBitmap(
+          decoded,
+          (decoded.width * scale).toInt().coerceAtLeast(1),
+          (decoded.height * scale).toInt().coerceAtLeast(1),
+          true,
+        )
+      }.getOrNull() ?: decoded
+    } else {
+      decoded
+    }
+    val saved = writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+    if (bitmap !== decoded) {
+      bitmap.recycle()
+    }
+    decoded.recycle()
+    return if (saved) Uri.fromFile(file).toString() else null
   }
 
   private fun describeImage(file: File): Map<String, Any> {

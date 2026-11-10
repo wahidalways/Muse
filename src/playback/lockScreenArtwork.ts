@@ -1,4 +1,4 @@
-import { getArtworkFile, getCoverThumb, getFullCover } from '../../modules/muse-audio-metadata';
+import { getArtworkFile, getCoverThumb, getFullCover, getLockScreenCover } from '../../modules/muse-audio-metadata';
 import { generatedArtFor, generatedArtName } from '../components/AlbumArtwork';
 import { museArtFile } from '../components/MuseArtCapture';
 import { getSongCover } from '../library/covers';
@@ -14,8 +14,9 @@ export function lockScreenCoverKey(track: MusicTrack): string {
 
 /**
  * The cover the app shows, as a file:// picture the lock screen can load:
- * the song's own, else the file's at full size (the best picture in it when
- * that setting is on), else Muse art, saved as a picture. Muse art also
+ * the song's own, else the file's (the best picture in it when that setting
+ * is on), else Muse art, saved as a picture. Big pictures go as a copy
+ * capped at 1440 px (getLockScreenCover): the lock screen never shows more. Muse art also
  * stands in for songs without a cover, as everywhere in the app.
  */
 export async function lockScreenArtwork(track: MusicTrack): Promise<string | null> {
@@ -26,7 +27,7 @@ export async function lockScreenArtwork(track: MusicTrack): Promise<string | nul
     return museArt();
   }
   if (cover?.kind === 'image') {
-    return cover.uri;
+    return (await getLockScreenCover(cover.uri)) ?? museArt();
   }
   const source = track.albumArtUri;
   if (source && !source.startsWith('content://')) {
@@ -35,7 +36,8 @@ export async function lockScreenArtwork(track: MusicTrack): Promise<string | nul
   }
   if (source) {
     const full = await getFullCover(track.id, bestFileCover);
-    const file = full?.uri ?? (await (bestFileCover ? getCoverThumb(track.id) : getArtworkFile(track.id)));
+    const sized = full ? await getLockScreenCover(full.uri) : null;
+    const file = sized ?? (await (bestFileCover ? getCoverThumb(track.id) : getArtworkFile(track.id)));
     if (file) {
       return file;
     }

@@ -71,12 +71,20 @@ class MuseAudioEffectsModule : Module() {
     // app restarts. So: skip a song that fails mid-play, and prepare again on play.
     override fun onPlayerError(error: PlaybackException) {
       val exo = player?.get() ?: return
-      if (exo.playWhenReady && exo.hasNextMediaItem() && failedInARow < MAX_FAILED_IN_A_ROW) {
-        failedInARow += 1
+      if (!exo.playWhenReady || failedInARow >= MAX_FAILED_IN_A_ROW) {
+        // Left idle; the next play below prepares it.
+        exo.pause()
+        return
+      }
+      failedInARow += 1
+      if (error.errorCode in 5000..5999) {
+        // The audio output failed (a Bluetooth or headphone switch), not the
+        // song: carry on with the same song where it was.
+        exo.prepare()
+      } else if (exo.hasNextMediaItem()) {
         exo.seekToNextMediaItem()
         exo.prepare()
       } else {
-        // Left idle; the next play below prepares it.
         exo.pause()
       }
     }

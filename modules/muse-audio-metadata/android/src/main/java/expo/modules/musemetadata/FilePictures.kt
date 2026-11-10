@@ -10,8 +10,12 @@ import java.nio.channels.FileChannel
 // find the best cover when a file holds several (front, back, booklet...).
 // Only the tag area is read, never the audio.
 
-/** Tags bigger than this are not read (a cover is a few MB at most). */
-private const val MAX_TAG_BYTES = 64_000_000
+/**
+ * Tags bigger than this are not read (a cover is a few MB at most); such a
+ * file gets Android's own picture. Reading takes a few copies of the tag at
+ * once, so a bigger limit risks running the app out of memory.
+ */
+private const val MAX_TAG_BYTES = 16_000_000
 
 /** ID3 and FLAC picture type for the front cover. */
 private const val FRONT_COVER = 3

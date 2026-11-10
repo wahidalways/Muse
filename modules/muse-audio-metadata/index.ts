@@ -60,6 +60,8 @@ type MuseAudioMetadataModule = {
   getFullCover?(trackId: string, best: boolean): Promise<CoverFile | null>;
   getFilePictures?(trackId: string): Promise<FilePicture[]>;
   getImageColor?(uri: string): Promise<CoverColor | null>;
+  // Missing from builds made before the lock-screen size cap.
+  getLockScreenCover?(uri: string): Promise<string | null>;
   getAudioDetails(trackId: string): Promise<AudioDetails | null>;
   getArtworkColor(trackId: string): Promise<CoverColor | null>;
   addListener(event: 'onAudioBecomingNoisy' | 'onHeadphonesConnected', listener: () => void): { remove(): void };
@@ -141,6 +143,24 @@ export async function getCoverThumb(trackId: string): Promise<string | null> {
 export async function getFullCover(trackId: string, best: boolean): Promise<CoverFile | null> {
   try {
     return (await nativeModule?.getFullCover?.(trackId, best)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A file:// picture sized for the lock screen: a cached copy at most 1440 px
+ * on its longest side, or the picture itself when it is already that small.
+ * expo-audio decodes the lock screen's picture at full size (a 4000 px cover
+ * is 64 MB), and Android shows it at about 1000 px anyway. Null when no copy
+ * could be made; the picture itself on builds without this.
+ */
+export async function getLockScreenCover(uri: string): Promise<string | null> {
+  if (!nativeModule?.getLockScreenCover) {
+    return uri;
+  }
+  try {
+    return await nativeModule.getLockScreenCover(uri);
   } catch {
     return null;
   }
