@@ -1,61 +1,77 @@
 # Muse
 
-Muse is an Expo app being built into an offline-first music player for Android.
-The app starts with a welcome screen, explains its audio permission before
-asking, and then scans Android audio folders. You can include or block folders;
-playback and persistent track browsing are the next implementation steps.
+Muse is an offline music player for Android, built with Expo and React
+Native. It plays the music already on your phone. There is no account, no
+streaming and no ads, and your listening history never leaves the phone.
 
-The app requests Android audio-library access only after the user taps
-**Allow access**. It does not request photo, video, microphone, or recording
-access.
-Folder choices are saved on-device. On later launches, an existing permission
-grant and saved choices are restored without another permission prompt.
-After setup, Muse opens to Home by default. The bottom tabs provide Home,
-Library, Equalizer, and Settings. Library displays individual tracks with a
-single-line search and a Sort by dropdown. Sort by title, artist, album, album
-artist, year, track number, filename, folder/path, duration, or date added,
-and choose ascending or descending order. Folder inclusion rules are managed
-from Settings.
+## What it does
 
-The **Equalizer** (More, Settings or the full player) changes the real sound in
-the installed app: a 10-band or 31-band graphic EQ, a parametric EQ with
-draggable bands, tone (bass, mid, treble, volume boost), balance, compressor,
-limiter, surround and room reverb. It has 20 built-in presets, your own saved
-presets (share them as text), headphone correction for 76 models from AutoEQ,
-a separate sound per output (speaker, wired, each Bluetooth device) and a
-hold-to-compare button. Dolby Atmos and Android spatial audio belong to the
-phone, so Muse shows their state and opens their settings. Expo Go shows the
-screens only. Check the EQ math with `node scripts/check-eq.mjs`.
-Choose **Light** or **Dark** mode independently from the **Muse Green**,
-**Ocean Blue** or **Sunset Amber** color theme in
-**Settings → Appearance**. Light is the default. In Dark mode, you can
-optionally enable **AMOLED black** for true-black backgrounds. Muse saves all
-appearance choices on the device. **Settings → Display → Full screen** hides
-the status bar while keeping the Android system navigation visible; safe-area
-spacing prevents app content and tabs from overlapping it.
+- **Your music, your folders.** Muse asks for audio access only after you tap
+  Allow access, then lists your music folders. Include or skip any folder;
+  you can change this later in Settings.
+- **Home.** A board of listening stats you can rearrange: this week, your
+  daily goal and streak, top artist, album and song, peak hour, genres,
+  sessions, how much of your library you have explored, and mixes made from
+  your plays. A weekly recap story and share cards sum it up.
+- **Library and Collections.** Every song with search and many sort options.
+  Collections holds your playlists, favorites, smart lists and folders.
+- **Player.** A mini player and a full player with four looks (Classic,
+  Full-bleed, Vinyl and Minimal type), lyrics stored in the song's tags, an
+  Up Next queue you can reorder, a sleep timer, crossfade and a speed per
+  song. Lock screen and headphone controls work in the background.
+- **Covers.** Muse reads the best picture inside each file. You can pick
+  another one, your own photo, or a cover found online (Apple Music and
+  Deezer, only when you search). Songs with no cover get generated Muse art.
+- **Equalizer.** On or off, 20 presets, 10 bands and bass boost. It changes
+  the real sound, and it can open your phone's own sound effects too.
+- **Make it yours.** Light, dark or AMOLED black, eight accent colors (or one
+  that follows the playing cover), glass or solid bars, and six app icons.
+- **Backup.** One file with your settings, playlists, favorites, ratings,
+  history and chosen photos. Restoring on a new phone matches songs by their
+  file path. Your music files are never part of it.
 
-Expo Go does not provide full access to the Android media library. It opens the
-real app shell with an empty library so you can review the screens and
-navigation. Install a development build or APK to test device music access.
-The installed APK asks for Android audio-library access when you tap
-**Allow access**. No photo, video, microphone, or recording permission is
-requested.
-
-## Run the app
+## Run it
 
 ```sh
+npm install
 npm start
 ```
 
-Press `a` in the Expo terminal to open Android, or run `npm run android`.
+Press `a` to open it on Android. Expo Go shows the screens with 15 test
+songs (`assets/demo`, made by `node scripts/make-demo-audio.js assets/demo`).
+They are never part of a release build. Reading your phone's music, the
+equalizer, covers from files and the lock screen need a real build.
 
-## Build an Android APK
-
-The `preview` EAS profile is configured to produce an installable APK:
+## Build an APK
 
 ```sh
 npx eas-cli build --platform android --profile preview
 ```
 
-An EAS account is needed to run a cloud build. The `production` profile is
-configured for an Android App Bundle.
+The `preview` profile makes an installable APK, and `production` makes an
+App Bundle for Google Play. You need an Expo account.
+
+## Checks
+
+Run these before a build:
+
+```sh
+npx tsc --noEmit
+npx expo lint
+node scripts/check-stats.mjs
+node scripts/check-eq.mjs
+node scripts/check-audio.mjs
+```
+
+`check-stats.mjs` covers the stats, mixes, sorting, search, backups and more.
+
+## Where things live
+
+- `src/MuseApp.tsx`: the app shell, tabs and navigation
+- `src/playback/`: the player engine (`PlaybackController.ts`)
+- `src/screens/`: Home, Library, Collections, Search and Settings
+- `src/player/`: the full and mini players
+- `modules/muse-audio-metadata/`: Muse's own native code (library scan,
+  covers, lyrics, equalizer and audio details)
+- `plugins/`: config plugins, such as the app icons
+- `scripts/`: checks and asset generators

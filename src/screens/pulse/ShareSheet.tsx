@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Modal, PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { captureRef } from 'react-native-view-shot';
+import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { isAvailableAsync, shareAsync } from 'expo-sharing';
 import { Asset, requestPermissionsAsync } from 'expo-media-library';
 import { getArtworkColor } from '../../../modules/muse-audio-metadata';
@@ -111,7 +111,13 @@ function Composer({ title, data, onClose }: { title: string; data: CardData; onC
         setStatus('Muse needs permission to save to your photos.');
         return;
       }
-      await Asset.create(await capture());
+      const image = await capture();
+      try {
+        await Asset.create(image);
+      } finally {
+        // The gallery keeps its own copy; the 1080 px temp file (a few MB) can go.
+        releaseCapture(image);
+      }
       setStatus('Saved to your photos ✅');
     } catch {
       setStatus('Could not save the image. Please try again.');
