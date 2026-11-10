@@ -20,13 +20,13 @@ import type { MusicTrack, ListeningEvent, MusicFolder } from '../types';
 import {
   computeStats,
   dayKey,
-  getGoalSummary,
   getLibraryCoverage,
   getRecentTracks,
   getStreaks,
   getWeek,
 } from '../history/stats';
 import { getMixes } from '../history/mixes';
+import { useToday } from '../history/useToday';
 import { useFavoriteIds } from '../library/favorites';
 import { markGoalCelebrated, openRecapCard, markRecapSeen, usePulse } from '../settings/pulse';
 import { getPlaybackController } from '../playback/PlaybackController';
@@ -186,10 +186,13 @@ export const HomeTab = memo(function HomeTab({
   // first and the numbers catch up a moment later.
   const history = useDeferredValue(liveHistory);
   const goalSeconds = goalMinutes * 60;
+  // Rebuilds the stats when the day turns, even with no new play.
+  const today = useToday();
 
   const data = useMemo(() => {
     const lookup = (id: string) => tracksById.get(id);
     const month = computeStats(history, '30d', lookup);
+    const week = getWeek(history, lookup, weekStart);
     // The top artist's albums, one cover each, so the tile shows the artist rather than one song.
     const topArtist = month.topArtists[0]?.name;
     const albums = new Map<string, MusicTrack>();
@@ -200,18 +203,21 @@ export const HomeTab = memo(function HomeTab({
       }
     });
     return {
-      week: getWeek(history, lookup, weekStart),
+      week,
       month,
       artistAlbums: [...albums.values()],
       goalSeconds,
-      todaySeconds: getGoalSummary(history, lookup, goalSeconds).todaySeconds,
+      // Today is the week's last day so far (later days are null).
+      todaySeconds: week.days.filter((day) => day.seconds !== null).at(-1)?.seconds ?? 0,
       streak: getStreaks(history),
       coverage: getLibraryCoverage(history, tracks),
       recent: getRecentTracks(history, 12),
     };
-  }, [goalSeconds, history, tracks, tracksById, weekStart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `today`: the stats read the clock, so they rebuild when the day turns.
+  }, [goalSeconds, history, today, tracks, tracksById, weekStart]);
   // Apart from the stats, so liking a song only rebuilds the mixes.
-  const mixes = useMemo(() => getMixes(history, tracks, favorites), [favorites, history, tracks]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `today`, as above.
+  const mixes = useMemo(() => getMixes(history, tracks, favorites), [favorites, history, today, tracks]);
   const boardData = useMemo(() => ({ ...data, mixes }), [data, mixes]);
 
   const live = useLiveSeconds(liveHistory, currentTrack, isPlaying, active);
@@ -248,6 +254,11 @@ export const HomeTab = memo(function HomeTab({
   }, [active, historyLoaded, isNewBest]);
 
   const recap = useRecap(history, tracksById, goalSeconds, weekStart);
+  // Built once per recap, not on every render (the live listening time ticks every 15 s).
+  const recapShare = useMemo(
+    () => (recap ? recapCard(recap, tracksById, goalSeconds) : null),
+    [goalSeconds, recap, tracksById],
+  );
 
   // The skeleton only comes when loading is still going a moment after Home shows.
   const [isSlow, setIsSlow] = useState(false);
@@ -385,11 +396,11 @@ export const HomeTab = memo(function HomeTab({
             }}
           />
         )}
-        {recap && (
+        {recapShare && (
           <ShareSheet
             visible={isSharing}
             title="Share your week"
-            data={recapCard(recap, tracksById, goalSeconds)}
+            data={recapShare}
             onClose={() => setIsSharing(false)}
           />
         )}

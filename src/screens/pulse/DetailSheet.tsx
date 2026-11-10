@@ -256,7 +256,9 @@ function Frame({ request, onClose, ctx, closeAsk }: { request: DetailRequest; on
   };
 
   const isMix = request.key === 'mix';
-  const mix = isMix && request.mixIndex !== undefined ? ctx.data.mixes[request.mixIndex] : null;
+  // By id, not position: the list re-sorts as you play (a mix shows from 3 songs), and an open
+  // sheet must not turn into another mix. One that dropped out keeps showing as it was opened.
+  const mix = isMix ? (ctx.data.mixes.find((item) => item.id === request.hero?.mix?.id) ?? request.hero?.mix ?? null) : null;
 
   return (
     <View style={StyleSheet.absoluteFill} accessibilityViewIsModal>
@@ -453,7 +455,8 @@ function useDetailView(key: DetailKey, range: Range | null, ctx: DetailContext, 
         hero: formatListeningTime(total),
         delta: stats.previous && stats.previous.seconds > 0 ? percentChange(total, stats.previous.seconds) : null,
         caption: range === '30 days' ? 'vs the 30 days before' : `${stats.plays.toLocaleString()} plays`,
-        chart: <TimeChart data={points} formatValue={formatListeningTime} kind="bars" height={150} animateIn />,
+        // Bars for 30 days; All time has a bar per week, which passes 100 after two years, so it draws an area.
+        chart: <TimeChart data={points} formatValue={formatListeningTime} kind={range === '30 days' ? 'bars' : undefined} height={150} animateIn />,
         facts: [
           [stats.bucketUnit === 'week' ? 'Weekly average' : 'Daily average', formatListeningTime(total / Math.max(1, stats.buckets.length))],
           [stats.bucketUnit === 'week' ? 'Best week' : 'Best day', best.value > 0 ? `${best.label} · ${formatListeningTime(best.value)}` : 'None yet'],

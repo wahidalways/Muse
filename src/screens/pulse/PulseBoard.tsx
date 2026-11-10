@@ -71,7 +71,6 @@ export type Rect = { x: number; y: number; width: number; height: number };
 /** What a tap hands the detail sheet: where the card is, so the sheet grows out of it. */
 export type DetailRequest = {
   key: DetailKey;
-  mixIndex?: number;
   rect: Rect;
   /** The card, faded out while its sheet is open (mixes stay put). */
   hide?: SharedValue<number>;
@@ -120,7 +119,8 @@ export const PulseBoard = memo(function PulseBoard(props: BoardProps) {
     goal: true,
     streak: true,
     artist: data.month.topArtists.length > 0,
-    hour: data.month.plays > 0,
+    // Plays of 0 seconds leave every hour empty, and no peak (-1) reads as "-1 AM".
+    hour: peakIndex(data.month.hours) >= 0,
     repeat: Boolean(data.month.topTracks[0] && tracksById.get(data.month.topTracks[0].id)),
     album: data.month.topAlbums.length > 0,
     session: data.month.sessions.count > 0,
@@ -619,7 +619,7 @@ function Mixes({ data, currentTrack, isPlaying, active, queueSource, onOpenDetai
           size={size}
           isCurrent={currentTrack !== null && queueSource === mix.title}
           isPlaying={isPlaying && active}
-          onOpen={(rect) => onOpenDetail({ key: 'mix', mixIndex: index, rect, hero: { rect, mix } })}
+          onOpen={(rect) => onOpenDetail({ key: 'mix', rect, hero: { rect, mix } })}
         />
       ))}
     </View>

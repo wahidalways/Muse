@@ -1,5 +1,8 @@
 import type { ListeningEvent, MusicTrack } from '../types';
 
+const LABEL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+const LABEL_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 /**
  * Listening stats, worked out from the saved play history. Pure functions with
  * no runtime imports, so `scripts/check-stats.mjs` can run them in plain Node.
@@ -175,12 +178,15 @@ export function computeStats(
   // A calendar week shows all seven days; the ones still to come stay empty.
   const bucketEnd = range === 'week' ? addDays(start, 7) : end;
   for (let time = bucketStart; time < bucketEnd; time = addDays(time, bucketDays)) {
+    const date = new Date(time);
     buckets.push({
       key: dayKey(time),
+      // Fixed names like the rest of Muse ("3 Nov", "Mon"): Intl date formatting
+      // is slow on Hermes, and All time has a bucket per week.
       label:
         bucketUnit === 'week' || range === '30d'
-          ? new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-          : new Date(time).toLocaleDateString(undefined, { weekday: 'short' }),
+          ? `${date.getDate()} ${LABEL_MONTHS[date.getMonth()]}`
+          : LABEL_DAYS[date.getDay()],
       seconds: 0,
       plays: 0,
     });

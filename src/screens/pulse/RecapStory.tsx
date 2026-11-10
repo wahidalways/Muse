@@ -12,6 +12,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 import type { ListeningEvent, MusicTrack } from '../../types';
 import { computeStats, getWeek, peakIndex, type ListeningStats, type WeekStart } from '../../history/stats';
+import { useToday } from '../../history/useToday';
 import { AlbumArtwork } from '../../components/AlbumArtwork';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { formatHour, formatListeningTime, percentChange } from '../../utils/format';
@@ -34,6 +35,8 @@ export type Recap = {
   goalDays: number;
   /** Per day, Monday-first in week order: listened, goal met. */
   days: { played: boolean; metGoal: boolean }[];
+  /** No play from before this week at all. */
+  isFirstWeek: boolean;
 };
 
 export function dateFromKey(key: string): Date {
@@ -44,6 +47,10 @@ export function dateFromKey(key: string): Date {
 const label = (date: Date) => `${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
 
 export function shortRange(from: Date, to: Date): string {
+  if (from.getFullYear() !== to.getFullYear()) {
+    // All time can span years: "3 Nov 2025 – 10 Nov 2026", not "3–10 Nov".
+    return `${from.getDate()} ${MONTHS[from.getMonth()]} ${from.getFullYear()} – ${to.getDate()} ${MONTHS[to.getMonth()]} ${to.getFullYear()}`;
+  }
   return from.getMonth() === to.getMonth()
     ? `${from.getDate()}–${to.getDate()} ${MONTHS[to.getMonth()]}`
     : `${from.getDate()} ${MONTHS[from.getMonth()]} – ${to.getDate()} ${MONTHS[to.getMonth()]}`;
@@ -67,6 +74,8 @@ export function useRecap(
   goalSeconds: number,
   weekStart: WeekStart,
 ): Recap | null {
+  // A new week starts at midnight, even with no new play.
+  const today = useToday();
   return useMemo(() => {
     const lookup = (id: string) => tracksById.get(id);
     // Noon on the last day of last week: computeStats' calendar week then covers all of it.
@@ -86,8 +95,11 @@ export function useRecap(
       short: shortRange(dateFromKey(stats.buckets[0].key), dateFromKey(stats.buckets[6].key)),
       goalDays: days.filter((day) => day.metGoal).length,
       days,
+      // Any play from before this week: a quiet week before it is a break, not a first week.
+      isFirstWeek: !history.some((event) => event.playedAt < dateFromKey(stats.buckets[0].key).getTime()),
     };
-  }, [goalSeconds, history, tracksById, weekStart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `today`: last week moves on when the day turns.
+  }, [goalSeconds, history, today, tracksById, weekStart]);
 }
 
 function partOfDay(hour: number): string {
@@ -218,7 +230,9 @@ function useSlides(
         <Text style={story.huge}>{formatListeningTime(stats.seconds)}</Text>
         <Text style={story.say}>
           {change === null
-            ? 'Your first full week here. Welcome in ✨'
+            ? recap.isFirstWeek
+              ? 'Your first full week here. Welcome in ✨'
+              : 'Good to have you back. Welcome in ✨'
             : change >= 0
               ? `${change}% more than the week before. Turn it up 📈`
               : `${Math.abs(change)}% less than the week before. Quality over quantity 😌`}
