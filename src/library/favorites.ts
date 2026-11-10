@@ -1,73 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
-
-const FAVORITES_KEY = '@muse/favorites/v1';
-
-type Listener = () => void;
+import { createSavedStore } from './savedStore';
 
 /**
  * Favorite songs, by track id, saved on the phone. Kept outside React so a
- * heart re-renders only itself when it changes.
+ * heart re-renders only itself when it changes. The saved store replays a
+ * heart tapped while the saved list is still loading on top of that list,
+ * so an early tap never overwrites the others.
  */
-let favorites: ReadonlySet<string> = new Set();
-let loadStarted = false;
-const listeners = new Set<Listener>();
+const store = createSavedStore<readonly string[]>(AsyncStorage, '@muse/favorites/v1', [], (value) =>
+  Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : null,
+);
 
-function notify() {
-  listeners.forEach((listener) => listener());
-}
-
-function ensureLoaded() {
-  if (loadStarted) {
-    return;
+let lastIds = store.get();
+let lastSet: ReadonlySet<string> = new Set(lastIds);
+/** The same Set until the list changes, as useSyncExternalStore needs. */
+function favoriteSet(): ReadonlySet<string> {
+  const ids = store.get();
+  if (ids !== lastIds) {
+    lastIds = ids;
+    lastSet = new Set(ids);
   }
-  loadStarted = true;
-  AsyncStorage.getItem(FAVORITES_KEY)
-    .then((value) => {
-      if (!value) {
-        return;
-      }
-      const parsed: unknown = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        // Keep anything toggled while loading.
-        favorites = new Set([
-          ...parsed.filter((id): id is string => typeof id === 'string'),
-          ...favorites,
-        ]);
-        notify();
-      }
-    })
-    .catch(() => undefined);
-}
-
-function subscribe(listener: Listener) {
-  ensureLoaded();
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return lastSet;
 }
 
 export function toggleFavorite(trackId: string) {
-  const next = new Set(favorites);
-  if (next.has(trackId)) {
-    next.delete(trackId);
-  } else {
-    next.add(trackId);
-  }
-  favorites = next;
-  notify();
-  // A failed save only means the change is lost on the next launch.
-  AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify([...next])).catch(
-    () => undefined,
-  );
+  store.update((ids) => (ids.includes(trackId) ? ids.filter((id) => id !== trackId) : [...ids, trackId]));
 }
 
 export function useIsFavorite(trackId: string): boolean {
-  return useSyncExternalStore(subscribe, () => favorites.has(trackId));
+  return useSyncExternalStore(store.subscribe, () => favoriteSet().has(trackId));
 }
 
 /** Every favorite track id. Re-renders when any heart changes. */
 export function useFavoriteIds(): ReadonlySet<string> {
-  return useSyncExternalStore(subscribe, () => favorites);
+  return useSyncExternalStore(store.subscribe, favoriteSet);
 }

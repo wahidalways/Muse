@@ -32,8 +32,14 @@ export function isNewer(candidate: string, current: string): boolean {
 
 /** `currentVersion` is APP_VERSION; passed in so this file runs in node checks too. */
 export async function checkForUpdate(currentVersion: string): Promise<UpdateCheck> {
+  // A captive portal or a weak signal can hold a request open forever.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
   try {
-    const response = await fetch(LATEST_RELEASE, { headers: { Accept: 'application/vnd.github+json' } });
+    const response = await fetch(LATEST_RELEASE, {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    });
     if (response.status === 404) {
       // No release published yet.
       return { status: 'none' };
@@ -56,6 +62,8 @@ export async function checkForUpdate(currentVersion: string): Promise<UpdateChec
       : { status: 'latest' };
   } catch {
     return { status: 'error' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

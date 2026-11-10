@@ -491,3 +491,32 @@ console.log('update checks passed');
   assert.match(funkyName(), /^\S+ \S+$/);
 }
 console.log('funky name checks passed');
+
+// Backups: ASCII-only text, and songs matched across phones by path.
+{
+  const { ascii, relativePath, songIdMap, swapSongIds } = await import('../src/settings/backupFormat.ts');
+  const text = JSON.stringify({ title: 'আমার গান 😀', plain: 'ok' });
+  assert.match(ascii(text), /^[\x00-\x7e]*$/, 'every character is ASCII');
+  assert.deepEqual(JSON.parse(ascii(text)), JSON.parse(text), 'escapes read back the same');
+  assert.equal(relativePath('/storage/emulated/0/Music/a.mp3'), 'Music/a.mp3');
+  assert.equal(relativePath('/storage/1A2B-3C4D/Music/a.mp3'), 'Music/a.mp3', 'SD card volume dropped');
+
+  // Old phone: 1 = Music/a, 2 = Music/b, 3 = Music/c. New phone: a is 2, b is 9, c is missing and 3 is another song.
+  const ids = songIdMap(
+    { 1: 'Music/a.mp3', 2: 'Music/b.mp3', 3: 'Music/c.mp3', 4: 'Music/d.mp3' },
+    [
+      { id: '2', path: '/storage/emulated/0/Music/a.mp3' },
+      { id: '9', path: '/storage/emulated/0/Music/b.mp3' },
+      { id: '3', path: '/storage/emulated/0/Music/other.mp3' },
+    ],
+  );
+  assert.deepEqual([...ids], [['1', '2'], ['2', '9'], ['3', 'gone:3']], 'unmatched 4 is left alone');
+  assert.equal(
+    swapSongIds('{"favorites":["1","2","3","4"],"2":5,"name":"x"}', ids),
+    '{"favorites":["2","9","gone:3","4"],"9":5,"name":"x"}',
+    'one pass: 1 becomes 2 and is not then swapped again to 9',
+  );
+  assert.equal(swapSongIds('["1"]', new Map()), '["1"]');
+  assert.equal(songIdMap(undefined, []).size, 0);
+}
+console.log('backup checks passed');

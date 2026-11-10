@@ -77,18 +77,27 @@ export async function loadListeningHistory(): Promise<ListeningEvent[]> {
 
 let saveQueue: Promise<void> = Promise.resolve();
 let hasRemovedLegacyCopy = false;
+/** Set by a restore: Muse closes right after, and the old list in memory must not be saved back. */
+let isReplaced = false;
+
+/** Writes a temporary file, then moves it over the real one, so a crash mid-save never leaves half a file. */
+async function writeHistoryFile(text: string) {
+  const temp = new File(Paths.document, `${LISTENING_HISTORY_FILE_NAME}.tmp`);
+  await temp.write(text);
+  await temp.move(historyFile(), { overwrite: true });
+}
 
 /**
- * Writes a temporary file, then moves it over the real one, so a crash
- * mid-save never leaves half a file. Saves run one at a time, in order, so
- * an older list can never land after a newer one.
+ * Saves run one at a time, in order, so an older list can never land after
+ * a newer one.
  */
 export function saveListeningHistory(history: ListeningEvent[]): Promise<void> {
+  if (isReplaced) {
+    return Promise.resolve();
+  }
   const text = JSON.stringify(history);
   const save = saveQueue.then(async () => {
-    const temp = new File(Paths.document, `${LISTENING_HISTORY_FILE_NAME}.tmp`);
-    await temp.write(text);
-    await temp.move(historyFile(), { overwrite: true });
+    await writeHistoryFile(text);
     if (!hasRemovedLegacyCopy) {
       await AsyncStorage.removeItem(LISTENING_HISTORY_KEY);
       hasRemovedLegacyCopy = true;
@@ -97,4 +106,34 @@ export function saveListeningHistory(history: ListeningEvent[]): Promise<void> {
   // A failed save must not block the ones after it.
   saveQueue = save.catch(() => undefined);
   return save;
+}
+
+/** The saved history as text, for a backup. Null when nothing was ever saved. */
+export async function listeningHistoryText(): Promise<string | null> {
+  const file = historyFile();
+  return file.exists ? file.text() : AsyncStorage.getItem(LISTENING_HISTORY_KEY);
+}
+
+/** Bytes of saved history, for Settings › Storage. */
+export function listeningHistoryBytes(): number {
+  const file = historyFile();
+  return file.exists ? (file.size ?? 0) : 0;
+}
+
+/**
+ * Restore: puts a backup's history in place. Every later save this session
+ * is dropped, since the plays still in memory are the old ones.
+ */
+export async function replaceListeningHistory(text: string): Promise<void> {
+  // Checked before anything changes: a bad list throws here.
+  parseListeningHistory(text);
+  isReplaced = true;
+  try {
+    await saveQueue;
+    await writeHistoryFile(text);
+  } catch (error) {
+    // Muse keeps running after a failed restore, so new plays save again.
+    isReplaced = false;
+    throw error;
+  }
 }

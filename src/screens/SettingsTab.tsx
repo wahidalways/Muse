@@ -1055,7 +1055,7 @@ const checkedAgo = (time: number) => {
   return minutes < 24 * 60 ? `${Math.floor(minutes / 60)} h ago` : `on ${sinceLabel(time)}`;
 };
 
-function AppPage({ accent, onSetUpAgain, onResetSettings }: Props) {
+function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
   const styles = useAppStyles();
   const preferences = usePreferences();
   const switchColor = useSwitchColor(accent);
@@ -1088,6 +1088,9 @@ function AppPage({ accent, onSetUpAgain, onResetSettings }: Props) {
       onConfirm: () => {
         try {
           clearArtworkCache();
+        } catch {
+          // A throw from a press handler would close the app in a release build.
+          showToast('Could not clear the cover cache', { icon: 'info' });
         } finally {
           setCacheBytes(artworkCacheBytes());
         }
@@ -1097,7 +1100,7 @@ function AppPage({ accent, onSetUpAgain, onResetSettings }: Props) {
   const backUp = async () => {
     setBusy('backup');
     try {
-      const summary = await previewBackup();
+      const summary = await previewBackup(tracks);
       setBusy(null);
       setConfirm({
         eyebrow: 'BACKUP',
@@ -1107,7 +1110,7 @@ function AppPage({ accent, onSetUpAgain, onResetSettings }: Props) {
         confirmLabel: 'Pick a folder',
         onConfirm: async () => {
           try {
-            const name = await saveBackup();
+            const name = await saveBackup(tracks);
             if (name) {
               const now = Date.now();
               setBackupMade(now);
@@ -1133,7 +1136,7 @@ function AppPage({ accent, onSetUpAgain, onResetSettings }: Props) {
       if (!picked) {
         return;
       }
-      const { summary, backup } = picked;
+      const { summary } = picked;
       setConfirm({
         eyebrow: 'RESTORE',
         title: 'Restore this backup?',
@@ -1141,16 +1144,19 @@ function AppPage({ accent, onSetUpAgain, onResetSettings }: Props) {
         confirmLabel: 'Replace everything',
         destructive: true,
         onConfirm: async () => {
+          // Busy until Muse closes: a change made now would be saved over the restored data.
+          setBusy('restore');
           try {
             // Nothing plays (and saves history) while the saved data is swapped.
             getPlaybackController().pause();
-            await restoreBackup(backup);
+            await restoreBackup(picked, tracks);
             // The open screens still hold the old values and would save them back,
             // so Muse ends at once. Expo Go cannot, so it only closes the screen.
             if (!closeApp()) {
               BackHandler.exitApp();
             }
           } catch {
+            setBusy(null);
             showToast('Could not restore the backup', { icon: 'info' });
           }
         },
