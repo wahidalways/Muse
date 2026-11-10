@@ -506,7 +506,7 @@ function ViewerBody({ track, onClose, onChange }: { track: MusicTrack; onClose: 
       <View style={viewerLayout.stage}>
         <GestureDetector gesture={gesture}>
           <Animated.View accessibilityHint="Pinch or double-tap to zoom" style={zoomStyle}>
-            <AlbumArtwork track={track} size={size} radius={0} full />
+            <AlbumArtwork track={track} size={size} radius={0} full zoom />
           </Animated.View>
         </GestureDetector>
       </View>

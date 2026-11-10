@@ -146,6 +146,7 @@ export function AlbumArtwork({
   radius,
   full = false,
   original = false,
+  zoom = false,
 }: {
   track: MusicTrack;
   size: number;
@@ -155,6 +156,8 @@ export function AlbumArtwork({
   full?: boolean;
   /** The file's own cover, ignoring one chosen in Change cover. */
   original?: boolean;
+  /** Decodes every pixel, for pinch zoom (the full-size view only). */
+  zoom?: boolean;
 }) {
   const styles = useAppStyles();
   const { artworkStyle, artSet, bestFileCover } = usePreferences();
@@ -176,8 +179,12 @@ export function AlbumArtwork({
   // Muse art only once it is known there is no cover. While a cover is still
   // being read the tile stays plain, so bright art never flashes before it.
   const art = !showBelow && !showAbove && !thumb.pending && !big.pending ? generatedArtFor(track, artSet) : null;
-  // Lists decode at the size shown; the player and full-size view keep every pixel for zooming.
-  const resizeMethod = full ? 'scale' : 'resize';
+  // Decoded at the size shown, which looks the same: a 4000 px cover kept
+  // whole is 64 MB in memory, and the player stays mounted while closed.
+  // A little over the shown size (1.25), since the decoder can round down.
+  // Only the zoomable full-size view keeps every pixel.
+  const resizeMethod = zoom ? 'scale' : 'resize';
+  const resizeMultiplier = full && !zoom ? 1.25 : undefined;
 
   return (
     <View
@@ -205,6 +212,7 @@ export function AlbumArtwork({
           source={{ uri: below }}
           resizeMode="cover"
           resizeMethod={resizeMethod}
+          resizeMultiplier={resizeMultiplier}
           style={styles.playerArtworkImage}
           onError={() => setFailedUri(below)}
           // No fade: recycled rows would visibly flash as they scroll in.
@@ -217,6 +225,7 @@ export function AlbumArtwork({
           source={{ uri: above }}
           resizeMode="cover"
           resizeMethod={resizeMethod}
+          resizeMultiplier={resizeMultiplier}
           style={styles.playerArtworkImage}
           onError={() => setFailedUri(above)}
           fadeDuration={0}
