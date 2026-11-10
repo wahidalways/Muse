@@ -1367,6 +1367,7 @@ export function MuseApp({
   const canSwipeNext = !isOnSubPage && tabIndex >= 0 && tabIndex < SWIPE_TABS.length - 1;
   const swipeX = useSharedValue(0);
   const pendingSwipe = useRef(0);
+  const swipeFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitSwipe = useCallback(
     (direction: number) => {
       pendingSwipe.current = direction;
@@ -1378,7 +1379,13 @@ export function MuseApp({
         selectTab(SWIPE_TABS[tabIndex + direction]);
       }
       // If nothing changed, slide the page back rather than leave it off screen.
-      setTimeout(() => {
+      // Only the latest swipe's check: an earlier one would spring a quick
+      // second swipe back mid-slide.
+      if (swipeFallback.current) {
+        clearTimeout(swipeFallback.current);
+      }
+      swipeFallback.current = setTimeout(() => {
+        swipeFallback.current = null;
         if (pendingSwipe.current !== 0) {
           pendingSwipe.current = 0;
           swipeX.set(withSpring(0, SETTLE_SPRING));

@@ -30,12 +30,14 @@ export function AddSongsSheet({
   const [showHint, setShowHint] = useState(false);
   const deferredSearch = useDeferredValue(search);
   const words = useMemo(() => searchWords(deferredSearch), [deferredSearch]);
-  const searchIndex = useMemo(() => buildSearchIndex(tracks), [tracks]);
+  // Only while open: the sheet sits mounted (hidden) on every playlist page,
+  // and indexing the whole library there cost every visit.
+  const searchIndex = useMemo(() => (visible ? buildSearchIndex(tracks) : null), [tracks, visible]);
   const present = useMemo(() => new Set(playlist.trackIds), [playlist.trackIds]);
   const shown = useMemo(
     () =>
       words.length > 0
-        ? tracks.filter((track) => matchesAllWords(searchIndex.get(track.id) ?? '', words))
+        ? tracks.filter((track) => matchesAllWords(searchIndex?.get(track.id) ?? '', words))
         : tracks,
     [searchIndex, tracks, words],
   );

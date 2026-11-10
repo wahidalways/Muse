@@ -1,5 +1,6 @@
 import type { ListeningEvent, MusicTrack } from '../types';
-import type { SortDirection } from './sortTracks';
+// With .ts, so scripts/check-stats.mjs (plain Node) can load it too; Metro takes the exact path.
+import { textSortKey, type SortDirection } from './sortTracks.ts';
 
 /**
  * Ways to browse the library in the More tab. Pure functions with no runtime
@@ -45,8 +46,16 @@ function groupValue(track: MusicTrack, kind: GroupKind): string | null {
   }
 }
 
-// One shared collator: `localeCompare` with options builds a new one per call.
-const groupCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+/**
+ * A to Z on cached sort keys (no case, no accents, numbers by value), like the
+ * song list. A collator sends every compare through Java on Android, and
+ * Search groups the whole library three times as it opens.
+ */
+const compareText = (first: string, second: string) => {
+  const a = textSortKey(first);
+  const b = textSortKey(second);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
 
 /**
  * Songs grouped by one tag. Albums with the same name by different artists
@@ -73,8 +82,8 @@ export function groupTracks(tracks: MusicTrack[], kind: GroupKind): TrackGroup[]
   known.sort((first, second) =>
     kind === 'year'
       ? Number(second.title) - Number(first.title)
-      : groupCollator.compare(first.title, second.title) ||
-        groupCollator.compare(first.subtitle ?? '', second.subtitle ?? ''),
+      : compareText(first.title, second.title) ||
+        compareText(first.subtitle ?? '', second.subtitle ?? ''),
   );
   // Album songs play in track order.
   if (kind === 'album') {
@@ -139,9 +148,9 @@ export function sortGroups(
       first.value === null || second.value === null
         ? 0
         : typeof first.value === 'string'
-          ? groupCollator.compare(first.value, second.value as string)
+          ? compareText(first.value, second.value as string)
           : first.value - (second.value as number);
-    return sign * comparison || groupCollator.compare(first.group.title, second.group.title);
+    return sign * comparison || compareText(first.group.title, second.group.title);
   });
   return decorated.map((entry) => entry.group);
 }

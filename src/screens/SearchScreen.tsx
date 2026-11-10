@@ -12,12 +12,12 @@ import { ControlIcon, PlaybackGlyph, usePlayButtonColors, type ControlIconName }
 import { SectionHeading } from './HomeTab';
 import type { MoreRoute } from './MoreTab';
 import { useAppStyles } from '../theme/styles';
+import { sortMusicTracks } from '../library/sortTracks';
 
 /** Songs shown under "All" before "See all", so other kinds stay in view. */
 const SONG_PREVIEW = 5;
 /** Songs listed A to Z before anything is typed. Typing finds the rest. */
 const BROWSE_SONGS = 40;
-const titleCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
 type Filter = 'all' | 'songs' | 'artists' | 'albums' | 'playlists' | 'genres' | 'folders';
 const FILTERS: { id: Exclude<Filter, 'all'>; label: string }[] = [
@@ -303,7 +303,8 @@ function SongsFirst({
     [byId, history],
   );
   const aToZ = useMemo(
-    () => [...tracks].sort((first, second) => titleCollator.compare(first.title, second.title)),
+    // Cached sort keys, not a collator: every collator compare goes through Java on Android.
+    () => sortMusicTracks(tracks, 'title', 'ascending'),
     [tracks],
   );
   const browse = aToZ.slice(0, BROWSE_SONGS);

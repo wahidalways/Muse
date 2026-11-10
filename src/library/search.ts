@@ -179,23 +179,46 @@ export function hiddenMatch(
   return null;
 }
 
+/**
+ * Each text normalized once and split into words. Every keystroke scores the
+ * same titles, artists and albums again, and normalizing (NFD plus a Unicode
+ * regex) was most of the work. Grows with the library's distinct texts only.
+ */
+const prepared = new Map<string, { value: string; words: string[] }>();
+function prepare(text: string) {
+  let entry = prepared.get(text);
+  if (!entry) {
+    const value = normalizeSearch(text);
+    entry = { value, words: value.split(/[^\p{L}\p{N}]+/u) };
+    prepared.set(text, entry);
+  }
+  return entry;
+}
+
 /** 4 exact, 3 starts with, 2 a word starts with, 1 contains, 0 no match. */
 export function matchScore(text: string | null, query: string): number {
   if (!text || !query) {
     return 0;
   }
-  const value = normalizeSearch(text);
+  const { value, words } = prepare(text);
   if (value === query) return 4;
   if (value.startsWith(query)) return 3;
-  if (value.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(query))) return 2;
+  if (words.some((word) => word.startsWith(query))) return 2;
   return value.includes(query) ? 1 : 0;
 }
 
 function rank<T>(items: T[], score: (item: T) => number, name: (item: T) => string, limit: number) {
+  // Ties in name order, compared on the normalized text: localeCompare goes
+  // through Intl on Hermes, and a one-letter search can tie thousands.
+  const byName = (first: T, second: T) => {
+    const a = prepare(name(first)).value;
+    const b = prepare(name(second)).value;
+    return a < b ? -1 : a > b ? 1 : 0;
+  };
   return items
     .map((item) => ({ item, score: score(item) }))
     .filter((hit) => hit.score > 0)
-    .sort((first, second) => second.score - first.score || name(first.item).localeCompare(name(second.item)))
+    .sort((first, second) => second.score - first.score || byName(first.item, second.item))
     .slice(0, limit);
 }
 
