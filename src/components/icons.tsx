@@ -1,6 +1,6 @@
 import { useContext, type ComponentProps } from 'react';
 import { Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemeContext } from '../theme/theme';
 import { useAppStyles } from '../theme/styles';
 
@@ -12,7 +12,8 @@ function useIconColor(tone: IconTone): string {
   if (tone === 'accent') {
     return theme === 'light'
       ? {
-          muse: '#739B42',
+          lime: '#4F7A12',
+          muse: '#4A7323',
           ocean: '#17678F',
           sunset: '#9B5B12',
           rose: '#B0275B',
@@ -21,6 +22,7 @@ function useIconColor(tone: IconTone): string {
           red: '#C3121C',
         }[accent]
       : {
+          lime: '#C4F27A',
           muse: '#B9E77B',
           ocean: '#8BD7FF',
           sunset: '#FFD18A',
@@ -68,13 +70,20 @@ export type ControlIconName =
   | 'edit'
   | 'delete'
   | 'chevron-right'
+  | 'back'
+  | 'note'
   | 'play'
   | 'search'
   | 'equalizer'
   | 'folder'
   | 'drag'
   | 'info'
-  | 'lyrics';
+  | 'lyrics'
+  | 'play-next'
+  | 'queue-add'
+  | 'queue'
+  | 'moon'
+  | 'skin';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -96,8 +105,6 @@ const OPTICAL_SCALE: Partial<Record<IoniconName, number>> = {
   close: 1.1,
   'ellipsis-horizontal': 0.85,
   'flame-outline': 0.9,
-  home: 0.8,
-  'home-outline': 0.8,
   'hourglass-outline': 0.85,
   'image-outline': 0.95,
   'logo-github': 0.95,
@@ -173,6 +180,8 @@ const CONTROL_GLYPHS: Record<
   edit: 'pencil-outline',
   delete: 'trash-outline',
   'chevron-right': 'chevron-forward',
+  back: 'chevron-back',
+  note: 'musical-notes-outline',
   play: 'play',
   search: 'search',
   equalizer: 'options-outline',
@@ -180,6 +189,11 @@ const CONTROL_GLYPHS: Record<
   drag: 'reorder-three-outline',
   info: 'information-circle-outline',
   lyrics: 'document-text-outline',
+  'play-next': 'return-down-forward-outline',
+  'queue-add': 'add-outline',
+  queue: 'list-outline',
+  moon: 'moon-outline',
+  skin: 'phone-portrait-outline',
 };
 
 /**
@@ -192,14 +206,18 @@ export function ControlIcon({
   size = 20,
   tone = 'text',
   showOne = false,
+  color: fixedColor,
 }: {
   name: ControlIconName;
   size?: number;
   tone?: IconTone;
   /** For repeat: show the repeat-one icon. */
   showOne?: boolean;
+  /** Overrides the tone, for icons over a picture (white on a cover). */
+  color?: string;
 }) {
-  const color = useIconColor(tone);
+  const toneColor = useIconColor(tone);
+  const color = fixedColor ?? toneColor;
   const iconSize = opticalSize(CONTROL_GLYPHS[name], size * 1.25);
   const icon = (
     <Ionicons
@@ -282,6 +300,7 @@ export function PlaybackGlyph({
     theme === 'light'
       ? '#FFFFFF'
       : {
+          lime: '#24331A',
           muse: '#24331A',
           ocean: '#173247',
           sunset: '#3B2A18',

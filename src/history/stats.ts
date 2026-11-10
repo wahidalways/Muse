@@ -327,7 +327,12 @@ export function getWeek(history: ListeningEvent[], lookup: Lookup, weekStart: We
   const daily = getDailySeconds(history, lookup);
   const days = Array.from({ length: 7 }, (_, index) => {
     const time = addDays(start, index);
-    return { time, seconds: time > today ? null : (daily.get(dayKey(time)) ?? 0) };
+    return {
+      time,
+      seconds: time > today ? null : (daily.get(dayKey(time)) ?? 0),
+      /** The same day last week, drawn as a ghost behind this week's bar. */
+      previous: daily.get(dayKey(addDays(time, -7))) ?? 0,
+    };
   });
   const sofar = days.filter((day) => day.seconds !== null);
   return {
@@ -378,7 +383,22 @@ function streaksFrom(days: Set<string>, now: number) {
     best = Math.max(best, run);
     last = time;
   });
-  return { current, best };
+  // The best run before this one: "New best" only when the current run passes it.
+  let previousBest = 0;
+  run = 0;
+  last = null;
+  sorted.forEach((key, index) => {
+    const [year, month, date] = key.split('-').map(Number);
+    const time = new Date(year, month - 1, date).getTime();
+    run = last !== null && dayKey(addDays(last, 1)) === key ? run + 1 : 1;
+    const endsRun = index === sorted.length - 1 || sorted[index + 1] !== dayKey(addDays(time, 1));
+    const isCurrent = current > 0 && index === sorted.length - 1;
+    if (endsRun && !isCurrent) {
+      previousBest = Math.max(previousBest, run);
+    }
+    last = time;
+  });
+  return { current, best, previousBest, playedToday: days.has(dayKey(now)) };
 }
 
 /**

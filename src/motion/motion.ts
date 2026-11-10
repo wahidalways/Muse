@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { Dimensions } from 'react-native';
 import {
   Easing,
+  FadeInDown,
   FadeInLeft,
   FadeInRight,
   ReduceMotion,
-  SlideInDown,
 } from 'react-native-reanimated';
 
 /**
@@ -64,8 +65,14 @@ export function clamp(value: number, min: number, max: number): number {
 export const PUSH_IN = FadeInRight.duration(260).easing(EASE_OUT);
 /** The page underneath, coming back after a pop: in from the left. */
 export const POP_IN = FadeInLeft.duration(260).easing(EASE_OUT);
-/** A bottom sheet rising on the iOS sheet curve; its backdrop fades. */
-export const SHEET_IN = SlideInDown.duration(340).easing(EASE_SHEET);
+/**
+ * A bottom sheet rising on the iOS sheet curve; its backdrop fades. It moves
+ * by transform, not SlideInDown's layout position: an Android modal re-lays
+ * out just after it opens, and a layout slide snaps when that happens.
+ */
+export const SHEET_IN = FadeInDown.duration(340)
+  .easing(EASE_SHEET)
+  .withInitialValues({ opacity: 1, transform: [{ translateY: Dimensions.get('window').height }] });
 
 /**
  * Whether `depth` (how many pages deep) last went up or down, for choosing

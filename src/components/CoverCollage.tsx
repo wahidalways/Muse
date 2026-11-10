@@ -1,18 +1,25 @@
-import { Image, Text, View } from 'react-native';
+import { Image, View } from 'react-native';
 import type { MusicTrack } from '../types';
 import type { Playlist } from '../library/playlists';
+import type { Mix } from '../history/mixes';
+import { useMixCover } from '../library/mixCovers';
 import { AlbumArtwork } from './AlbumArtwork';
+import { ControlIcon, type ControlIconName } from './icons';
 import { useAppStyles } from '../theme/styles';
+import { usePreferences } from '../settings/preferences';
 
 /** Up to four covers from different albums in a 2x2 grid, or one big cover. */
 export function CoverCollage({
   tracks,
   size,
   radius = 10,
+  emptyIcon = 'note',
 }: {
   tracks: MusicTrack[];
   size: number;
   radius?: number;
+  /** Drawn on a soft tile when there are no songs: what will go here. */
+  emptyIcon?: ControlIconName;
 }) {
   const styles = useAppStyles();
   const covers: MusicTrack[] = [];
@@ -29,6 +36,7 @@ export function CoverCollage({
     <View
       style={[
         styles.coverCollage,
+        !covers[0] && styles.coverCollageEmpty,
         { width: size, height: size, borderRadius: radius },
       ]}
     >
@@ -39,10 +47,30 @@ export function CoverCollage({
       ) : covers[0] ? (
         <AlbumArtwork track={covers[0]} size={size} radius={0} />
       ) : (
-        <Text style={[styles.coverCollageNote, { fontSize: size * 0.3 }]}>♫</Text>
+        // An icon, not a "♫" character: font line spacing pushed that off centre.
+        <ControlIcon name={emptyIcon} size={Math.round(size * 0.24)} tone="muted" />
       )}
     </View>
   );
+}
+
+/** A Home mix's cover: the photo picked for it, or its song covers. */
+export function MixCover({ mix, size, radius = 14 }: { mix: Mix; size: number; radius?: number }) {
+  const styles = useAppStyles();
+  const uri = useMixCover(mix.id);
+  // Muse art everywhere also covers a photo picked for the mix; the photo stays saved.
+  const realCovers = usePreferences().artworkStyle === 'covers';
+  if (uri && realCovers) {
+    return (
+      <Image
+        accessibilityIgnoresInvertColors
+        source={{ uri }}
+        resizeMode="cover"
+        style={[styles.coverCollage, { width: size, height: size, borderRadius: radius }]}
+      />
+    );
+  }
+  return <CoverCollage tracks={mix.tracks} size={size} radius={radius} />;
 }
 
 /** A playlist's cover: its photo, its chosen song's art, or a collage. */
@@ -59,7 +87,8 @@ export function PlaylistCover({
   radius?: number;
 }) {
   const styles = useAppStyles();
-  if (playlist.coverUri) {
+  const realCovers = usePreferences().artworkStyle === 'covers';
+  if (playlist.coverUri && realCovers) {
     return (
       <Image
         accessibilityIgnoresInvertColors

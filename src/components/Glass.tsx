@@ -79,34 +79,48 @@ export function useGlassColors() {
  * Two layers: the outer one carries the rim, shadow and glow and does not
  * clip, so they can spill past the edge; the inner one clips the blur and
  * fill to the rounded shape.
+ *
+ * `seam` joins two pieces into one card (the Joined mini player on the
+ * tabs): that side is square, the upper piece keeps its hairline there as
+ * the divider, and only the lower piece casts the shadow.
  */
 export function Glass({
   blurTarget,
   radius,
+  seam,
   style,
   children,
 }: {
   blurTarget: RefObject<ComponentRef<typeof View> | null>;
   radius: number;
+  seam?: 'top' | 'bottom';
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 }) {
   const glass = useGlassColors();
+  const corners = {
+    borderTopLeftRadius: seam === 'top' ? 0 : radius,
+    borderTopRightRadius: seam === 'top' ? 0 : radius,
+    borderBottomLeftRadius: seam === 'bottom' ? 0 : radius,
+    borderBottomRightRadius: seam === 'bottom' ? 0 : radius,
+  };
   return (
     <View
       style={[
         glassStyles.shell,
+        corners,
         {
-          borderRadius: radius,
           borderColor: glass.edge,
-          // Light catches the top edge first, as on real glass.
-          borderTopColor: glass.rim,
-          boxShadow: glass.shadow,
+          // Light catches the top edge first, as on real glass. A lower piece
+          // has no top edge of its own: the piece above draws the divider.
+          borderTopColor: seam === 'top' ? 'transparent' : glass.rim,
+          borderTopWidth: seam === 'top' ? 0 : StyleSheet.hairlineWidth,
+          boxShadow: seam === 'bottom' ? undefined : glass.shadow,
         },
         style,
       ]}
     >
-      <View style={[StyleSheet.absoluteFill, glassStyles.clip, { borderRadius: radius }]}>
+      <View style={[StyleSheet.absoluteFill, glassStyles.clip, corners]}>
         {glass.style !== 'solid' && (
           // Android 12+ blurs for real; older phones get the tint alone.
           <BlurView

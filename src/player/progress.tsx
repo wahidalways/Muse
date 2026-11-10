@@ -27,7 +27,6 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { EASE_OUT, clamp } from '../motion/motion';
@@ -208,12 +207,15 @@ export function ProgressSlider({
   onSeek,
   variant,
   animate = true,
+  flat = false,
 }: {
   fallbackDuration: number;
   onSeek: (ratio: number) => void;
   variant: 'full' | 'home';
   /** Off while the slider is hidden, for example under the full player. */
   animate?: boolean;
+  /** A still, straight line (the Minimal type skin): no wave, no per-frame work. */
+  flat?: boolean;
 }) {
   const styles = useAppStyles();
   const size = SLIDER[variant];
@@ -249,7 +251,7 @@ export function ProgressSlider({
   }, [controller, durationValue, fallbackDuration]);
 
   // The wave's phase turns forever while music flows, and holds when it stops.
-  const flowing = isPlaying && animate && !reduceMotion;
+  const flowing = isPlaying && animate && !reduceMotion && !flat;
   const phase = useSharedValue(0);
   const isFlowing = useSharedValue(flowing);
   useEffect(() => {
@@ -545,13 +547,9 @@ function SliderTimes({
           setPreference('showTimeRemaining', !showTimeRemaining);
         }}
       >
-        {/* A small swap mark, so the tap is not a secret only Settings tells. */}
-        <View style={styles.playerTimeToggle}>
-          <Text style={styles.playerTimeText}>
-            {showTimeRemaining ? `-${formatTrackDuration(left)}` : formatTrackDuration(duration)}
-          </Text>
-          <Ionicons accessible={false} name="swap-horizontal" size={11} style={styles.playerTimeSwap} />
-        </View>
+        <Text style={styles.playerTimeText}>
+          {showTimeRemaining ? `-${formatTrackDuration(left)}` : formatTrackDuration(duration)}
+        </Text>
       </Pressable>
     </View>
   );

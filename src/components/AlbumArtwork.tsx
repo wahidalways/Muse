@@ -1,23 +1,29 @@
-import { useContext, useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { ThemeContext } from '../theme/theme';
+import { useEffect, useState } from 'react';
+import { Image, StyleSheet, View } from 'react-native';
 
-import { getArtworkFile } from '../../modules/muse-audio-metadata';
+import { getArtworkFile, getCoverThumb, getFullCover } from '../../modules/muse-audio-metadata';
 import type { MusicTrack } from '../types';
 import { useAppStyles } from '../theme/styles';
+import { getPreferences, usePreferences, type ArtSet } from '../settings/preferences';
+import { getSongCover, useSongCover } from '../library/covers';
+import { MuseArtView, museArt } from './MuseArt';
+import { hueOf } from '../theme/dynamicAccent';
 
 /**
  * Album art read from the phone arrives as a legacy `content://…/albumart/<id>`
  * address, which many Android versions no longer serve reliably. Those go
- * through the native module instead: it uses Android's thumbnail API and
- * saves a small JPEG per album. Bundled art and `file://`
- * paths load directly.
+ * through the native module instead, as files:
+ * - thumb: a list-size JPEG (512 px), made from the best picture in the song's
+ *   file when Settings › Best cover in the file is on, else Android's own;
+ * - full: the cover exactly as stored in the file, for the player and the
+ *   full-size view. Quality is never reduced there.
+ * Bundled art and `file://` paths load directly.
  *
  * Results are cached for the session per song, not per album: Android puts
  * untagged songs in one folder into a single album, yet each file can carry
  * its own cover.
  */
+type Variant = 'thumb' | 'full';
 const resolvedArtwork = new Map<string, string | null>();
 const pendingArtwork = new Map<string, Promise<string | null>>();
 
@@ -31,10 +37,21 @@ function needsNativeArtwork(uri: string): boolean {
   return uri.startsWith('content://');
 }
 
-function requestArtwork(track: MusicTrack, key: string): Promise<string | null> {
+function artworkKey(trackId: string, variant: Variant, best: boolean): string {
+  return `${variant}:${best ? 'best' : 'android'}:${trackId}`;
+}
+
+function requestArtwork(trackId: string, variant: Variant, best: boolean): Promise<string | null> {
+  const key = artworkKey(trackId, variant, best);
   let request = pendingArtwork.get(key);
   if (!request) {
-    request = getArtworkFile(track.id).then((uri) => {
+    const load =
+      variant === 'full'
+        ? getFullCover(trackId, best).then((cover) => cover?.uri ?? null)
+        : best
+          ? getCoverThumb(trackId)
+          : getArtworkFile(trackId);
+    request = load.then((uri) => {
       resolvedArtwork.set(key, uri);
       pendingArtwork.delete(key);
       return uri;
@@ -46,34 +63,47 @@ function requestArtwork(track: MusicTrack, key: string): Promise<string | null> 
 
 /**
  * Reads a track's cover ahead of showing it, so it does not pop in after
- * the song does. Never rejects: a missing cover just shows the placeholder.
+ * the song does: the list copy (awaited) and the full one (started). Never
+ * rejects: a missing cover just shows the placeholder.
  */
 export function preloadArtwork(track: MusicTrack): Promise<void> {
   const source = track.albumArtUri;
-  if (!source || !needsNativeArtwork(source) || resolvedArtwork.has(track.id)) {
+  const best = getPreferences().bestFileCover;
+  if (!source || !needsNativeArtwork(source) || getSongCover(track.id)) {
     return Promise.resolve();
   }
-  return requestArtwork(track, track.id).then(
+  if (!resolvedArtwork.has(artworkKey(track.id, 'full', best))) {
+    void requestArtwork(track.id, 'full', best);
+  }
+  if (resolvedArtwork.has(artworkKey(track.id, 'thumb', best))) {
+    return Promise.resolve();
+  }
+  return requestArtwork(track.id, 'thumb', best).then(
     () => undefined,
     () => undefined,
   );
 }
 
-/** The image address to show for a track, or null for the placeholder. */
-function useArtworkUri(track: MusicTrack): string | null {
+type ArtworkState = { uri: string | null; pending: boolean };
+const NO_COVER: ArtworkState = { uri: null, pending: false };
+
+/**
+ * The image address to show for a track (null: it has none), and whether the
+ * phone is still being asked. Off while Muse art or the song's own cover shows,
+ * so no cover is read at all.
+ */
+function useArtworkUri(track: MusicTrack, variant: Variant, best: boolean, enabled: boolean): ArtworkState {
   const source = track.albumArtUri;
   const isNative = source !== null && needsNativeArtwork(source);
-  const key = track.id;
-  const [loaded, setLoaded] = useState<{ key: string; uri: string | null } | null>(
-    null,
-  );
+  const key = artworkKey(track.id, variant, best);
+  const [loaded, setLoaded] = useState<{ key: string; uri: string | null } | null>(null);
 
   useEffect(() => {
-    if (!source || !isNative || resolvedArtwork.has(key)) {
+    if (!enabled || !source || !isNative || resolvedArtwork.has(key)) {
       return;
     }
     let isActive = true;
-    void requestArtwork(track, key).then((uri) => {
+    void requestArtwork(track.id, variant, best).then((uri) => {
       if (isActive) {
         setLoaded({ key, uri });
       }
@@ -81,56 +111,73 @@ function useArtworkUri(track: MusicTrack): string | null {
     return () => {
       isActive = false;
     };
-  }, [isNative, key, source, track]);
+  }, [best, enabled, isNative, key, source, track.id, variant]);
 
-  if (!source) {
-    return null;
+  if (!enabled || !source) {
+    return NO_COVER;
   }
   if (!isNative) {
-    return source;
+    return { uri: source, pending: false };
   }
   if (resolvedArtwork.has(key)) {
-    return resolvedArtwork.get(key) ?? null;
+    return { uri: resolvedArtwork.get(key) ?? null, pending: false };
   }
-  return loaded?.key === key ? loaded.uri : null;
+  return loaded?.key === key ? { uri: loaded.uri, pending: false } : { uri: null, pending: true };
 }
 
-/**
- * The no-cover tile's colors, from the album name: the same album always
- * gets the same hue. Low saturation, so the tiles stay calm beside real art
- * and the neutral glass.
- */
-export function placeholderColors(name: string, light: boolean): { background: string; glyph: string } {
-  let hash = 0;
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) | 0;
-  }
-  const hue = Math.abs(hash) % 360;
-  return light
-    ? { background: `hsl(${hue}, 26%, 84%)`, glyph: `hsl(${hue}, 24%, 50%)` }
-    : // Light enough to stand off the near-black page, still calm.
-      { background: `hsl(${hue}, 18%, 31%)`, glyph: `hsl(${hue}, 26%, 70%)` };
+/** What a song's Muse art is drawn from: its album (or folder, or title when untagged). */
+export function generatedArtName(track: MusicTrack): string {
+  return track.album || track.folderTitle || track.title;
+}
+
+/** A song's Muse art in the chosen style. */
+export function generatedArtFor(track: MusicTrack, set: ArtSet) {
+  return museArt(generatedArtName(track), set);
+}
+
+/** The main hue of a song's Muse art, for tints that follow the art. */
+export function generatedArtHue(track: MusicTrack, set: ArtSet): number {
+  return hueOf(generatedArtFor(track, set).background);
 }
 
 export function AlbumArtwork({
   track,
   size,
   radius,
+  full = false,
+  original = false,
 }: {
   track: MusicTrack;
   size: number;
   /** Corner radius. By default it scales with the size. */
   radius?: number;
+  /** The cover exactly as stored (player and full-size view); lists use the small copy. */
+  full?: boolean;
+  /** The file's own cover, ignoring one chosen in Change cover. */
+  original?: boolean;
 }) {
   const styles = useAppStyles();
-  const { theme } = useContext(ThemeContext);
-  const artworkUri = useArtworkUri(track);
+  const { artworkStyle, artSet, bestFileCover } = usePreferences();
+  const ownCover = useSongCover(track.id);
+  const chosen = original ? undefined : ownCover;
+  const realCovers = artworkStyle === 'covers' && chosen?.kind !== 'muse';
+  const chosenImage = realCovers && chosen?.kind === 'image' ? chosen.uri : null;
+  const thumb = useArtworkUri(track, 'thumb', bestFileCover, realCovers && chosenImage === null);
+  const big = useArtworkUri(track, 'full', bestFileCover, full && realCovers && chosenImage === null);
+  // The full copy draws over the small one, so the cover never goes blank while it loads.
+  const below = chosenImage ?? thumb.uri;
+  const above = full && chosenImage === null && big.uri !== thumb.uri ? big.uri : null;
   // Remember which image failed rather than "failed" for this component.
   // Recycled list rows reuse the component for a different song, and that
   // song's art must still get its own try.
   const [failedUri, setFailedUri] = useState<string | null>(null);
-  const showImage = artworkUri !== null && failedUri !== artworkUri;
-  const tile = placeholderColors(track.album || track.folderTitle || track.title, theme === 'light');
+  const showBelow = below !== null && failedUri !== below;
+  const showAbove = above !== null && failedUri !== above;
+  // Muse art only once it is known there is no cover. While a cover is still
+  // being read the tile stays plain, so bright art never flashes before it.
+  const art = !showBelow && !showAbove && !thumb.pending && !big.pending ? generatedArtFor(track, artSet) : null;
+  // Lists decode at the size shown; the player and full-size view keep every pixel for zooming.
+  const resizeMethod = full ? 'scale' : 'resize';
 
   return (
     <View
@@ -142,23 +189,36 @@ export function AlbumArtwork({
           height: size,
           borderRadius: radius ?? Math.min(24, Math.max(10, size * 0.085)),
         },
+        // Art runs edge to edge: the frame's 1dp border would shift every shape and clip two edges.
+        art && styles.playerArtworkBare,
       ]}
     >
-      {/* No cover: a calm tile, one muted color per album, so a list of
-          untagged files gets some rhythm instead of identical discs. */}
-      <View style={[styles.playerArtworkFallback, { backgroundColor: tile.background }]}>
-        <Ionicons accessible={false} name="musical-note" size={Math.round(size * 0.38)} color={tile.glyph} />
-      </View>
-      {showImage && (
+      {art && (
+        // Decoration only: screen readers skip it (the Letter style's letter included).
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={StyleSheet.absoluteFill}>
+          <MuseArtView art={art} size={size} />
+        </View>
+      )}
+      {showBelow && (
         <Image
           accessibilityLabel={`${track.album || track.title} album cover`}
-          source={{ uri: artworkUri }}
+          source={{ uri: below }}
           resizeMode="cover"
-          // Decode at the size shown, not the full cover image.
-          resizeMethod="resize"
+          resizeMethod={resizeMethod}
           style={styles.playerArtworkImage}
-          onError={() => setFailedUri(artworkUri)}
+          onError={() => setFailedUri(below)}
           // No fade: recycled rows would visibly flash as they scroll in.
+          fadeDuration={0}
+        />
+      )}
+      {showAbove && (
+        <Image
+          accessibilityLabel={`${track.album || track.title} album cover`}
+          source={{ uri: above }}
+          resizeMode="cover"
+          resizeMethod={resizeMethod}
+          style={styles.playerArtworkImage}
+          onError={() => setFailedUri(above)}
           fadeDuration={0}
         />
       )}

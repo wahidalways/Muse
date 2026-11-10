@@ -48,7 +48,7 @@ export function getMixes(
     { id: 'shuffle', title: 'Shuffle all', tracks, shuffle: true },
     {
       id: 'liked',
-      title: 'Liked songs',
+      title: 'Favorites',
       tracks: tracks.filter((track) => favorites.has(track.id)),
       shuffle: false,
     },

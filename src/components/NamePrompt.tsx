@@ -49,7 +49,7 @@ function NameForm({
   };
 
   return (
-    <View style={styles.sheetBody}>
+    <View style={styles.sheetForm}>
       <TextInput
         accessibilityLabel="Playlist name"
         autoFocus

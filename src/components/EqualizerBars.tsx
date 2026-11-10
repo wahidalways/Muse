@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -10,17 +10,19 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useAppStyles } from '../theme/styles';
+import { PageVisible } from './TabLayer';
 
 /** Each bar bounces at its own pace so the three never move in step. */
 const BAR_SPEEDS = [420, 560, 360];
 const REST = 0.3;
 
-/** Three small bars that bounce while music plays and rest when paused. */
+/** Three small bars that bounce while music plays and rest when paused or out of sight. */
 export function EqualizerBars({ playing, size = 12 }: { playing: boolean; size?: number }) {
+  const visible = useContext(PageVisible);
   return (
     <View style={[barStyles.row, { height: size }]} accessible={false}>
       {BAR_SPEEDS.map((speed, index) => (
-        <Bar key={index} playing={playing} speed={speed} height={size} />
+        <Bar key={index} playing={playing && visible} speed={speed} height={size} />
       ))}
     </View>
   );

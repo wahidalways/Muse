@@ -33,16 +33,6 @@ const SORT_KINDS: Record<LibrarySort, SortKind> = {
   dateModified: 'date',
 };
 
-/**
- * Direction labels that say what the order means for this sort, for example
- * "Newest first" for dates instead of "Descending".
- */
-export function sortDirectionLabels(
-  sortBy: LibrarySort,
-): Record<SortDirection, string> {
-  return directionLabelsFor(SORT_KINDS[sortBy]);
-}
-
 export function sortKindOf(sortBy: LibrarySort): SortKind {
   return SORT_KINDS[sortBy];
 }
@@ -61,11 +51,6 @@ export function directionLabelsFor(kind: SortKind): Record<SortDirection, string
     default:
       return { ascending: 'A to Z', descending: 'Z to A' };
   }
-}
-
-/** The order a sort usually starts in: newest first for dates, else A to Z. */
-export function defaultSortDirection(sortBy: LibrarySort): SortDirection {
-  return defaultDirectionFor(SORT_KINDS[sortBy]);
 }
 
 /** Newest first for dates, most first for counts, otherwise A to Z or low to high. */

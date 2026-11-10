@@ -12,7 +12,11 @@ export function formatTrackDuration(durationInSeconds: number): string {
   return `${minutes}:${seconds}`;
 }
 
-export const formatSleepTimer = formatTrackDuration;
+/** Always mm:ss ("60:00", "09:59"; timers run up to an hour), so the countdown keeps one width and the buttons beside it never shift. */
+export function formatSleepTimer(secondsLeft: number): string {
+  const total = Math.max(0, Math.floor(secondsLeft));
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
 
 export function formatTimeAgo(timestamp: number): string {
   const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
@@ -100,35 +104,63 @@ const FORMAT_NAMES: Record<string, string> = {
   'audio/3gpp': 'AMR',
 };
 
+type FileAudio = {
+  mimeType: string | null;
+  codec: string | null;
+  bitrate: number | null;
+  sampleRate: number | null;
+  channels: number | null;
+  bitDepth?: number | null;
+} | null;
+
+/** Formats that keep every bit of the recording. */
+const LOSSLESS = new Set(['FLAC', 'ALAC', 'WAV']);
+
 /**
- * One line about a file's audio, as "FLAC · 1,411 kbps · 44.1 kHz · Stereo".
- * Parts that are unknown are left out; the format falls back to the file
- * extension.
+ * A file's audio in parts, for the player's badge row. `quality` is a plain
+ * fact of the file: Lossless for a lossless format, Hi-Res when that lossless
+ * audio is beyond CD (more than 16-bit or more than 48 kHz). `specs` are
+ * bit depth (lossless only), sample rate, bitrate, and Mono or "6 ch" only
+ * when not stereo. Unknown parts are left out; the format falls back to the
+ * file extension.
  */
-export function formatAudioDetails(
-  details: {
-    mimeType: string | null;
-    codec: string | null;
-    bitrate: number | null;
-    sampleRate: number | null;
-    channels: number | null;
-  } | null,
-  filename: string,
-): string {
+export function summarizeAudio(details: FileAudio, filename: string) {
   const extension = filename.includes('.') ? filename.split('.').pop()!.toUpperCase() : '';
   const format =
     (details?.codec && FORMAT_NAMES[details.codec.toLowerCase()]) ||
     (details?.mimeType && FORMAT_NAMES[details.mimeType.toLowerCase()]) ||
     extension;
-  const parts = [format];
+  const lossless = LOSSLESS.has(format);
+  const bitDepth = lossless && details?.bitDepth && details.bitDepth > 0 ? details.bitDepth : null;
+  const sampleRate = details?.sampleRate && details.sampleRate > 0 ? details.sampleRate : null;
+  const quality = !lossless
+    ? null
+    : (bitDepth ?? 0) > 16 || (sampleRate ?? 0) > 48000
+      ? ('Hi-Res' as const)
+      : ('Lossless' as const);
+  const specs: string[] = [];
+  if (bitDepth) {
+    specs.push(`${bitDepth}-bit`);
+  }
+  if (sampleRate) {
+    specs.push(`${Number((sampleRate / 1000).toFixed(1))} kHz`);
+  }
   if (details?.bitrate && details.bitrate > 0) {
-    parts.push(`${Math.round(details.bitrate / 1000).toLocaleString('en-US')} kbps`);
+    specs.push(`${Math.round(details.bitrate / 1000).toLocaleString('en-US')} kbps`);
   }
-  if (details?.sampleRate && details.sampleRate > 0) {
-    parts.push(`${Number((details.sampleRate / 1000).toFixed(1))} kHz`);
+  if (details?.channels && details.channels !== 2) {
+    specs.push(details.channels === 1 ? 'Mono' : `${details.channels} ch`);
   }
-  if (details?.channels) {
-    parts.push(details.channels === 1 ? 'Mono' : details.channels === 2 ? 'Stereo' : `${details.channels} ch`);
-  }
-  return parts.filter(Boolean).join(' · ');
+  return { format, quality, specs };
+}
+
+/**
+ * One full line about a file's audio, for Song info, as
+ * "FLAC · Hi-Res · 24-bit · 96 kHz · 4,608 kbps · Stereo".
+ */
+export function formatAudioDetails(details: FileAudio, filename: string): string {
+  const { format, quality, specs } = summarizeAudio(details, filename);
+  // Song info is the full record, so it names Stereo too.
+  const stereo = details?.channels === 2 ? ['Stereo'] : [];
+  return [format, quality, ...specs, ...stereo].filter(Boolean).join(' · ');
 }

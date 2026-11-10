@@ -1,10 +1,15 @@
-import { useRef, useState, type ComponentRef } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { getDocumentAsync } from 'expo-document-picker';
 import { launchImageLibraryAsync } from 'expo-image-picker';
-import { Sheet } from '../../components/Sheet';
+import { ConfirmSheet, type ConfirmRequest } from '../../components/ConfirmSheet';
+import { SurpriseButton } from '../../components/SurpriseButton';
+import { funkyName } from '../../settings/funkyNames';
+import { Sheet, SheetRow } from '../../components/Sheet';
 import { Avatar, PRESETS } from '../../components/Avatar';
 import { PressableScale } from '../../components/PressableScale';
+import { usePlayButtonColors } from '../../components/icons';
 import {
   NAME_LIMIT,
   clearProfileImage,
@@ -12,121 +17,283 @@ import {
   setProfilePhoto,
   setProfilePreset,
   useProfile,
+  type Profile,
 } from '../../settings/profile';
-import { greeting } from '../../utils/greeting';
-import { hapticSelection } from '../../utils/haptics';
+import { greetingParts } from '../../utils/greeting';
+import { hapticSelection, hapticSuccess } from '../../utils/haptics';
 import { useAppStyles } from '../../theme/styles';
 
-const PRESET_SIZE = 60;
-const PRESET_GAP = 12;
+const COLUMNS = 5;
+const CELL_GAP = 12;
+/** The sheet's side padding and border, so the picture grid fills its width exactly. */
+const SHEET_INSET = 2 * 22 + 2;
 
 /**
- * A contact card: tap the big avatar for a photo, type your name under it and
- * see the greeting it makes, or pick a drawn avatar. Saves as you go.
+ * Your name and picture. A preview at the top shows Home's greeting as you
+ * edit; nothing changes until Save. Leaving with unsaved changes asks first,
+ * however the sheet is closed.
  */
-export function ProfileSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const styles = useAppStyles();
-  const profile = useProfile();
-  const [error, setError] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const strip = useRef<ComponentRef<typeof ScrollView>>(null);
-  const name = profile.name.trim();
-  const accentText = String(styles.pulseNewText.color);
+export function ProfileSheet({
+  visible,
+  onClose,
+  onCustomize,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  /** Customize lives here and at the end of the board, not in Home's header. Left out where it does not apply. */
+  onCustomize?: () => void;
+}) {
+  const [dirty, setDirty] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  const leave = (then: () => void) => () => {
+    if (!dirty) {
+      then();
+      return;
+    }
+    setConfirm({
+      eyebrow: 'PROFILE',
+      title: 'Discard changes?',
+      message: 'Your new name and picture are not saved yet.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      destructive: true,
+      onConfirm: () => {
+        setDirty(false);
+        then();
+      },
+    });
+  };
+  return (
+    <>
+      <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
+      <Sheet visible={visible} eyebrow="Home" title="Your profile" onClose={leave(onClose)} guarded={dirty}>
+      {/* Inside the modal, so each opening starts from what is saved. */}
+      <Editor
+        onSaved={() => {
+          setDirty(false);
+          onClose();
+        }}
+        onDirty={setDirty}
+        onCustomize={onCustomize && leave(onCustomize)}
+      />
+      </Sheet>
+    </>
+  );
+}
 
-  const pickPhoto = async () => {
+function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirty: (dirty: boolean) => void; onCustomize?: () => void }) {
+  const styles = useAppStyles();
+  const play = usePlayButtonColors();
+  const { width } = useWindowDimensions();
+  const saved = useProfile();
+  const [draft, setDraft] = useState<Profile>(saved);
+  // A photo picked in this sheet still sits in the picker's cache until Save copies it in.
+  const [pickedPhoto, setPickedPhoto] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const dirty = draft.name.trim() !== saved.name.trim() || draft.preset !== saved.preset || draft.photoUri !== saved.photoUri;
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+  useEffect(() => () => onDirty(false), [onDirty]);
+  const cell = Math.floor((width - SHEET_INSET - (COLUMNS - 1) * CELL_GAP) / COLUMNS);
+  const muted = String(styles.pulseSub.color);
+  const ink = String(styles.homeSongTitle.color);
+  const accent = String(styles.eyebrow.color);
+
+  // Both are Android's own pickers: Muse gets only the one picture chosen, so no permission is asked.
+  const pickPicture = async (from: 'photos' | 'files') => {
     setError('');
     try {
-      const result = await launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.85 });
-      if (!result.canceled && result.assets[0]) {
-        await setProfilePhoto(result.assets[0].uri);
+      const uri =
+        from === 'photos'
+          ? await launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.85 }).then((result) =>
+              result.canceled ? null : (result.assets[0]?.uri ?? null),
+            )
+          : await getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true }).then((result) =>
+              result.canceled ? null : (result.assets[0]?.uri ?? null),
+            );
+      if (uri) {
+        setDraft((current) => ({ ...current, photoUri: uri }));
+        setPickedPhoto(true);
       }
     } catch {
-      setError('Could not use that photo. Please try another one.');
+      setError(from === 'photos' ? 'Could not open your photos. Please try again.' : 'Could not open that file. Please try another one.');
+    }
+  };
+  const pickPhoto = () => void pickPicture('photos');
+
+  // Each shuffle of the dice: a new funky name, and a new character unless a photo is chosen.
+  const surprise = () => {
+    setDraft((current) => ({
+      ...current,
+      name: funkyName(current.name),
+      preset: current.photoUri ? current.preset : Math.floor(Math.random() * PRESETS.length),
+    }));
+  };
+
+  const choosePreset = (preset: number) => {
+    hapticSelection();
+    setDraft((current) => ({ ...current, preset, photoUri: null }));
+    setPickedPhoto(false);
+  };
+
+  const save = async () => {
+    setError('');
+    setIsSaving(true);
+    try {
+      if (pickedPhoto && draft.photoUri) {
+        await setProfilePhoto(draft.photoUri);
+      } else if (!draft.photoUri && (saved.photoUri || draft.preset !== saved.preset)) {
+        if (draft.preset >= 0) {
+          setProfilePreset(draft.preset);
+        } else {
+          clearProfileImage();
+        }
+      }
+      setProfileName(draft.name.trim());
+      hapticSuccess();
+      onSaved();
+    } catch {
+      setError('Could not save that photo. Please pick another one.');
+      setIsSaving(false);
     }
   };
 
+  const name = draft.name.trim();
+  const hello = greetingParts(new Date().getHours());
+  const hasPhoto = draft.photoUri !== null;
+
   return (
-    <Sheet visible={visible} eyebrow="Home" title="Your profile" onClose={onClose}>
-      <View style={styles.pulseProfileCard}>
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={profile.photoUri ? 'Change photo' : 'Choose a photo'}
-          onPress={pickPhoto}
-        >
-          <Avatar profile={profile} size={112} />
-          <View style={[styles.pulseCamBadge, styles.pulseFill]}>
-            <Ionicons accessible={false} name="camera" size={18} color="#11130F" />
+    <>
+      <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        {/* How Home will greet you, live as you edit. */}
+        <View style={styles.profilePreview} accessible accessibilityLabel={`Preview: ${hello.before}${name ? `, ${name}` : ''}${hello.after}`}>
+          <PressableScale accessibilityRole="button" accessibilityLabel={hasPhoto ? 'Change photo' : 'Choose a photo'} onPress={pickPhoto}>
+            <Avatar profile={draft} size={72} />
+            <View style={[styles.profileCamBadge, styles.pulseFill]}>
+              <Ionicons accessible={false} name="camera" size={13} color="#11130F" />
+            </View>
+          </PressableScale>
+          <View style={styles.homeSongCopy}>
+            <Text style={styles.profilePreviewLabel}>On Home</Text>
+            <Text numberOfLines={2} style={styles.profilePreviewHello}>
+              {name ? `${hello.before},\n` : `${hello.before}${hello.after}`}
+              {name ? <Text style={styles.pulseGreetingName}>{`${name}${hello.after}`}</Text> : null}
+            </Text>
           </View>
-        </PressableScale>
-
-        <TextInput
-          accessibilityLabel="Listening name"
-          value={profile.name}
-          onChangeText={setProfileName}
-          onFocus={() => setIsTyping(true)}
-          onBlur={() => setIsTyping(false)}
-          maxLength={NAME_LIMIT}
-          placeholder="Your name"
-          placeholderTextColor={String(styles.pulseSub.color)}
-          autoComplete="nickname"
-          autoCapitalize="words"
-          returnKeyType="done"
-          textAlign="center"
-          style={[styles.pulseNameInput, isTyping && styles.pulseNameInputFocus]}
-        />
-        <View style={styles.pulseNameMeta}>
-          <Text numberOfLines={1} style={[styles.pulseTinyLabel, { flex: 1 }]}>
-            Home says “{greeting(new Date().getHours(), name)}”
-          </Text>
-          <Text style={styles.pulseTinyLabel}>
-            {profile.name.length}/{NAME_LIMIT}
-          </Text>
         </View>
-        {error ? <Text style={[styles.pulseSub, { textAlign: 'center' }]}>{error}</Text> : null}
-      </View>
 
-      <Text style={styles.pulseSectionLabel}>Or pick an avatar</Text>
-      <ScrollView
-        ref={strip}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pulsePresetStrip}
-        // Opens with the chosen avatar in view.
-        onLayout={() => profile.preset > 1 && strip.current?.scrollTo({ x: (profile.preset - 1) * (PRESET_SIZE + 8 + PRESET_GAP), animated: false })}
-        accessibilityRole="radiogroup"
-        accessibilityLabel="Avatars"
-      >
-        {PRESETS.map((preset, index) => {
-          const on = !profile.photoUri && profile.preset === index;
-          return (
+        <Text style={styles.pulseSectionLabel}>Name</Text>
+        <View style={[styles.profileField, isTyping && styles.profileFieldFocus]}>
+          <TextInput
+            accessibilityLabel="Your name"
+            value={draft.name}
+            onChangeText={(text) => setDraft((current) => ({ ...current, name: text.slice(0, NAME_LIMIT) }))}
+            onFocus={() => setIsTyping(true)}
+            onBlur={() => setIsTyping(false)}
+            maxLength={NAME_LIMIT}
+            placeholder="What should Home call you?"
+            placeholderTextColor={muted}
+            autoComplete="nickname"
+            autoCapitalize="words"
+            returnKeyType="done"
+            style={styles.profileInput}
+          />
+          <SurpriseButton onRoll={surprise} color={accent} />
+          {draft.name.length > 0 ? (
+            <>
+              <Text style={styles.profileCount}>
+                {draft.name.length}/{NAME_LIMIT}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear name"
+                hitSlop={10}
+                onPress={() => setDraft((current) => ({ ...current, name: '' }))}
+              >
+                <Ionicons accessible={false} name="close-circle" size={18} color={muted} />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+
+        <Text style={styles.pulseSectionLabel}>Picture</Text>
+        <View style={styles.profileGrid} accessibilityRole="radiogroup" accessibilityLabel="Picture">
+          {hasPhoto ? (
+            <Choice size={cell} label="Your picture" on onPress={pickPhoto}>
+              <Avatar profile={draft} size={cell} />
+            </Choice>
+          ) : null}
+          {(['photos', 'files'] as const).map((from) => (
             <Pressable
-              key={preset.name}
-              accessibilityRole="radio"
-              accessibilityLabel={preset.name}
-              accessibilityState={{ checked: on }}
-              onPress={() => {
-                hapticSelection();
-                setProfilePreset(index);
-              }}
-              style={[styles.pulseStripItem, on && styles.pulseStripItemOn]}
+              key={from}
+              accessibilityRole="button"
+              accessibilityLabel={from === 'photos' ? 'Pick from Photos' : 'Pick from Files'}
+              onPress={() => void pickPicture(from)}
+              style={({ pressed }) => [styles.profilePhotoCell, { width: cell, height: cell, borderRadius: cell / 2 }, pressed && { opacity: 0.8 }]}
             >
-              <Avatar profile={{ preset: index, photoUri: null }} size={PRESET_SIZE} />
-              {on && (
-                <View style={[styles.pulseCheck, styles.pulseFill]}>
-                  <Ionicons accessible={false} name="checkmark" size={13} color="#11130F" />
-                </View>
-              )}
+              <Ionicons accessible={false} name={from === 'photos' ? 'images-outline' : 'folder-open-outline'} size={Math.round(cell * 0.36)} color={ink} />
             </Pressable>
-          );
-        })}
+          ))}
+          <Choice size={cell} label="No picture" on={!hasPhoto && draft.preset < 0} onPress={() => choosePreset(-1)}>
+            <Avatar profile={{ preset: -1, photoUri: null }} size={cell} />
+          </Choice>
+          {PRESETS.map((preset, index) => (
+            <Choice key={preset.name} size={cell} label={preset.name} on={!hasPhoto && draft.preset === index} onPress={() => choosePreset(index)}>
+              <Avatar profile={{ preset: index, photoUri: null }} size={cell} />
+            </Choice>
+          ))}
+        </View>
+        {error ? (
+          <Text style={styles.profileError}>{error}</Text>
+        ) : (
+          <Text style={styles.profileNote}>Or use your own from Photos or Files. Muse only sees the picture you choose.</Text>
+        )}
+
+        {onCustomize && (
+          <View style={{ marginTop: 18 }}>
+            <SheetRow
+              icon={<Ionicons accessible={false} name="options-outline" size={20} color={ink} />}
+              label="Customize Home"
+              detail="Cards, order, sizes"
+              onPress={onCustomize}
+            />
+          </View>
+        )}
+        <Text style={styles.profileNote}>Optional. Stays on this phone and only goes on a share card if you switch it on.</Text>
       </ScrollView>
 
-      {(profile.photoUri || profile.preset >= 0) && (
-        <Pressable accessibilityRole="button" hitSlop={8} onPress={clearProfileImage} style={styles.pulseLinkButton}>
-          <Text style={[styles.pulseLinkText, { color: accentText }]}>Remove picture</Text>
-        </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ busy: isSaving }}
+        disabled={isSaving}
+        onPress={save}
+        style={({ pressed }) => [styles.pulseSheetButton, styles.profileSave, { backgroundColor: play.background }, pressed && { opacity: 0.85 }]}
+      >
+        <Text style={[styles.pulseSheetButtonText, { color: play.glyph }]}>{isSaving ? 'Saving...' : 'Save'}</Text>
+      </Pressable>
+    </>
+  );
+}
+
+/** One picture to choose: a ring and a tick when it is the one. */
+function Choice({ size, label, on, onPress, children }: { size: number; label: string; on: boolean; onPress: () => void; children: ReactNode }) {
+  const styles = useAppStyles();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: on }}
+      onPress={onPress}
+      style={({ pressed }) => [{ width: size, height: size, borderRadius: size / 2 }, pressed && { opacity: 0.8 }]}
+    >
+      {children}
+      {on && <View pointerEvents="none" style={[styles.profileRing, { borderRadius: size / 2 + 4 }]} />}
+      {on && (
+        <View style={[styles.profileTick, styles.pulseFill]}>
+          <Ionicons accessible={false} name="checkmark" size={11} color="#11130F" />
+        </View>
       )}
-      <Text style={styles.pulseNote}>🔒 Optional. Stays on this phone and only goes on a share card if you switch it on.</Text>
-    </Sheet>
+    </Pressable>
   );
 }

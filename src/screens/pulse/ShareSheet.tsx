@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Modal, PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { captureRef } from 'react-native-view-shot';
 import { isAvailableAsync, shareAsync } from 'expo-sharing';
 import { Asset, requestPermissionsAsync } from 'expo-media-library';

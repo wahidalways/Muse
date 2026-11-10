@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { isRunningInExpoGo } from 'expo';
+import { hideAsync as hideSplash } from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
@@ -17,7 +18,7 @@ import {
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
 import { sidewaysDragLock } from './motion/gestureLock';
-import { setBarMinimized, useBarScroll } from './motion/barScroll';
+import { setBarMinimized, useBarScroll, useBarScrollAt } from './motion/barScroll';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -38,7 +39,7 @@ import { getPermissionsAsync, requestPermissionsAsync } from 'expo-media-library
 import type { LibrarySort, SortDirection } from './library/sortTracks';
 import { getPlaybackController, shuffleTracks } from './playback/PlaybackController';
 import { settlePlayer, usePlayerTransition } from './player/playerTransition';
-import { addAudioBecomingNoisyListener, getLibraryVersion } from '../modules/muse-audio-metadata';
+import { addAudioBecomingNoisyListener, addHeadphonesConnectedListener, getLibraryVersion, setAppIcon } from '../modules/muse-audio-metadata';
 import { usePlayback } from './playback/usePlayback';
 import type {
   MusicTrack,
@@ -51,15 +52,17 @@ import type {
 } from './types';
 import type { Accent, Appearance, Theme } from './theme/theme';
 import {
-  SHORT_AUDIO_SECONDS,
   getPreferences,
   preferencesReady,
+  resetPreferences,
   usePreferences,
 } from './settings/preferences';
+import { setWeekStart } from './settings/pulse';
 import { hapticImpact, hapticSelection } from './utils/haptics';
-import { BottomTabs, HideWhenBarFolded } from './components/BottomTabs';
-import { TabLayer } from './components/TabLayer';
-import { useGlassStyle } from './theme/glassStyle';
+import { BottomTabs, HideForSelection, HideWhenBarFolded } from './components/BottomTabs';
+import { ToastHost, showToast } from './components/Toast';
+import { PageVisible, TabLayer } from './components/TabLayer';
+import { setGlassChoice, useGlassStyle } from './theme/glassStyle';
 import { SearchScreen } from './screens/SearchScreen';
 import { LaunchScreen } from './components/LaunchScreen';
 import { CloseIcon } from './components/icons';
@@ -75,11 +78,13 @@ import {
 import { EqualizerTab } from './screens/EqualizerTab';
 import { useEqualizerLabel } from './equalizer/equalizerStore';
 import { FullPlayer } from './player/FullPlayer';
-import { Header, MessageScreen, SetupProgress } from './components/setup';
+import { Header, MessageScreen } from './components/setup';
+import { Onboarding, type AccessResult } from './onboarding/Onboarding';
 import { HomeTab } from './screens/HomeTab';
 import { StatsScreen } from './screens/StatsScreen';
 import { MoreTab, type MoreRoute } from './screens/MoreTab';
 import { SongMenu } from './components/SongMenu';
+import { CoverHost } from './components/CoverSheets';
 import { removeFromAllPlaylists } from './library/playlists';
 import { LibraryTab } from './screens/LibraryTab';
 import { MiniPlayer } from './player/MiniPlayer';
@@ -88,15 +93,13 @@ import {
   BuildRequiredScreen,
   DeniedScreen,
   FoldersScreen,
-  GuidanceScreen,
-  WelcomeScreen,
 } from './screens/SetupScreens';
 import { SleepTimerModal } from './player/SleepTimerModal';
 import {
   canRestoreSavedLibrary,
   canDeleteTrack,
   countIncludedTracks,
-  deleteTrackFile,
+  deleteTrackFiles,
   loadMusicLibrary,
   parseCachedLibrary,
   parseFolderRules,
@@ -106,7 +109,6 @@ import {
   saveLibraryCache,
   writeLibraryCache,
 } from './library/library';
-import { DEMO_FOLDER, DEMO_TRACKS, loadLocalDemoTracks } from './library/demoTracks'; // Expo Go test songs: remove before shipping
 import { useAppStyles } from './theme/styles';
 import {
   EASE_OUT,
@@ -120,6 +122,12 @@ import {
 } from './motion/motion';
 import { loadListeningHistory, saveListeningHistory } from './history/history';
 import { withListenedSeconds } from './history/stats';
+
+// Expo Go test songs. Dev bundles only: a release build folds `__DEV__` to
+// false and drops this require (an import could not be dropped), so the APK
+// carries none of assets/demo.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const demo: typeof import('./library/demoTracks') | null = __DEV__ ? require('./library/demoTracks') : null;
 
 /** History is written at most this often while songs change quickly. */
 const HISTORY_SAVE_GAP_MS = 3000;
@@ -141,8 +149,8 @@ const TAP_SLIDE = 28;
 const TAB_WARM_GAP_MS = 400;
 /** How long a committed swipe waits for its page before sliding back anyway. */
 const SWIPE_FALLBACK_MS = 300;
-/** The launch screen stays at least this long, so it reads as a moment, not a flash. */
-const LAUNCH_MIN_MS = 1400;
+/** The launch screen stays at least this long (about one beat of every bar), so it never just blinks. */
+const LAUNCH_MIN_SHOWN_MS = 1200;
 const NOTICE_ENTER = FadeInDown.duration(220).easing(EASE_OUT);
 const NOTICE_EXIT = FadeOutDown.duration(180).easing(EASE_OUT);
 
@@ -178,16 +186,41 @@ export function MuseApp({
   // A returning Android user may already have a library saved. Show nothing
   // until that is known, instead of flashing the Welcome screen.
   const [screen, setScreen] = useState<Screen>(() =>
-    canRestoreSavedLibrary() ? 'starting' : 'welcome',
+    canRestoreSavedLibrary() ? 'starting' : 'onboarding',
   );
+  /** Setup on a first run, or "Set up Muse again" from Settings › About (choices and tour only). */
+  const [onboardingMode, setOnboardingMode] = useState<'first' | 'replay'>('first');
+  /** What setup's background scan found; null until it is done. */
+  const [scannedLibrary, setScannedLibrary] = useState<CachedLibrary | null>(null);
+  const scanJob = useRef<Promise<CachedLibrary | null> | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   /** Search covers the current page; the dock turns into its field. */
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLaunchTimeUp, setIsLaunchTimeUp] = useState(false);
+  // The launch screen (the Muse bars pulsing) is up from the first frame
+  // while the saved library restores. A first launch has nothing to
+  // restore, so Welcome shows straight away.
+  const [isLaunchShown, setIsLaunchShown] = useState(screen === 'starting');
+  const launchShownAt = useRef(0);
   useEffect(() => {
-    const timer = setTimeout(() => setIsLaunchTimeUp(true), LAUNCH_MIN_MS);
-    return () => clearTimeout(timer);
+    launchShownAt.current = Date.now();
   }, []);
+  useEffect(() => {
+    if (screen === 'starting' || !isLaunchShown) {
+      return;
+    }
+    const left = LAUNCH_MIN_SHOWN_MS - (Date.now() - launchShownAt.current);
+    const timer = setTimeout(() => setIsLaunchShown(false), Math.max(0, left));
+    return () => clearTimeout(timer);
+  }, [isLaunchShown, screen]);
+  /** The launch screen is gone, or never came: Home may play its entrance. */
+  const isLaunchTimeUp = screen !== 'starting' && !isLaunchShown;
+  // Android's splash looks like our launch screen, so it hands over to it
+  // (or to Welcome on a first launch).
+  useEffect(() => {
+    if (screen !== 'starting' || isLaunchShown) {
+      hideSplash().catch(() => undefined);
+    }
+  }, [isLaunchShown, screen]);
   // After launch the other tabs mount hidden, one at a time, so even a first
   // visit swaps instantly. Leaving the app screens unmounts them, so restart.
   const [warmTabs, setWarmTabs] = useState(0);
@@ -206,6 +239,7 @@ export function MuseApp({
   const blurTarget = useRef<ComponentRef<typeof View>>(null);
   /** Solid glass style docks everything flush along the bottom edge. */
   const isSolidBar = useGlassStyle() === 'solid';
+
   /** Measured, so pages can scroll their last row clear of the dock. */
   const [dockHeight, setDockHeight] = useState(96);
   const dockRef = useRef<ComponentRef<typeof Animated.View>>(null);
@@ -216,7 +250,15 @@ export function MuseApp({
   // Scrolling down shrinks the glass bar (BottomTabs reads it, so the whole
   // app does not redraw on each fold).
   const homeBarScroll = useBarScroll();
+  /** Home scrolls on the UI thread and sends a position over now and then. */
+  const homeBarScrollAt = useBarScrollAt();
   const settingsBarScroll = useBarScroll();
+  // Whether the app is in front, so Home's live numbers and loops stop in the background.
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => setIsAppActive(state === 'active'));
+    return () => subscription.remove();
+  }, []);
   /** The full stats page, opened from Home. */
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   /** Pages opened inside the More tab. Empty means its menu. */
@@ -231,14 +273,14 @@ export function MuseApp({
   const [folders, setFolders] = useState<MusicFolder[]>([]);
   const [deviceTracks, setTracks] = useState<MusicTrack[]>([]);
   const preferences = usePreferences();
-  const { skipShortAudio } = preferences;
+  const { skipShortAudio, shortAudioSeconds, historyPaused } = preferences;
   // Unknown lengths (0) stay: only clearly short files are voice notes or tones.
   const tracks = useMemo(
     () =>
       skipShortAudio
-        ? deviceTracks.filter((track) => track.duration <= 0 || track.duration >= SHORT_AUDIO_SECONDS)
+        ? deviceTracks.filter((track) => track.duration <= 0 || track.duration >= shortAudioSeconds)
         : deviceTracks,
-    [deviceTracks, skipShortAudio],
+    [deviceTracks, shortAudioSeconds, skipShortAudio],
   );
   const [blockedFolderIds, setBlockedFolderIds] = useState<string[]>([]);
   const [hasSavedFolderRules, setHasSavedFolderRules] = useState(false);
@@ -262,6 +304,8 @@ export function MuseApp({
   const playbackController = getPlaybackController();
   const playback = usePlayback();
   const { currentTrack } = playback;
+  /** Joined: the mini player and the tab pill are one frosted card (not while searching). */
+  const isDockJoined = !isSolidBar && preferences.miniDock === 'joined' && Boolean(currentTrack) && !isSearchOpen;
   const {
     togglePlayback,
     skipNext,
@@ -301,8 +345,16 @@ export function MuseApp({
   const sheetPlayback = isFullPlayerOpen ? playback : deferredPlayback;
   /** Set when Equalizer was opened from the full player: the tab to reopen it over. */
   const [playerReturnTab, setPlayerReturnTab] = useState<Tab | null>(null);
+  /**
+   * Set when an album or artist was opened from the full player: how deep its
+   * page sits in Collections. Back from that page returns to `playerReturnTab`
+   * with the player open again, as Equalizer does.
+   */
+  const [playerReturnDepth, setPlayerReturnDepth] = useState<number | null>(null);
   /** The Settings category page that is open, or null for the main list. */
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null);
+  /** Settings search scrolls the setting it found into view. */
+  const settingsScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   /** Equalizer opens from Settings or the full player; back returns there. */
   const [equalizerBackTab, setEqualizerBackTab] = useState<Tab>('settings');
   const [isSleepTimerOpen, setIsSleepTimerOpen] = useState(false);
@@ -331,6 +383,19 @@ export function MuseApp({
       return !track || !blocked.has(track.folderId);
     });
   }, [blockedFolderIds, listeningHistory, tracksById]);
+  const recentTracks = useMemo(() => {
+    const seen = new Set<string>();
+    const recent: MusicTrack[] = [];
+    // History is newest first.
+    for (let index = 0; index < visibleHistory.length && recent.length < 31; index += 1) {
+      const track = tracksById.get(visibleHistory[index].trackId);
+      if (track && !seen.has(track.id)) {
+        seen.add(track.id);
+        recent.push(track);
+      }
+    }
+    return recent;
+  }, [tracksById, visibleHistory]);
   const playableTracks = useMemo(() => {
     const blocked = new Set(blockedFolderIds);
     return tracks.filter(
@@ -360,11 +425,19 @@ export function MuseApp({
 
   useEffect(() => {
     const subscription = addAudioBecomingNoisyListener(() => {
-      if (!getPreferences().pauseOnDisconnect) {
-        playbackController.resumeAfterDisconnect();
+      playbackController.handleDisconnect(!getPreferences().pauseOnDisconnect);
+    });
+    // Settings › Sound › Resume on reconnect.
+    const reconnect = addHeadphonesConnectedListener(() => {
+      const { pauseOnDisconnect, resumeOnConnect } = getPreferences();
+      if (pauseOnDisconnect && resumeOnConnect) {
+        playbackController.resumeAfterReconnect();
       }
     });
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      reconnect.remove();
+    };
   }, [playbackController]);
 
   useEffect(() => {
@@ -454,10 +527,17 @@ export function MuseApp({
     }
     const seconds = playbackController.getFinishedListenSeconds();
     setListeningHistory((history) => withListenedSeconds(history, playedAt, seconds));
+    if (getPreferences().historyPaused) {
+      // The next play is not recorded, so its time must not land on this one.
+      currentListenAt.current = null;
+    }
   }, [playback.playRequestId, playbackController]);
 
   useEffect(() => {
     if (
+      // Settings › Listening › Pause history: plays are not written down. Turning
+      // it back on mid-song records that song from then on.
+      historyPaused ||
       !playback.isPlaying ||
       !currentTrack ||
       playback.playRequestId === 0 ||
@@ -480,14 +560,45 @@ export function MuseApp({
           album: currentTrack.album,
           genre: currentTrack.genre,
           duration: currentTrack.duration,
+          // Nothing heard yet. Left out, stats would count the whole song the moment it starts.
+          listenedSeconds: 0,
         },
         ...history,
       ].slice(0, MAX_LISTENING_EVENTS),
     );
-  }, [currentTrack, playback.isPlaying, playback.playRequestId]);
+  }, [currentTrack, historyPaused, playback.isPlaying, playback.playRequestId]);
 
   // Save the time heard so far whenever playback pauses or the app leaves the
   // screen, so a closed app keeps most of the current listen.
+  /** Settings › Listening › Clear listening history. The save effect writes the empty list. */
+  const clearHistory = useCallback(() => {
+    currentListenAt.current = null;
+    setListeningHistory([]);
+  }, []);
+
+  /**
+   * Settings › App & data › Reset settings: look, player, sound, library and
+   * listening settings go back to how Muse starts. Music, playlists,
+   * favorites, ratings, history and the equalizer stay.
+   */
+  const resetSettings = useCallback(() => {
+    if (getPreferences().appIcon !== 'muse') {
+      setAppIcon('muse');
+    }
+    resetPreferences();
+    setGlassChoice('blur');
+    setWeekStart(6);
+    changeGoal(0);
+    onSelectAppearance('system');
+    onSelectAccent('lime');
+    if (isAmoled) {
+      onToggleAmoled();
+    }
+    if (isFullScreen) {
+      onToggleFullScreen();
+    }
+  }, [changeGoal, isAmoled, isFullScreen, onSelectAccent, onSelectAppearance, onToggleAmoled, onToggleFullScreen]);
+
   const saveCurrentListen = useCallback(() => {
     const playedAt = currentListenAt.current;
     if (playedAt === null) {
@@ -613,7 +724,8 @@ export function MuseApp({
     try {
       const permission = await getPermissionsAsync(false, ['audio']);
       if (!permission.granted) {
-        setScreen('welcome');
+        setOnboardingMode('first');
+        setScreen('onboarding');
         return;
       }
 
@@ -684,9 +796,12 @@ export function MuseApp({
 
   const retryAfterError = () => {
     if (!canRestoreSavedLibrary()) {
-      setScreen('guidance');
+      setOnboardingMode('first');
+      setScreen('onboarding');
       return;
     }
+    launchShownAt.current = Date.now();
+    setIsLaunchShown(true);
     setScreen('starting');
     void restoreSavedLibrary();
   };
@@ -734,6 +849,11 @@ export function MuseApp({
     },
     [openIfCurrent, playbackController],
   );
+  /** Plays a mix from one of its songs (a song tapped in the mix's sheet on Home). */
+  const playMixFrom = useCallback(
+    (track: MusicTrack, list: MusicTrack[], source: string) => playFromList(track, list, true, source),
+    [playFromList],
+  );
   const openTrackMenu = useCallback((track: MusicTrack, playlistId?: string) => {
     hapticImpact();
     setTrackMenu({ track, playlistId });
@@ -743,9 +863,10 @@ export function MuseApp({
    * out of the library, its saved copy, the queue and every playlist. Plays
    * stay in history, so stats do not change.
    */
-  const deleteSong = useCallback(
-    async (track: MusicTrack) => {
-      if (!canDeleteTrack(track)) {
+  const deleteSongs = useCallback(
+    async (picked: MusicTrack[]) => {
+      const list = picked.filter(canDeleteTrack);
+      if (list.length === 0) {
         setLibraryNotice(
           isRunningInExpoGo()
             ? 'This is a sample song. Expo Go cannot read the music on your phone, so install the Muse app to delete your own songs.'
@@ -754,32 +875,42 @@ export function MuseApp({
         return;
       }
       try {
-        if (!(await deleteTrackFile(track))) {
+        if (!(await deleteTrackFiles(list))) {
           return;
         }
       } catch {
         setLibraryNotice(
           Platform.OS === 'android' && Number(Platform.Version) < 30
             ? 'Deleting songs needs Android 11 or newer.'
-            : `Could not delete "${track.title}". It is still on your phone.`,
+            : list.length === 1
+              ? `Could not delete "${list[0].title}". It is still on your phone.`
+              : `Could not delete those ${list.length} songs. They are still on your phone.`,
         );
         return;
       }
-      playbackController.removeTrack(track.id);
-      removeFromAllPlaylists(track.id);
+      const gone = new Set(list.map((track) => track.id));
+      const perFolder = new Map<string, number>();
+      list.forEach((track) => {
+        playbackController.removeTrack(track.id);
+        removeFromAllPlaylists(track.id);
+        perFolder.set(track.folderId, (perFolder.get(track.folderId) ?? 0) + 1);
+      });
+      if (list.length > 1) {
+        showToast(`Deleted ${list.length} songs`, { icon: 'delete' });
+      }
       // Closing Android's confirm dialog can start a rescan, so this works
       // from the latest state and cache, not the lists from before the dialog.
       const withoutTrack = (library: CachedLibrary): CachedLibrary => ({
-        tracks: library.tracks.filter((item) => item.id !== track.id),
+        tracks: library.tracks.filter((item) => !gone.has(item.id)),
         folders: library.folders
           .map((folder) =>
-            folder.id === track.folderId
-              ? { ...folder, trackCount: folder.trackCount - 1 }
+            perFolder.has(folder.id)
+              ? { ...folder, trackCount: folder.trackCount - (perFolder.get(folder.id) ?? 0) }
               : folder,
           )
           .filter((folder) => folder.trackCount > 0),
       });
-      setTracks((current) => current.filter((item) => item.id !== track.id));
+      setTracks((current) => current.filter((item) => !gone.has(item.id)));
       setFolders((current) => withoutTrack({ tracks: [], folders: current }).folders);
       // If this fails, the next rescan finds the file gone anyway.
       readLibraryCache()
@@ -803,6 +934,12 @@ export function MuseApp({
     setIsSleepTimerOpen(false);
   };
 
+  const sleepAtTrackEnd = () => {
+    playbackController.sleepAtTrackEnd();
+    setIsSleepTimerOpen(false);
+    showToast('Sleep timer set', { detail: 'Pausing when this song ends', icon: 'moon' });
+  };
+
   const clearSleepTimer = () => {
     playbackController.clearSleepTimer();
     setIsSleepTimerOpen(false);
@@ -814,11 +951,11 @@ export function MuseApp({
       return;
     }
 
-    if (isRunningInExpoGo()) {
-      setFolders([DEMO_FOLDER]);
-      setTracks(DEMO_TRACKS);
+    if (demo && isRunningInExpoGo()) {
+      setFolders([demo.DEMO_FOLDER]);
+      setTracks(demo.DEMO_TRACKS);
       // Played from the phone once downloaded, as a real build would.
-      void loadLocalDemoTracks().then(setTracks);
+      void demo.loadLocalDemoTracks().then(setTracks);
       setBlockedFolderIds([]);
       setHasSavedFolderRules(true);
       setScreen('app');
@@ -862,6 +999,83 @@ export function MuseApp({
       setIsLoading(false);
     }
   };
+
+  /**
+   * Setup's "Allow access": asks Android once, then scans in the background
+   * while setup goes on, so Folders has real counts by the time it shows.
+   */
+  const requestAccess = useCallback(async (): Promise<AccessResult> => {
+    if (Platform.OS !== 'android') {
+      setScreen('unsupported');
+      return 'unsupported';
+    }
+    if (demo && isRunningInExpoGo()) {
+      const library = { folders: [demo.DEMO_FOLDER], tracks: demo.DEMO_TRACKS };
+      setFolders(library.folders);
+      setTracks(library.tracks);
+      setScannedLibrary(library);
+      scanJob.current = Promise.resolve(library);
+      // Played from the phone once downloaded, as a real build would.
+      void demo.loadLocalDemoTracks().then(setTracks);
+      return 'granted';
+    }
+    try {
+      const permission = await requestPermissionsAsync(false, ['audio']);
+      if (!permission.granted) {
+        return 'denied';
+      }
+    } catch {
+      return 'denied';
+    }
+    scanJob.current ??= loadMusicLibrary()
+      .then(async (library) => {
+        // A cache that fails to save only means the next launch rescans.
+        await saveLibraryCache(library).catch(() => undefined);
+        setFolders(library.folders);
+        setTracks(library.tracks);
+        setScannedLibrary(library);
+        return library;
+      })
+      .catch((error: unknown) => {
+        setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred.');
+        scanJob.current = null;
+        return null;
+      });
+    return 'granted';
+  }, []);
+
+  /** Setup is done: save the folder choices (all on unless changed) and open Home. */
+  const finishOnboarding = useCallback(async () => {
+    if (onboardingMode === 'replay') {
+      setScreen('app');
+      return;
+    }
+    // Quick start can finish before the scan does; wait for it here.
+    const library = scannedLibrary ?? (await scanJob.current);
+    if (!library) {
+      setScreen('error');
+      return;
+    }
+    try {
+      await AsyncStorage.setItem(FOLDER_RULES_KEY, JSON.stringify(blockedFolderIds));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not save your folder choices.');
+      setScreen('error');
+      return;
+    }
+    setHasSavedFolderRules(true);
+    if (!(demo && isRunningInExpoGo())) {
+      await playbackController.restore(library.tracks, blockedFolderIds);
+    }
+    setActiveTab('home');
+    setFolderReturnTab('home');
+    setScreen('app');
+  }, [blockedFolderIds, onboardingMode, playbackController, scannedLibrary]);
+
+  const openSetupAgain = useCallback(() => {
+    setOnboardingMode('replay');
+    setScreen('onboarding');
+  }, []);
 
   const openSettings = async () => {
     try {
@@ -956,9 +1170,20 @@ export function MuseApp({
         isSearchOpen ||
         isStatsOpen ||
         activeTab !== 'home'
-      : screen !== 'welcome' && screen !== 'starting');
+      : screen !== 'onboarding' && screen !== 'starting');
 
   const openFullPlayer = useCallback(() => changePlayerOpen(true), [changePlayerOpen]);
+
+  /** Back on a Collections page; from the page the player opened, back to the player. */
+  const backInMore = useCallback(() => {
+    popMore();
+    if (playerReturnTab && playerReturnDepth !== null && moreStack.length === playerReturnDepth) {
+      setActiveTab(playerReturnTab);
+      setPlayerReturnTab(null);
+      setPlayerReturnDepth(null);
+      changePlayerOpen(true);
+    }
+  }, [changePlayerOpen, moreStack.length, playerReturnDepth, playerReturnTab, popMore]);
 
   const goBack = useCallback(() => {
     if (isLoading) {
@@ -976,7 +1201,7 @@ export function MuseApp({
         return;
       }
       if (activeTab === 'more' && moreStack.length > 0) {
-        popMore();
+        backInMore();
         return;
       }
       if (activeTab === 'settings' && settingsPage) {
@@ -1003,19 +1228,15 @@ export function MuseApp({
       if (hasSavedFolderRules) {
         void cancelFolderChanges();
       } else {
-        setScreen('guidance');
+        setScreen('onboarding');
       }
       return;
     }
 
-    if (screen === 'guidance') {
-      setScreen('welcome');
-    } else if (screen === 'denied') {
-      setScreen('guidance');
-    } else if (screen === 'build-required' || screen === 'unsupported') {
-      setScreen('guidance');
+    if (screen === 'denied' || screen === 'build-required' || screen === 'unsupported') {
+      setScreen(hasSavedFolderRules ? 'app' : 'onboarding');
     } else if (screen === 'error') {
-      setScreen(hasSavedFolderRules ? 'folders' : 'guidance');
+      setScreen(hasSavedFolderRules ? 'folders' : 'onboarding');
     }
   }, [
     cancelFolderChanges,
@@ -1030,7 +1251,7 @@ export function MuseApp({
     activeTab,
     moreStack.length,
     playerReturnTab,
-    popMore,
+    backInMore,
   ]);
 
   const selectTab = useCallback(
@@ -1039,6 +1260,7 @@ export function MuseApp({
       setIsStatsOpen(false);
       setIsSearchOpen(false);
       setPlayerReturnTab(null);
+      setPlayerReturnDepth(null);
       // Tapping More again goes back to its menu.
       if (tab === 'more' && activeTab === 'more') {
         setMoreStack([]);
@@ -1056,6 +1278,8 @@ export function MuseApp({
   const openSearchResult = useCallback((route: MoreRoute) => {
     setIsSearchOpen(false);
     setIsStatsOpen(false);
+    setPlayerReturnTab(null);
+    setPlayerReturnDepth(null);
     setMoreStack([route]);
     setActiveTab('more');
   }, []);
@@ -1066,7 +1290,7 @@ export function MuseApp({
       () => {
         if (isLoading) {
           // Keep Muse open mid-scan; only the first-run screens may quit.
-          return screen !== 'welcome' && screen !== 'starting';
+          return screen !== 'onboarding' && screen !== 'starting';
         }
         if (!canGoBack) {
           return false;
@@ -1078,7 +1302,7 @@ export function MuseApp({
     return () => subscription.remove();
   }, [canGoBack, goBack, isLoading, screen]);
 
-  const refreshLibrary = async () => {
+  const refreshLibrary = useCallback(async () => {
     setIsLoading(true);
     setLibraryNotice('');
 
@@ -1104,7 +1328,8 @@ export function MuseApp({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [blockedFolderIds, currentTrack, playbackController]);
+  const openStats = useCallback(() => setIsStatsOpen(true), []);
 
   // The library is a virtualized list, so it cannot sit inside the shared
   // ScrollView. It gets its own scroll container instead.
@@ -1150,13 +1375,15 @@ export function MuseApp({
   // The new page comes in from the side the finger went toward. A tapped
   // tab gets a short version from the side of the new tab, so taps and
   // swipes feel like one motion. Transform only, so it never waits on React.
-  const lastTabIndex = useRef(tabIndex);
+  const lastTab = useRef({ index: tabIndex, screen });
   useEffect(() => {
     const direction = pendingSwipe.current;
-    const from = lastTabIndex.current;
-    lastTabIndex.current = tabIndex;
+    const from = lastTab.current.index;
+    // Launch (and setup) restores the last tab: it lands in place, it was not a tap.
+    const wasOnApp = lastTab.current.screen === 'app';
+    lastTab.current = { index: tabIndex, screen };
     if (direction === 0) {
-      if (from >= 0 && tabIndex >= 0 && from !== tabIndex) {
+      if (wasOnApp && from >= 0 && tabIndex >= 0 && from !== tabIndex) {
         swipeX.set(Math.sign(tabIndex - from) * TAP_SLIDE);
         swipeX.set(withSpring(0, SETTLE_SPRING));
       }
@@ -1165,7 +1392,7 @@ export function MuseApp({
     pendingSwipe.current = 0;
     swipeX.set(direction * windowWidth * 0.25);
     swipeX.set(withSpring(0, SETTLE_SPRING));
-  }, [activeTab, isStatsOpen, moreStack, settingsPage, swipeX, tabIndex, windowWidth]);
+  }, [activeTab, isStatsOpen, moreStack, screen, settingsPage, swipeX, tabIndex, windowWidth]);
   const tabSwipe = usePanGesture({
     enabled: screen === 'app' && !isSearchOpen && !isFullPlayerOpen,
     // Clearly sideways only, so vertical scrolling keeps working.
@@ -1226,10 +1453,10 @@ export function MuseApp({
   });
   // Library and More are virtualized lists with their own scrolling; the
   // other tabs share this padding inside a plain scroll view.
-  const appPageContent = [
-    styles.content,
-    { paddingTop: 18 + insets.top, paddingBottom: dockHeight + 16 },
-  ];
+  const appPageContent = useMemo(
+    () => [styles.content, { paddingTop: 18 + insets.top, paddingBottom: dockHeight + 16 }],
+    [dockHeight, insets.top, styles.content],
+  );
   // The full player is a sheet over the app. The tabs stay mounted under it,
   // so dragging it down shows them and closing it costs no re-mount. It stays
   // mounted itself too (invisible when closed), so opening starts at once.
@@ -1263,16 +1490,25 @@ export function MuseApp({
     (route: MoreRoute) => {
       // The player morphs closed while the page opens behind it.
       changePlayerOpen(false);
-      openSearchResult(route);
+      setIsSearchOpen(false);
+      setIsStatsOpen(false);
+      // Over Collections the page goes on top, so Back passes through what was open.
+      const stack = activeTab === 'more' ? [...moreStack, route] : [route];
+      setMoreStack(stack);
+      setActiveTab('more');
+      setPlayerReturnTab(activeTab);
+      setPlayerReturnDepth(stack.length);
     },
-    [changePlayerOpen, openSearchResult],
+    [activeTab, changePlayerOpen, moreStack],
   );
   const openEqualizerFromPlayer = useCallback(() => {
     selectTab('equalizer');
     // Back from Equalizer reopens the player over this tab.
     setPlayerReturnTab(activeTab);
+    setPlayerReturnDepth(null);
   }, [activeTab, selectTab]);
-  const deleteFromPlayer = useCallback((track: MusicTrack) => void deleteSong(track), [deleteSong]);
+  const deleteFromPlayer = useCallback((track: MusicTrack) => void deleteSongs([track]), [deleteSongs]);
+  const deleteFromLibrary = useCallback((list: MusicTrack[]) => void deleteSongs(list), [deleteSongs]);
   const openCurrentTrackMenu = useCallback(() => {
     if (currentTrack) {
       openTrackMenu(currentTrack);
@@ -1330,20 +1566,19 @@ export function MuseApp({
         <GestureDetector gesture={tabSwipe}>
         <Animated.View style={[styles.mainScroll, swipeStyle]}>
         {screen === 'app' ? (
-          <>
+          <PageVisible.Provider value={!isFullPlayerOpen}>
             <TabLayer active={!isSearchOpen && activeTab === 'home'} warm={warmTabs > 0} swipe={pendingSwipe}>
+              {isStatsOpen ? (
               <ScrollView
-                // A new scroll view per page, so Stats opens at the top.
-                key={isStatsOpen ? 'stats' : 'main'}
+                // A new scroll view for Stats, so it opens at the top.
+                key="stats"
                 style={styles.mainScroll}
                 contentContainerStyle={appPageContent}
                 showsVerticalScrollIndicator={false}
                 onScroll={homeBarScroll}
                 scrollEventThrottle={32}
               >
-                {/* Home draws its own logo row, with its buttons on it. */}
                 <View style={styles.screenBody}>
-                  {isStatsOpen ? (
                     <Animated.View entering={statsDirection === 'forward' ? PUSH_IN : undefined}>
                       <StatsScreen
                         history={visibleHistory}
@@ -1357,8 +1592,11 @@ export function MuseApp({
                         onBack={() => setIsStatsOpen(false)}
                       />
                     </Animated.View>
-                  ) : (
-                    <Animated.View entering={statsDirection === 'back' ? POP_IN : undefined}>
+                </View>
+              </ScrollView>
+              ) : (
+                    // Home owns its scroll view, so its large title can fold into a bar on the UI thread.
+                    <Animated.View entering={statsDirection === 'back' ? POP_IN : undefined} style={styles.mainScroll}>
                       <HomeTab
                         trackCount={trackCount}
                         tracks={playableTracks}
@@ -1371,19 +1609,25 @@ export function MuseApp({
                         playbackError={playback.error}
                         currentTrack={currentTrack}
                         isPlaying={playback.isPlaying}
+                        queueSource={playback.queueSource}
+                        // On screen: the launch screen is gone and Home is the page showing.
+                        revealed={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen}
+                        // Can be seen right now: loops and live numbers only run then.
+                        active={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen && !isFullPlayerOpen && isAppActive}
+                        contentContainerStyle={appPageContent}
+                        onBarScroll={homeBarScrollAt}
                         onPlayTrack={playTrack}
                         onPlayMix={playMix}
+                        onPlayFromList={playMixFrom}
                         onOpenPlayer={openFullPlayer}
-                        onOpenStats={() => setIsStatsOpen(true)}
+                        onOpenStats={openStats}
                         goalMinutes={goalMinutes}
                         onChangeGoal={changeGoal}
                         onRefresh={refreshLibrary}
                         isLoading={isLoading}
                       />
                     </Animated.View>
-                  )}
-                </View>
-              </ScrollView>
+              )}
             </TabLayer>
 
             <TabLayer active={!isSearchOpen && activeTab === 'library'} warm={warmTabs > 1} swipe={pendingSwipe}>
@@ -1401,6 +1645,7 @@ export function MuseApp({
                 onPlayAll={playMix}
                 onOpenGroup={openSearchResult}
                 onOpenTrackMenu={openTrackMenu}
+                onDeleteTracks={deleteFromLibrary}
                 searchText={librarySearch}
                 onChangeSearchText={setLibrarySearch}
                 sortBy={librarySort}
@@ -1418,7 +1663,7 @@ export function MuseApp({
               <MoreTab
                 stack={moreStack}
                 onPush={pushMore}
-                onPop={popMore}
+                onPop={backInMore}
                 tracks={playableTracks}
                 history={visibleHistory}
                 currentTrackId={currentTrack?.id ?? null}
@@ -1434,9 +1679,12 @@ export function MuseApp({
 
             <TabLayer active={!isSearchOpen && activeTab === 'settings'} warm={warmTabs > 3} swipe={pendingSwipe}>
               <ScrollView
+                ref={settingsScrollRef}
                 style={styles.mainScroll}
                 contentContainerStyle={appPageContent}
                 showsVerticalScrollIndicator={false}
+                // Settings search: a tap on a result works while the keyboard is up.
+                keyboardShouldPersistTaps="handled"
                 onScroll={settingsBarScroll}
                 scrollEventThrottle={32}
               >
@@ -1468,6 +1716,12 @@ export function MuseApp({
                     onChangeGoal={changeGoal}
                     onRefresh={refreshLibrary}
                     onOpenPermissionSettings={openSettings}
+                    onSetUpAgain={openSetupAgain}
+                    tracks={tracks}
+                    listenCount={listeningHistory.length}
+                    onClearHistory={clearHistory}
+                    onResetSettings={resetSettings}
+                    scrollRef={settingsScrollRef}
                   />
                 </View>
               </ScrollView>
@@ -1499,7 +1753,27 @@ export function MuseApp({
                 />
               </Animated.View>
             )}
-          </>
+          </PageVisible.Provider>
+        ) : screen === 'onboarding' ? (
+          <Onboarding
+            mode={onboardingMode}
+            theme={theme}
+            appearance={appearance}
+            accent={accent}
+            isAmoled={isAmoled}
+            onSelectAppearance={onSelectAppearance}
+            onSelectAccent={onSelectAccent}
+            onToggleAmoled={onToggleAmoled}
+            goalMinutes={goalMinutes}
+            onChangeGoal={changeGoal}
+            onRequestAccess={requestAccess}
+            library={scannedLibrary}
+            blockedFolderIds={blockedFolderIds}
+            onToggleFolder={toggleFolder}
+            onIncludeAllFolders={() => setBlockedFolderIds([])}
+            onOpenAppSettings={openSettings}
+            onFinish={finishOnboarding}
+          />
         ) : (
           <Animated.View key={screen} entering={PAGE_FADE} style={styles.mainScroll}>
           <ScrollView
@@ -1511,26 +1785,7 @@ export function MuseApp({
             showsVerticalScrollIndicator={false}
           >
             {screen !== 'starting' && (
-              <Header showBack={screen !== 'welcome'} onBack={goBack} />
-            )}
-            {(screen === 'welcome' ||
-              screen === 'guidance' ||
-              (screen === 'folders' && !hasSavedFolderRules)) && (
-              <SetupProgress
-                step={screen === 'welcome' ? 1 : screen === 'guidance' ? 2 : 3}
-              />
-            )}
-
-            {screen === 'welcome' && (
-              <WelcomeScreen onGetStarted={() => setScreen('guidance')} />
-            )}
-
-            {screen === 'guidance' && (
-              <GuidanceScreen
-                isLoading={isLoading}
-                onAllowAccess={findMusic}
-                onNotNow={() => setScreen('welcome')}
-              />
+              <Header showBack onBack={goBack} />
             )}
 
             {screen === 'folders' && (
@@ -1560,12 +1815,12 @@ export function MuseApp({
                 title={'Music is not\navailable here yet.'}
                 description="Muse can find music on Android phones for now."
                 actionLabel="Back"
-                onAction={() => setScreen('guidance')}
+                onAction={() => setScreen('onboarding')}
               />
             )}
 
             {screen === 'build-required' && (
-              <BuildRequiredScreen onBack={() => setScreen('guidance')} />
+              <BuildRequiredScreen onBack={() => setScreen('onboarding')} />
             )}
 
             {screen === 'error' && (
@@ -1591,6 +1846,7 @@ export function MuseApp({
           style={[styles.dock, isSolidBar && styles.dockSolid, dockLiftStyle]}
           onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
         >
+        <HideForSelection style={[styles.dockStack, (isSolidBar || isDockJoined) && styles.dockSolid]}>
         {(libraryNotice.length > 0 || currentTrack) && (
         <View
           pointerEvents="box-none"
@@ -1632,6 +1888,7 @@ export function MuseApp({
             isCovered={isFullPlayerOpen}
             transition={playerTransition}
             blurTarget={blurTarget}
+            joined={isDockJoined}
           />
           </HideWhenBarFolded>
         )}
@@ -1648,7 +1905,9 @@ export function MuseApp({
           onCloseSearch={closeSearch}
           bottomInset={insets.bottom}
           nowPlaying={nowPlaying}
+          joined={isDockJoined}
         />
+        </HideForSelection>
         </Animated.View>
         )}
       </Animated.View>
@@ -1685,24 +1944,32 @@ export function MuseApp({
           queueSource={sheetPlayback.queueSource}
           equalizerPreset={equalizerPresetName}
           sleepTimerEndsAt={sheetPlayback.sleepTimerEndsAt}
+          sleepAtTrackEnd={sheetPlayback.sleepAtTrackEnd}
+          recentTracks={recentTracks}
         />
       )}
+      {/* Above the dock, or under the header while the full player is open. */}
+      <ToastHost bottom={dockHeight + 12} top={isFullPlayerOpen ? insets.top + 78 : null} />
+      {/* Change cover and the full-size cover view, opened from song menus and the player's cover. */}
+      <CoverHost />
       <SongMenu
         track={trackMenu?.track ?? null}
         playlistId={trackMenu?.playlistId}
         playCount={menuPlayCount}
-        onDelete={(track) => void deleteSong(track)}
+        onDelete={(track) => void deleteSongs([track])}
         onClose={() => setTrackMenu(null)}
       />
       <SleepTimerModal
         visible={isSleepTimerOpen}
         endsAt={playback.sleepTimerEndsAt}
+        atTrackEnd={playback.sleepAtTrackEnd}
         onClose={() => setIsSleepTimerOpen(false)}
         onSelectMinutes={startSleepTimer}
+        onSelectTrackEnd={sleepAtTrackEnd}
         onCancelTimer={clearSleepTimer}
       />
-      {/* On top of everything until the library is back and the moment has passed. */}
-      {(!isLaunchTimeUp || screen === 'starting') && <LaunchScreen />}
+      {/* On top of everything while a slow library restore is still running. */}
+      {isLaunchShown && <LaunchScreen />}
     </View>
   );
 }

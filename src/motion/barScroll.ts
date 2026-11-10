@@ -24,6 +24,29 @@ const subscribe = (listener: () => void) => {
 };
 const read = () => minimized;
 
+/**
+ * Hidden while Library is picking songs: its own action bar takes the
+ * dock's place. One app-wide flag, so the dock needs no props for it.
+ */
+let dockHidden = false;
+const dockListeners = new Set<() => void>();
+export function setDockHidden(next: boolean): void {
+  if (next !== dockHidden) {
+    dockHidden = next;
+    dockListeners.forEach((listener) => listener());
+  }
+}
+const subscribeDock = (listener: () => void) => {
+  dockListeners.add(listener);
+  return () => {
+    dockListeners.delete(listener);
+  };
+};
+const readDock = () => dockHidden;
+export function useDockHidden(): boolean {
+  return useSyncExternalStore(subscribeDock, readDock, readDock);
+}
+
 export function useBarMinimized(): boolean {
   return useSyncExternalStore(subscribe, read, read);
 }
@@ -39,11 +62,24 @@ const TOP_ZONE = 80;
  * `scrollEventThrottle={32}`.
  */
 export function useBarScroll() {
+  const at = useBarScrollAt();
+  return useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      at(contentOffset.y, contentSize.height, layoutMeasurement.height);
+    },
+    [at],
+  );
+}
+
+/**
+ * The same, fed plain numbers: for a scroll view whose scroll handler runs on
+ * the UI thread and only sends a position over now and then.
+ */
+export function useBarScrollAt() {
   const lastY = useRef(0);
   const travel = useRef(0);
-  return useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const y = contentOffset.y;
+  return useCallback((y: number, contentHeight: number, viewHeight: number) => {
     const delta = y - lastY.current;
     lastY.current = y;
     if (y <= TOP_ZONE) {
@@ -52,7 +88,7 @@ export function useBarScroll() {
       return;
     }
     // The bounce at the end of a list is not a real scroll up or down.
-    if (y + layoutMeasurement.height >= contentSize.height - 4) {
+    if (y + viewHeight >= contentHeight - 4) {
       travel.current = 0;
       return;
     }

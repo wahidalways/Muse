@@ -6,7 +6,7 @@ export type CoverColor = { hue: number; colorfulness: number };
 /** Below this a cover is close to grey, black or white, and keeps the chosen accent. */
 const MIN_COLORFULNESS = 0.12;
 
-function hueOf(hex: string): number {
+export function hueOf(hex: string): number {
   const value = Number.parseInt(hex.slice(1), 16);
   const r = ((value >> 16) & 255) / 255;
   const g = ((value >> 8) & 255) / 255;

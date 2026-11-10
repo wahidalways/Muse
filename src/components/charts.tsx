@@ -1,20 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
-import Animated, {
-  Easing,
-  Keyframe,
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { useAppStyles } from '../theme/styles';
-import { EASE_OUT } from '../motion/motion';
 import { sidewaysDragLock } from '../motion/gestureLock';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 /** Bars rise from the baseline. Runs on the UI thread as a layout animation. */
 const GROW_IN = new Keyframe({
@@ -641,62 +632,6 @@ export function Meter({ ratio }: { ratio: number }) {
           { width: `${Math.max(ratio > 0 ? 2 : 0, Math.min(1, ratio) * 100)}%` },
         ]}
       />
-    </View>
-  );
-}
-
-/** A ring that fills toward a target, with the center left for a label. */
-export function ProgressRing({
-  ratio,
-  size = 96,
-  thickness = 9,
-  children,
-}: {
-  ratio: number;
-  size?: number;
-  thickness?: number;
-  children?: ReactNode;
-}) {
-  const colors = useChartColors();
-  const radius = (size - thickness) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const filled = Math.min(1, Math.max(0, ratio));
-  // Fills from empty on first show, then glides to each new value.
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.set(withTiming(filled, { duration: 900, easing: EASE_OUT }));
-  }, [filled, progress]);
-  const arcProps = useAnimatedProps(() => ({
-    strokeDashoffset: circumference * (1 - progress.get()),
-    // A round cap would leave a dot at zero.
-    strokeOpacity: progress.get() > 0.002 ? 1 : 0,
-  }));
-  return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={colors.track}
-          strokeWidth={thickness}
-          fill="none"
-        />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={colors.accent}
-          strokeWidth={thickness}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference} ${circumference}`}
-          animatedProps={arcProps}
-          // Start at 12 o'clock.
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <View style={[StyleSheet.absoluteFill, chartStyles.clockCenter]}>{children}</View>
     </View>
   );
 }

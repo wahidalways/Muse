@@ -31,7 +31,7 @@ import { usePulse } from '../settings/pulse';
 import { RecapStory, dateFromKey, recapCard, shortRange, useRecap } from './pulse/RecapStory';
 import { ShareSheet } from './pulse/ShareSheet';
 import { cardFromStats } from './pulse/ShareCard';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const RANGES: { id: StatsRange; label: string; period: string }[] = [
   { id: 'week', label: 'This week', period: 'the same days last week' },

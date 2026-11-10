@@ -19,3 +19,10 @@ export function hapticImpact() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   }
 }
+
+/** A real achievement, such as reaching the daily goal. */
+export function hapticSuccess() {
+  if (getPreferences().haptics) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  }
+}

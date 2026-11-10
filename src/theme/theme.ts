@@ -5,6 +5,7 @@ export type Theme = 'light' | 'dark';
 export type Appearance = Theme | 'system';
 
 export type Accent =
+  | 'lime'
   | 'muse'
   | 'ocean'
   | 'sunset'
@@ -17,7 +18,7 @@ type ThemeContextValue = { theme: Theme; accent: Accent; isAmoled: boolean };
 
 export const ThemeContext = createContext<ThemeContextValue>({
   theme: 'light',
-  accent: 'muse',
+  accent: 'lime',
   isAmoled: false,
 });
 
@@ -30,11 +31,22 @@ export const ACCENT_OPTIONS: {
   lightSurface: string;
   darkSurface: string;
 }[] = [
+  // The default: the lime of the app icon's bars. Deeper in light mode so text stays readable (4.7:1).
+  {
+    id: 'lime',
+    label: 'Muse Lime',
+    swatch: '#A4D65E',
+    lightText: '#4F7A12',
+    darkText: '#C4F27A',
+    lightSurface: '#EEF6DF',
+    darkSurface: '#313E1F',
+  },
   {
     id: 'muse',
     label: 'Muse Green',
     swatch: '#739B42',
-    lightText: '#739B42',
+    // Deeper than the swatch: #739B42 text was only 3:1 on the light background.
+    lightText: '#4A7323',
     darkText: '#B9E77B',
     lightSurface: '#EAF2E1',
     darkSurface: '#2D3A22',

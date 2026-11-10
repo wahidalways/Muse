@@ -49,15 +49,28 @@
         {
           "android": {
             "buildArchs": [
-              "arm64-v8a",
-              "armeabi-v7a"
+              "arm64-v8a"
             ],
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F5F6F0",
+          "image": "./assets/splash-bars-light.png",
+          "imageWidth": 46,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#0B0B0C",
+            "image": "./assets/splash-bars-dark.png"
+          }
+        }
+      ],
+      "./plugins/withAppIcons"
     ],
     "ios": {
       "bundleIdentifier": "com.muse.offlineplayer",
@@ -72,7 +85,6 @@
       "adaptiveIcon": {
         "backgroundColor": "#141712",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,

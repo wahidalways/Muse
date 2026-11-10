@@ -25,12 +25,15 @@ const PRESS_OUT = { duration: 150, easing: EASE_OUT };
  */
 export function PressableScale({
   style,
+  containerStyle,
   children,
   onPressIn,
   onPressOut,
   ...props
 }: Omit<PressableProps, 'style' | 'children'> & {
   style?: StyleProp<ViewStyle>;
+  /** Layout for the touch area around the scaled view, such as flexGrow to fill a row. */
+  containerStyle?: StyleProp<ViewStyle>;
   children?: ReactNode;
 }) {
   const scale = useSharedValue(1);
@@ -41,6 +44,7 @@ export function PressableScale({
   return (
     <Pressable
       {...props}
+      style={containerStyle}
       pressRetentionOffset={16}
       onPressIn={(event: GestureResponderEvent) => {
         hapticImpact();

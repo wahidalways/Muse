@@ -2,8 +2,8 @@
 // list them. Bundled .wav files resolve to a resource name in an APK, which the
 // player cannot open, so keep them out of the library on device builds.
 // Recreate the files with: node scripts/make-demo-audio.js assets/demo
-// Delete this file, assets/demo/ and the MuseApp.tsx import before shipping,
-// so the APK does not carry the files.
+// MuseApp.tsx requires this only when __DEV__, so release builds (the APK)
+// leave this file and assets/demo/ out on their own.
 import { Asset } from 'expo-asset';
 import type { MusicFolder, MusicTrack } from '../types';
 

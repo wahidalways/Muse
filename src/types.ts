@@ -28,8 +28,7 @@ export type RepeatMode = 'none' | 'all' | 'single';
 export type Screen =
   /** Reading saved state on launch. Shows only the background. */
   | 'starting'
-  | 'welcome'
-  | 'guidance'
+  | 'onboarding'
   | 'folders'
   | 'app'
   | 'denied'
@@ -67,4 +66,3 @@ export type CachedLibrary = {
   tracks: MusicTrack[];
 };
 
-export type DropdownAnchor = { x: number; y: number; width: number; height: number };

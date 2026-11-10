@@ -17,6 +17,8 @@ export type SortChoice = {
   label: string;
   kind: SortKind;
   hint?: string;
+  /** For a list's own order ("Most first"), which the kind can't name. */
+  orderLabels?: Record<SortDirection, string>;
 };
 
 /**
@@ -27,6 +29,7 @@ export type SortChoice = {
  */
 export function SortSheet({
   visible,
+  eyebrow = 'LIBRARY',
   title,
   choices,
   sortBy,
@@ -35,6 +38,7 @@ export function SortSheet({
   onClose,
 }: {
   visible: boolean;
+  eyebrow?: string;
   /** "Sort songs", "Sort albums"... */
   title: string;
   choices: SortChoice[];
@@ -45,10 +49,10 @@ export function SortSheet({
 }) {
   const styles = useAppStyles();
   const current = choices.find((choice) => choice.id === sortBy) ?? choices[0];
-  const orderLabels = directionLabelsFor(current.kind);
+  const orderLabels = current.orderLabels ?? directionLabelsFor(current.kind);
 
   return (
-    <Sheet visible={visible} eyebrow="LIBRARY" title={title} onClose={onClose}>
+    <Sheet visible={visible} eyebrow={eyebrow} title={title} onClose={onClose}>
       <View style={styles.sortSheetOrder}>
         <Segmented
           label="Order"

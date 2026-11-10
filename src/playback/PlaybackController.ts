@@ -9,11 +9,13 @@ import {
 } from 'expo-audio';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import { getArtworkFile } from '../../modules/muse-audio-metadata';
-import { getPreferences } from '../settings/preferences';
+import { lockScreenArtwork, lockScreenCoverKey } from './lockScreenArtwork';
+import { subscribeSongCovers } from '../library/covers';
+import { getPreferences, SLEEP_FADE_SECONDS, subscribePreferences } from '../settings/preferences';
 import { getTrackSpeed, subscribeTrackSpeeds } from '../library/trackSpeeds';
 import { startEqualizer } from '../equalizer/equalizerStore';
 import type { MusicTrack, RepeatMode } from '../types';
+import { withQueued } from './queueOrder';
 
 export const PLAYBACK_STATE_KEY = '@muse/playback-state/v1';
 
@@ -65,6 +67,8 @@ export type PlaybackSnapshot = {
   playRequestId: number;
   /** When the sleep timer pauses playback, as a Date.now() time, or null. */
   sleepTimerEndsAt: number | null;
+  /** The sleep timer pauses when the current song ends, instead of at a time. */
+  sleepAtTrackEnd: boolean;
   /** Where the queue came from ("Library", an album, a playlist), for "Playing from". */
   queueSource: string | null;
 };
@@ -98,6 +102,7 @@ const INITIAL_SNAPSHOT: PlaybackSnapshot = {
   error: '',
   playRequestId: 0,
   sleepTimerEndsAt: null,
+  sleepAtTrackEnd: false,
   queueSource: null,
 };
 
@@ -116,6 +121,8 @@ export class PlaybackController {
   private isLockScreenActive = false;
   /** The song the lock screen shows, so a resume does not resend it. */
   private lockScreenTrack: MusicTrack | null = null;
+  /** What picked the lock screen's current picture (lockScreenCoverKey). */
+  private lockScreenCover = '';
   private artworkRequest = 0;
   /** When this controller last changed the native queue or its position. */
   private windowEditedAt = 0;
@@ -144,6 +151,8 @@ export class PlaybackController {
   private isApplyingSeek = false;
   /** Last report that said playing, to tell a disconnect mid-song from one while paused. */
   private lastPlayingAt = 0;
+  /** When Muse paused because headphones went away, or null. Cleared by any play or pause since. */
+  private pausedForDisconnectAt: number | null = null;
   /** Playback speed; 1 is normal. */
   private speed = 1;
   // Fade between songs (Settings › Playback › Crossfade).
@@ -170,6 +179,9 @@ export class PlaybackController {
       AppState.addEventListener('change', this.handleAppStateChange),
       // A song's saved speed can change (or load) at any time.
       { remove: subscribeTrackSpeeds(this.applyTrackSpeed) },
+      // A new cover for the playing song reaches the lock screen at once.
+      { remove: subscribeSongCovers(this.refreshLockScreenCover) },
+      { remove: subscribePreferences(this.refreshLockScreenCover) },
     ];
   }
 
@@ -401,12 +413,17 @@ export class PlaybackController {
 
   /**
    * Android pauses by itself when headphones or Bluetooth audio disconnect.
-   * With "Pause on disconnect" off, this plays on, through the speaker, but
-   * only if music was actually playing when it happened.
+   * With "Pause on disconnect" off (`keepPlaying`), this plays on, through the
+   * speaker. Either way it only acts if music was actually playing.
    */
-  resumeAfterDisconnect = () => {
+  handleDisconnect = (keepPlaying: boolean) => {
     this.flushPendingLoad();
     if (!this.snapshot.currentTrack || Date.now() - this.lastPlayingAt > 2000) {
+      return;
+    }
+    if (!keepPlaying) {
+      // Remembered for Resume on reconnect.
+      this.pausedForDisconnectAt = Date.now();
       return;
     }
     // After the player's own pause lands, so it does not undo this.
@@ -416,6 +433,18 @@ export class PlaybackController {
         this.expectPlaying(true);
       }
     }, 400);
+  };
+
+  /**
+   * Headphones came back. Plays again only when Muse paused because they
+   * went away, and nothing has played or been paused by hand since.
+   */
+  resumeAfterReconnect = () => {
+    const pausedForDisconnect = this.pausedForDisconnectAt !== null;
+    this.pausedForDisconnectAt = null;
+    if (pausedForDisconnect && !this.snapshot.isPlaying && this.snapshot.currentTrack) {
+      this.togglePlayback();
+    }
   };
 
   /**
@@ -438,6 +467,8 @@ export class PlaybackController {
 
   togglePlayback = () => {
     this.flushPendingLoad();
+    // A tap of your own replaces any pause the headphones caused.
+    this.pausedForDisconnectAt = null;
     if (this.snapshot.isPlaying) {
       this.player.pause();
       this.expectPlaying(false);
@@ -458,6 +489,7 @@ export class PlaybackController {
 
   pause = () => {
     this.flushPendingLoad();
+    this.pausedForDisconnectAt = null;
     this.player.pause();
     this.expectPlaying(false);
   };
@@ -472,7 +504,8 @@ export class PlaybackController {
    */
   trackAfterSkip = (direction: 1 | -1): MusicTrack | null => {
     const { queue, queueIndex } = this.snapshot;
-    if (queue.length < 2 || (direction === -1 && this.progress.currentTime > 3)) {
+    const restartsFirst = getPreferences().previousButton === 'restart';
+    if (queue.length < 2 || (direction === -1 && restartsFirst && this.progress.currentTime > 3)) {
       return null;
     }
     return queue[(queueIndex + direction + queue.length) % queue.length] ?? null;
@@ -613,14 +646,105 @@ export class PlaybackController {
   startSleepTimer = (minutes: number) => {
     this.update({
       sleepTimerEndsAt: Date.now() + minutes * 60 * 1000,
+      sleepAtTrackEnd: false,
       error: '',
     });
   };
 
+  /**
+   * Pauses when the current song ends. Caught on the native song change
+   * (and on a repeat-one loop), so it works in the background too.
+   */
+  sleepAtTrackEnd = () => {
+    this.update({ sleepTimerEndsAt: null, sleepAtTrackEnd: true, error: '' });
+  };
+
   clearSleepTimer = () => {
-    if (this.snapshot.sleepTimerEndsAt !== null) {
-      this.update({ sleepTimerEndsAt: null });
+    if (this.snapshot.sleepTimerEndsAt !== null || this.snapshot.sleepAtTrackEnd) {
+      this.update({ sleepTimerEndsAt: null, sleepAtTrackEnd: false });
     }
+  };
+
+  /** The end-of-song timer fired: stop on the song that just started, at its start. */
+  private sleepNow() {
+    this.player.pause();
+    this.expectPlaying(false);
+    this.pendingSeek = null;
+    void this.player.seekTo(0);
+    this.update({ sleepAtTrackEnd: false, error: 'Sleep timer ended. Playback paused.' });
+    this.save();
+  }
+
+  /**
+   * Play next (`next`) or Add to queue (`end`). A song already coming up
+   * moves instead of playing twice; the current song is never added. Returns
+   * how many songs were queued. With nothing playing, the songs just play.
+   */
+  enqueue = (tracks: MusicTrack[], position: 'next' | 'end'): number => {
+    const playable = tracks.filter((track) => track.uri);
+    if (playable.length === 0) {
+      return 0;
+    }
+    if (!this.snapshot.currentTrack) {
+      void this.playTrack(playable[0], playable, { freshQueue: true });
+      return playable.length;
+    }
+    this.flushPendingLoad();
+    this.syncWithNativeTrack();
+    const { queue, queueIndex, currentTrack, shuffle } = this.snapshot;
+    const adds = playable.filter((track) => track.id !== currentTrack?.id);
+    if (adds.length === 0) {
+      return 0;
+    }
+    const ids = new Set(adds.map((track) => track.id));
+    const nextQueue = withQueued(queue, queueIndex, adds, position);
+    if (shuffle) {
+      // Turning shuffle off later keeps them, right after the current song or at the end.
+      const original = this.originalQueue.filter((track) => !ids.has(track.id));
+      const at = original.findIndex((track) => track.id === currentTrack?.id);
+      this.originalQueue =
+        position === 'next' && at >= 0
+          ? [...original.slice(0, at + 1), ...adds, ...original.slice(at + 1)]
+          : [...original, ...adds];
+    } else {
+      this.originalQueue = nextQueue;
+    }
+    this.update({ queue: nextQueue });
+    this.resetWindowAroundCurrent();
+    this.save();
+    return adds.length;
+  };
+
+  /** Plays a song now (a past song tapped in Up Next) without dropping the rest of the queue. */
+  playNow = (track: MusicTrack) => {
+    if (track.id === this.snapshot.currentTrack?.id) {
+      return;
+    }
+    if (this.enqueue([track], 'next') > 0) {
+      this.skipToQueueIndex(this.snapshot.queueIndex + 1);
+    }
+  };
+
+  /** Empties Up Next. What already played and the current song stay. */
+  clearUpNext = () => {
+    this.flushPendingLoad();
+    this.syncWithNativeTrack();
+    const { queue, queueIndex, currentTrack, shuffle } = this.snapshot;
+    if (queueIndex >= queue.length - 1) {
+      return;
+    }
+    const nextQueue = queue.slice(0, queueIndex + 1);
+    if (shuffle) {
+      const kept = new Set(nextQueue.map((track) => track.id));
+      this.originalQueue = this.originalQueue.filter(
+        (track) => kept.has(track.id) || track.id === currentTrack?.id,
+      );
+    } else {
+      this.originalQueue = nextQueue;
+    }
+    this.update({ queue: nextQueue });
+    this.resetWindowAroundCurrent();
+    this.save();
   };
 
   setError = (message: string) => {
@@ -829,6 +953,19 @@ export class PlaybackController {
       });
     }
 
+    if (
+      this.snapshot.sleepAtTrackEnd &&
+      this.snapshot.repeatMode === 'single' &&
+      status.currentIndex === this.nativeIndex &&
+      this.progress.duration > 0 &&
+      this.progress.currentTime >= this.progress.duration - 3 &&
+      status.currentTime < 2
+    ) {
+      // Repeat one looped back to the start: that was the end of the song.
+      this.sleepNow();
+      return;
+    }
+
     if (status.currentIndex !== this.nativeIndex) {
       // Queued while this controller edited the queue: about the old layout.
       if (this.isStaleReport()) {
@@ -883,6 +1020,11 @@ export class PlaybackController {
     const wasPlaying = this.snapshot.isPlaying;
     if (status.playing) {
       this.lastPlayingAt = now;
+      // Playing again from anywhere (lock screen, headset button) ends the
+      // headphone pause. Reports from just before the pause landed do not.
+      if (this.pausedForDisconnectAt !== null && now - this.pausedForDisconnectAt > 2000) {
+        this.pausedForDisconnectAt = null;
+      }
     }
     let playing = status.playing;
     const nativeError = (status as { error?: { message?: string } }).error;
@@ -950,6 +1092,13 @@ export class PlaybackController {
     const isNewSong = track.id !== this.snapshot.currentTrack?.id;
     this.showTrack({ queueIndex, currentTrack: track });
     this.refillWindow();
+    if (isNewSong && this.snapshot.sleepAtTrackEnd && this.snapshot.isPlaying) {
+      // The song ended on its own (skips move the native index themselves, so they never land here).
+      this.hasCountedCurrentListen = false;
+      this.updateLockScreen(track);
+      this.sleepNow();
+      return;
+    }
     if (isNewSong) {
       this.fadeInCurrent = this.isFadingOut;
       this.isFadingOut = false;
@@ -1109,8 +1258,30 @@ export class PlaybackController {
   // arrive once a second, which keeps it going in the background; while the
   // app is open a short timer smooths the steps.
 
-  /** Volume for `position` seconds into the current song. */
+  /** Volume for `position` seconds into the current song: crossfade times the sleep fade. */
   private fadeVolume(position: number): { volume: number; fadingOut: boolean } {
+    const between = this.crossfadeVolume(position);
+    const sleep = this.sleepFadeVolume(position);
+    return { volume: Math.min(between.volume, sleep), fadingOut: between.fadingOut };
+  }
+
+  /** Settings › Sound › Fade out before sleep: the last SLEEP_FADE_SECONDS get quieter. */
+  private sleepFadeVolume(position: number): number {
+    if (!getPreferences().sleepFade) {
+      return 1;
+    }
+    const { sleepTimerEndsAt, sleepAtTrackEnd } = this.snapshot;
+    const { duration } = this.progress;
+    const left =
+      sleepTimerEndsAt !== null
+        ? (sleepTimerEndsAt - Date.now()) / 1000
+        : sleepAtTrackEnd && duration > 0
+          ? (duration - position) / this.speed
+          : Infinity;
+    return Math.min(1, Math.max(0, left / SLEEP_FADE_SECONDS));
+  }
+
+  private crossfadeVolume(position: number): { volume: number; fadingOut: boolean } {
     const fade = getPreferences().crossfadeSeconds;
     const { duration } = this.progress;
     if (fade <= 0 || duration <= 0) {
@@ -1225,17 +1396,30 @@ export class PlaybackController {
   }
 
   /**
+   * The playing song's cover was changed (Change cover), or a setting that
+   * picks it (Muse art, Best cover in the file): the lock screen gets the
+   * new picture now instead of at the next song.
+   */
+  private refreshLockScreenCover = () => {
+    const track = this.lockScreenTrack;
+    if (this.isLockScreenActive && track && lockScreenCoverKey(track) !== this.lockScreenCover) {
+      this.loadLockScreenArtwork(track);
+    }
+  };
+
+  /**
    * One update per song, title and cover together, once the cover file is
    * ready. Sent after the tap's own work, not during it: each update is a
    * blocking call and rebuilds the media notification, and a title-only
    * update first would clear the cover and make it decode again. Library
    * artwork uses content:// uris, which the lock screen cannot load, so it
-   * gets a file:// copy instead.
+   * gets a file:// picture instead: the cover the app shows (lockScreenArtwork).
    */
   private loadLockScreenArtwork(track: MusicTrack) {
     this.lockScreenTrack = track;
+    this.lockScreenCover = lockScreenCoverKey(track);
     const request = ++this.artworkRequest;
-    void getArtworkFile(track.id)
+    void lockScreenArtwork(track)
       .catch(() => null)
       .then((artworkUrl) => {
         if (request !== this.artworkRequest || !this.isLockScreenActive) {

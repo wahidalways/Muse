@@ -74,19 +74,19 @@ export function canDeleteTrack(track: MusicTrack): boolean {
 }
 
 /**
- * Deletes a song's file from the phone. Android shows its own confirm
- * dialog first. Resolves false when the person says no there.
+ * Deletes songs' files from the phone, behind one Android confirm dialog.
+ * Resolves false when the person says no there.
  *
  * Android 10 and older would need the storage write permission, which Muse
  * blocks on purpose, so deleting is offered from Android 11 on.
  */
-export async function deleteTrackFile(track: MusicTrack): Promise<boolean> {
+export async function deleteTrackFiles(tracks: MusicTrack[]): Promise<boolean> {
   if (Platform.OS !== 'android' || Number(Platform.Version) < 30) {
     throw new Error('Deleting songs needs Android 11 or newer.');
   }
   try {
     // Same id as Muse's own scan: the media store row for the file.
-    await new Asset(`content://media/external/audio/media/${track.id}`).delete();
+    await Asset.delete(tracks.map((track) => new Asset(`content://media/external/audio/media/${track.id}`)));
     return true;
   } catch (error) {
     // Saying no in Android's dialog arrives as a permission error.

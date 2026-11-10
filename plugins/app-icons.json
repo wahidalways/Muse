@@ -1,0 +1,8 @@
+[
+  { "id": "muse", "label": "Muse", "note": "Dark", "background": "#141712", "bars": "#C4F27A" },
+  { "id": "light", "label": "Muse", "note": "Light", "background": "#F5F6F0", "bars": "#5E8A2E" },
+  { "id": "lime", "label": "Lime", "note": "Bright", "background": "#C4F27A", "bars": "#141712" },
+  { "id": "mono", "label": "Mono", "note": "Black", "background": "#000000", "bars": "#FFFFFF" },
+  { "id": "paper", "label": "Paper", "note": "White", "background": "#FFFFFF", "bars": "#141712" },
+  { "id": "ocean", "label": "Ocean", "note": "Blue", "background": "#0E2233", "bars": "#8BD7FF" }
+]

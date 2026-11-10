@@ -71,6 +71,23 @@ export function addToPlaylist(playlistId: string, trackIds: string[]) {
   });
 }
 
+/**
+ * Moves a song to where `toTrackId` sits. By id, not index, because the page
+ * leaves out songs whose files are gone, so its positions can differ.
+ */
+export function movePlaylistTrack(playlistId: string, trackId: string, toTrackId: string) {
+  change(playlistId, (playlist) => {
+    const from = playlist.trackIds.indexOf(trackId);
+    const to = playlist.trackIds.indexOf(toTrackId);
+    if (from < 0 || to < 0 || from === to) {
+      return playlist;
+    }
+    const trackIds = playlist.trackIds.filter((id) => id !== trackId);
+    trackIds.splice(to, 0, trackId);
+    return { ...playlist, trackIds };
+  });
+}
+
 export function removeFromPlaylist(playlistId: string, trackId: string) {
   change(playlistId, (playlist) => ({
     ...playlist,
@@ -106,18 +123,24 @@ export function setPlaylistCoverTrack(playlistId: string, trackId: string | null
  * The picker's copy lives in a cache Android may clear at any time.
  */
 export async function setPlaylistCoverPhoto(playlistId: string, pickedUri: string) {
-  const folder = new Directory(Paths.document, 'playlist-covers');
+  const savedUri = await saveCoverPhoto('playlist-covers', playlistId, pickedUri);
+  const playlist = store.get().find((item) => item.id === playlistId);
+  removeCoverFile(playlist?.coverUri ?? null);
+  change(playlistId, (item) => ({ ...item, coverUri: savedUri, coverTrackId: null }));
+}
+
+/** Copies a picked photo into `folderName` in the app's own folder; returns the copy's uri. */
+export async function saveCoverPhoto(folderName: string, name: string, pickedUri: string): Promise<string> {
+  const folder = new Directory(Paths.document, folderName);
   folder.create({ idempotent: true, intermediates: true });
   const extension = pickedUri.match(/\.(\w+)$/)?.[1] ?? 'jpg';
   // A new name each time, so images never show an old cached copy.
-  const saved = new File(folder, `${playlistId}-${Date.now().toString(36)}.${extension}`);
+  const saved = new File(folder, `${name}-${Date.now().toString(36)}.${extension}`);
   await new File(pickedUri).copy(saved);
-  const playlist = store.get().find((item) => item.id === playlistId);
-  removeCoverFile(playlist?.coverUri ?? null);
-  change(playlistId, (item) => ({ ...item, coverUri: saved.uri, coverTrackId: null }));
+  return saved.uri;
 }
 
-function removeCoverFile(uri: string | null) {
+export function removeCoverFile(uri: string | null) {
   if (!uri) {
     return;
   }

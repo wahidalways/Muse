@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ScrollView } from 'react-native-gesture-handler';
 import { ACCENT_OPTIONS, type Accent } from '../theme/theme';
 import { useAppStyles } from '../theme/styles';

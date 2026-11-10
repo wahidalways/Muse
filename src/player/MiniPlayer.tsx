@@ -21,6 +21,8 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 /** The cover's size and corners; the full player's morph starts from these. */
 export const MINI_ART_SIZE = 48;
 export const MINI_ART_RADIUS = 12;
+/** The joined card's outer corners: the tab pill's own, so the two read as one piece. */
+export const JOINED_RADIUS = 28;
 /** Long enough for a card or pill to finish sliding in before it is measured. */
 export const SETTLED_MS = 320;
 
@@ -39,8 +41,11 @@ export const MiniPlayer = memo(function MiniPlayer({
   isCovered,
   transition,
   blurTarget,
+  joined = false,
 }: {
   blurTarget: RefObject<ComponentRef<typeof View> | null>;
+  /** Joined: the top half of one glass card with the tabs (Settings › Appearance › Mini player). */
+  joined?: boolean;
   track: MusicTrack;
   isPlaying: boolean;
   /** Loading the song: the play button spins, so a tap never looks ignored. */
@@ -124,7 +129,7 @@ export const MiniPlayer = memo(function MiniPlayer({
 
   return (
     <Animated.View ref={cardRef} onLayout={measure} collapsable={false} style={handOffStyle}>
-    <Shell blurTarget={blurTarget} radius={22} style={styles.miniPlayer}>
+    <Shell blurTarget={blurTarget} radius={joined ? JOINED_RADIUS : 22} seam={joined ? 'bottom' : undefined} style={styles.miniPlayer}>
       <View style={styles.miniPlayerTop}>
         <GestureDetector gesture={swipe.gesture}>
           <AnimatedPressable
@@ -235,7 +240,7 @@ export function MiniProgressLine({
   );
 }
 
-function SolidShell({ style, children }: Pick<ComponentProps<typeof Glass>, 'style' | 'children'>) {
+function SolidShell({ style, children }: Pick<ComponentProps<typeof Glass>, 'style' | 'children' | 'seam'>) {
   const styles = useAppStyles();
   return <View style={[style, styles.miniPlayerSolid]}>{children}</View>;
 }

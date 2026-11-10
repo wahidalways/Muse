@@ -53,26 +53,30 @@ const styleDefinitions = {
   },
   brand: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
+    // A view without text has its baseline at its bottom, so the bars stand on the wordmark's line.
+    alignItems: 'baseline',
+    gap: 8,
   },
   logo: {
     height: 22,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 3,
   },
   logoBar: {
-    width: 3,
+    width: 3.5,
     height: 12,
     borderRadius: 2,
     backgroundColor: colors.lime,
+    // Pulses from the floor, like a level meter.
+    transformOrigin: 'bottom',
   },
   brandName: {
     color: colors.text,
-    fontSize: 23,
-    fontWeight: '700',
-    letterSpacing: -1,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -1.1,
+    lineHeight: 26,
   },
   statusDot: {
     width: 6,
@@ -82,40 +86,6 @@ const styleDefinitions = {
   },
   screenBody: {
     flexGrow: 1,
-  },
-  setupProgress: {
-    marginTop: 24,
-  },
-  setupProgressTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 9,
-  },
-  setupProgressLabel: {
-    color: colors.muted,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-  },
-  setupProgressCount: {
-    color: colors.lime,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  setupProgressTrack: {
-    flexDirection: 'row',
-    gap: 5,
-  },
-  setupProgressSegment: {
-    flex: 1,
-    height: 3,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-  },
-  setupProgressSegmentActive: {
-    backgroundColor: colors.lime,
   },
   tabBody: {
     flexGrow: 1,
@@ -145,245 +115,9 @@ const styleDefinitions = {
     marginTop: 12,
     maxWidth: 320,
   },
-  artworkCard: {
-    height: 254,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 24,
-    marginTop: 24,
-    paddingHorizontal: 17,
-    paddingTop: 16,
-    paddingBottom: 13,
-    overflow: 'hidden',
-  },
-  artworkTopline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  cardEyebrow: {
-    color: colors.muted,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  artworkTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 5,
-  },
-  artworkDeviceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  artworkDeviceLabel: {
-    color: colors.muted,
-    fontSize: 7,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-  },
-  artworkLiveDot: {
-    width: 6,
-    height: 6,
-    backgroundColor: colors.lime,
-    borderRadius: 3,
-  },
-  artworkStage: {
-    height: 118,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 5,
-  },
-  artworkSleeveBack: {
-    position: 'absolute',
-    width: 84,
-    height: 98,
-    left: '25%',
-    backgroundColor: '#30372A',
-    borderWidth: 1,
-    borderColor: '#39412F',
-    borderRadius: 13,
-    transform: [{ rotate: '-9deg' }],
-  },
-  artworkSleeve: {
-    position: 'absolute',
-    width: 84,
-    height: 98,
-    left: '22%',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#252C20',
-    borderWidth: 1,
-    borderColor: '#39412F',
-    borderRadius: 13,
-    padding: 9,
-    transform: [{ rotate: '-5deg' }],
-  },
-  artworkSleeveTop: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  artworkSleeveDot: {
-    width: 7,
-    height: 7,
-    backgroundColor: colors.lime,
-    borderRadius: 4,
-  },
-  artworkSleeveLine: {
-    width: 24,
-    height: 3,
-    backgroundColor: '#606A54',
-    borderRadius: 2,
-  },
-  artworkSleeveCenter: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#30372A',
-    borderWidth: 1,
-    borderColor: '#46513A',
-    borderRadius: 21,
-  },
-  artworkSleeveCore: {
-    width: 18,
-    height: 18,
-    backgroundColor: colors.lime,
-    borderRadius: 9,
-  },
-  artworkSleeveBottom: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 4,
-  },
-  artworkSleeveLineShort: {
-    width: 39,
-    height: 3,
-    backgroundColor: colors.lime,
-    borderRadius: 2,
-  },
-  artworkVinyl: {
-    position: 'absolute',
-    width: 112,
-    height: 112,
-    right: '22%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 56,
-  },
-  artworkVinylRing: {
-    width: 94,
-    height: 94,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#39412F',
-    borderRadius: 47,
-  },
-  artworkVinylRingInner: {
-    width: 70,
-    height: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#46513A',
-    borderRadius: 35,
-  },
-  artworkVinylLabel: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.lime,
-    borderRadius: 16,
-  },
-  artworkVinylCenter: {
-    width: 6,
-    height: 6,
-    backgroundColor: colors.background,
-    borderRadius: 3,
-  },
-  artworkFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 10,
-  },
-  artworkFooterMark: {
-    width: 29,
-    height: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#252C20',
-    borderRadius: 9,
-  },
-  artworkFooterMarkText: {
-    color: colors.lime,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: -1,
-  },
-  artworkFooterCopy: {
-    flex: 1,
-    marginLeft: 9,
-  },
-  artworkFooterTitle: {
-    color: colors.text,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  artworkFooterNote: {
-    color: colors.muted,
-    fontSize: 8,
-    marginTop: 2,
-  },
-  waveform: {
-    height: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 4,
-  },
-  waveformBar: {
-    width: 2,
-    backgroundColor: colors.lime,
-    borderRadius: 2,
-  },
   bottomArea: {
     marginTop: 'auto',
     paddingTop: 28,
-  },
-  privacyNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  privacyIndicator: {
-    width: 7,
-    height: 7,
-    backgroundColor: colors.lime,
-    borderRadius: 4,
-  },
-  privacyText: {
-    color: '#A5AA9C',
-    fontSize: 10,
   },
   primaryButton: {
     minHeight: 56,
@@ -412,67 +146,6 @@ const styleDefinitions = {
     fontSize: 19,
     fontWeight: '600',
   },
-  permissionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 17,
-    marginTop: 26,
-  },
-  permissionIcon: {
-    padding: 5,
-    backgroundColor: '#20251B',
-    borderRadius: 14,
-  },
-  permissionCopy: {
-    flex: 1,
-  },
-  permissionTitle: {
-    color: '#E4E6DB',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  permissionDescription: {
-    color: '#959B8D',
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 4,
-  },
-  privacyList: {
-    gap: 13,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 15,
-    marginTop: 16,
-  },
-  privacyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-  },
-  checkMark: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2B3821',
-    borderRadius: 10,
-  },
-  checkMarkText: {
-    color: colors.lime,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  privacyItemText: {
-    color: '#B3B7A9',
-    fontSize: 11,
-  },
   textButton: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -483,9 +156,6 @@ const styleDefinitions = {
     color: '#A5AA9C',
     fontSize: 13,
     fontWeight: '600',
-  },
-  loadingIndicator: {
-    marginTop: 12,
   },
   musicIcon: {
     width: 44,
@@ -707,7 +377,7 @@ const styleDefinitions = {
   },
   /** Solid style: full width, flush on top of the bar, same surface. */
   miniPlayerSolid: {
-    backgroundColor: '#171A14',
+    backgroundColor: '#1C2118',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#2A3024',
     paddingHorizontal: 14,
@@ -800,12 +470,9 @@ const styleDefinitions = {
     shadowRadius: 14,
     elevation: 4,
   },
-  playerArtworkFallback: {
-    flex: 1,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
+  /** Muse art fills the tile, so it drops the frame border. */
+  playerArtworkBare: {
+    borderWidth: 0,
   },
   playerArtworkImage: {
     ...StyleSheet.absoluteFill,
@@ -822,38 +489,6 @@ const styleDefinitions = {
     color: colors.muted,
     fontSize: 11,
     fontVariant: ['tabular-nums'],
-  },
-  playerTimeToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  playerTimeSwap: {
-    color: colors.muted,
-  },
-  playerSecondaryButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  playerSecondaryButtonSelected: {
-    backgroundColor: colors.background,
-    borderColor: colors.lime,
-  },
-  playerSkipButton: {
-    minWidth: 34,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playerSkipButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
   },
   fullPlayer: {
     flexGrow: 1,
@@ -895,14 +530,6 @@ const styleDefinitions = {
     letterSpacing: 1.4,
     textAlign: 'center',
   },
-  /** "1.5× · Sleep 12:30" under the header title while either is on. */
-  fullPlayerHeaderStatus: {
-    color: colors.lime,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 3,
-    textAlign: 'center',
-  },
   /** "Album name" under PLAYING FROM. */
   fullPlayerHeaderSource: {
     color: colors.text,
@@ -910,10 +537,6 @@ const styleDefinitions = {
     fontWeight: '600',
     marginTop: 2,
     textAlign: 'center',
-  },
-  fullPlayerHero: {
-    alignItems: 'center',
-    width: '100%',
   },
   // Title and artist line up with the artwork's left edge, with the
   // favorite heart on the right, and clear space below the artwork.
@@ -968,27 +591,6 @@ const styleDefinitions = {
     backgroundColor: colors.text,
     borderRadius: 3,
   },
-  lyricsContent: {
-    paddingTop: 8,
-    paddingBottom: 120,
-    gap: 14,
-  },
-  lyricsLine: {
-    color: colors.muted,
-    fontSize: 22,
-    lineHeight: 30,
-    fontWeight: '700',
-    opacity: 0.5,
-  },
-  lyricsLineActive: {
-    color: colors.text,
-    opacity: 1,
-  },
-  lyricsPlain: {
-    color: colors.text,
-    fontSize: 17,
-    lineHeight: 27,
-  },
   fullPlayerLink: {
     color: colors.text,
   },
@@ -1000,6 +602,52 @@ const styleDefinitions = {
     letterSpacing: 0.2,
     marginTop: 4,
     fontVariant: ['tabular-nums'],
+  },
+  // Under the artist: [FLAC] Hi-Res  24-bit · 96 kHz · 4,608 kbps · ▶ 12
+  playerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  playerMetaAudio: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  playerMetaBadge: {
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  playerMetaBadgeText: {
+    color: colors.muted,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  /** Lossless or Hi-Res: the one accent-colored word in the row. */
+  playerMetaQuality: {
+    color: colors.lime,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  playerMetaSpecs: {
+    marginTop: 0,
+    flexShrink: 1,
+  },
+  playerMetaPlays: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  playerMetaPlaysText: {
+    marginTop: 0,
   },
   sleepTimerBackdrop: {
     flex: 1,
@@ -1149,7 +797,9 @@ const styleDefinitions = {
     marginTop: 18,
   },
   sleepTimerOption: {
-    width: '47%',
+    // Two per row that share the row exactly, so both columns line up with the wide option.
+    flexBasis: '40%',
+    flexGrow: 1,
     minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1157,6 +807,13 @@ const styleDefinitions = {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 15,
+  },
+  sleepTimerOptionWide: {
+    width: '100%',
+  },
+  sleepTimerOptionOn: {
+    backgroundColor: '#2B3821',
+    borderColor: colors.lime,
   },
   sleepTimerOptionValue: {
     color: colors.text,
@@ -1200,6 +857,366 @@ const styleDefinitions = {
   fullPlayerPlayback: {
     marginTop: 8,
   },
+  // ---- Full player: skins, the bar, Lyrics and Up Next in place ----
+  /** The skin's picture and words, between the header and the controls. */
+  playerHeroArea: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  playerHeroAreaMinimal: {
+    alignItems: 'stretch',
+  },
+  /** Title and artist sit midway between the picture and the controls. */
+  playerTitleSpacer: {
+    width: '100%',
+    marginVertical: 'auto',
+  },
+  /** Full-bleed: the header floats over the cover. */
+  playerHeaderOver: {
+    zIndex: 2,
+  },
+  playerBleedButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.34)',
+  },
+  playerHidden: {
+    opacity: 0,
+  },
+  playerBleedArt: {
+    alignSelf: 'center',
+  },
+  playerBleedFrom: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+  },
+  playerBleedInfo: {
+    marginTop: 6,
+  },
+  playerBleedTitle: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.8,
+  },
+  // Minimal type: one type scale (12 / 16 / 22, title 32-72) and an 8 dp grid.
+  playerMinimalTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginTop: 8,
+  },
+  /** Beside the cover, as tall as it: queue place on top, genre and year at the foot. */
+  playerMinimalSide: {
+    flex: 1,
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  playerMinimalLabel: {
+    color: colors.muted,
+    fontFamily: 'monospace',
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.8,
+  },
+  /** The words sit right above the controls. */
+  playerMinimalWords: {
+    marginTop: 'auto',
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  /** Size, leading and tracking come from minimalTitleStyle. */
+  playerMinimalTitle: {
+    color: colors.text,
+    fontWeight: '900',
+  },
+  playerMinimalArtist: {
+    color: colors.text,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '700',
+    marginTop: 16,
+  },
+  playerMinimalAlbum: {
+    color: colors.muted,
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 4,
+  },
+  /** A link's tap area hugs its words, so a tap beside a short name does nothing. */
+  playerMinimalLink: {
+    alignSelf: 'flex-start',
+  },
+  playerMinimalPressed: {
+    opacity: 0.6,
+  },
+  playerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    marginTop: 12,
+    marginHorizontal: -8,
+  },
+  playerBarButton: {
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  playerBarSpeed: {
+    minWidth: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  playerBarLabel: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  playerBarLabelOn: {
+    color: colors.text,
+  },
+  playerBarLabelSet: {
+    color: colors.lime,
+  },
+  playerBarDim: {
+    opacity: 0.38,
+  },
+  playerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 60,
+  },
+  playerTopRowArt: {
+    borderRadius: 10,
+    boxShadow: '0px 10px 22px -12px rgba(0, 0, 0, 0.6)',
+  },
+  playerTopRowTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  playerTopRowArtist: {
+    color: colors.muted,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  playerTopRowPlay: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playerTopLine: {
+    height: 3,
+    borderRadius: 2,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  playerTopLineFill: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.text,
+    transformOrigin: 'left center',
+  },
+  playerLyricsContent: {
+    paddingTop: 22,
+    paddingBottom: 260,
+  },
+  playerLyricsLine: {
+    color: colors.text,
+    fontSize: 26,
+    lineHeight: 33,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    opacity: 0.32,
+    marginBottom: 16,
+  },
+  playerLyricsLineActive: {
+    opacity: 1,
+  },
+  playerLyricsPlain: {
+    color: colors.text,
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '600',
+  },
+  playerLyricsNote: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 8,
+  },
+  playerPaneEmpty: {
+    paddingTop: 40,
+  },
+  playerPaneEmptyTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  playerPaneEmptyText: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  playerPaneList: {
+    paddingBottom: 40,
+  },
+  playerPaneLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginTop: 22,
+    marginBottom: 6,
+  },
+  playerPaneLabelInline: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  playerPaneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // Same as queueRowMain, so every title in Up Next starts on one line.
+    gap: 10,
+    minHeight: 60,
+    borderRadius: 14,
+  },
+  playerPaneRowPast: {
+    opacity: 0.5,
+  },
+  playerPaneRowPressed: {
+    opacity: 0.7,
+  },
+  playerPaneHead: {
+    marginTop: 22,
+    marginBottom: 4,
+  },
+  playerPaneHeadRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    // On a narrow phone or with big text, Save and Clear drop to a second line instead of running off the edge.
+    gap: 6,
+    rowGap: 8,
+  },
+  playerPaneCount: {
+    color: colors.muted,
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  playerPaneChip: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  playerPaneChipText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  playerPanePill: {
+    paddingHorizontal: 14,
+  },
+  playerPanePillOn: {
+    color: colors.lime,
+  },
+  playerPanePillOff: {
+    color: colors.muted,
+  },
+  playerPaneModes: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  playerSkinRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  playerSkinPreview: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  playerSkinOptions: {
+    flex: 1,
+    gap: 4,
+  },
+  playerSkinOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 10,
+    borderRadius: 14,
+  },
+  playerSkinOptionOn: {
+    backgroundColor: '#2B3821',
+  },
+  playerSkinRadioOn: {
+    borderColor: colors.lime,
+    borderWidth: 6,
+  },
+  playerSkinLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  playerSkinHint: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  playerSkinInUse: {
+    color: colors.lime,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 4,
+  },
+  playerSkinUse: {
+    marginTop: 16,
+  },
+  /** The preview's player, at full size before scaling: the real player's padding. */
+  playerPreviewBody: {
+    flex: 1,
+    paddingTop: 62,
+    paddingHorizontal: 24,
+  },
+  playerPreviewLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 36,
+    marginTop: 10,
+  },
+  playerPreviewPlayed: {
+    width: '30%',
+    height: 4,
+    borderRadius: 2,
+  },
+  playerPreviewRest: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    marginLeft: 12,
+  },
+  flexSpacer: {
+    flex: 1,
+  },
   playerControlSkip: {
     width: 56,
     height: 56,
@@ -1237,67 +1254,39 @@ const styleDefinitions = {
   fullPlayerErrorSkip: {
     minHeight: 36,
   },
-  playerSpeedRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  playerSpeedChip: {
-    minWidth: 56,
-    minHeight: 44,
-    alignItems: 'center',
-  },
-  fullPlayerQueue: {
-    marginTop: 12,
-    marginBottom: 2,
-  },
-  fullPlayerQueueToggle: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: 2,
-    paddingVertical: 6,
-  },
-  fullPlayerQueueToggleCopy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  fullPlayerQueueToggleTitle: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  fullPlayerQueueToggleCount: {
-    color: colors.muted,
-    fontSize: 11,
-  },
-  fullPlayerQueueToggleIcon: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-  },
-  playerQueueEmpty: {
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-  },
-  playerQueueEmptyText: {
+  // Speed sheet (player bar › 1×). Rows are the sort sheet's; spacing on the 8 dp grid.
+  speedSong: {
     color: colors.muted,
     fontSize: 13,
+    marginTop: 8,
+  },
+  speedList: {
+    // Row padding bleeds into the sheet padding, so the speeds start on the title's edge.
+    marginHorizontal: -12,
+    marginTop: 16,
+  },
+  speedValue: {
+    // A fixed column, so the words line up; it still grows with large text.
+    minWidth: 52,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  speedWord: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 15,
+  },
+  speedWordSelected: {
+    color: colors.text,
+  },
+  speedHint: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 16,
+  },
+  speedDone: {
+    marginTop: 16,
   },
   playerQueue: {
     backgroundColor: colors.surface,
@@ -1336,6 +1325,25 @@ const styleDefinitions = {
     paddingLeft: 10,
     borderRadius: 18,
   },
+  queueRowContentPlain: {
+    backgroundColor: 'transparent',
+    paddingLeft: 0,
+    borderRadius: 0,
+  },
+  queueRowRemoveTrailing: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '100%',
+    width: 160,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 18,
+    backgroundColor: '#252C20',
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
   queueRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
@@ -1354,15 +1362,6 @@ const styleDefinitions = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playerQueueRow: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   playerQueueCopy: {
     flex: 1,
   },
@@ -1375,10 +1374,6 @@ const styleDefinitions = {
     color: colors.muted,
     fontSize: 12,
     marginTop: 2,
-  },
-  playerQueueIndex: {
-    color: colors.muted,
-    fontSize: 9,
   },
   // Home and Stats cards.
   homeCard: {
@@ -1627,36 +1622,11 @@ const styleDefinitions = {
   goalChipLabelActive: {
     color: colors.lime,
   },
-  homeHero: {
-    marginTop: 18,
-  },
-  homeHeroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  homeHeroCopy: {
-    flex: 1,
-  },
-  homeHeroTitle: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -1,
-    lineHeight: 34,
-  },
   homeHeroLine: {
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 4,
-  },
-  homeIconButton: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 24,
   },
   homeChip: {
     minHeight: 32,
@@ -1664,11 +1634,6 @@ const styleDefinitions = {
     backgroundColor: '#252C20',
     borderRadius: 16,
     paddingHorizontal: 12,
-  },
-  homeChipText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '600',
   },
   homeChipAction: {
     backgroundColor: '#2B3821',
@@ -1678,27 +1643,6 @@ const styleDefinitions = {
     fontSize: 12,
     fontWeight: '700',
   },
-  mixGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  mixCell: {
-    flexBasis: '46%',
-    flexGrow: 1,
-  },
-  mixTile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 60,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 4,
-    paddingRight: 10,
-  },
   homeShelfPlaying: {
     position: 'absolute',
     left: 8,
@@ -1707,20 +1651,6 @@ const styleDefinitions = {
     borderRadius: 10,
     paddingHorizontal: 7,
     paddingVertical: 6,
-  },
-  // ---- Home board (code names say pulse) ----
-  pulseHeroRow: {
-    marginTop: 18,
-  },
-  pulseIconButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 22,
   },
   pulseBoard: {
     gap: 12,
@@ -1738,11 +1668,8 @@ const styleDefinitions = {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 24,
-    padding: 14,
+    padding: 16,
     overflow: 'hidden',
-  },
-  pulseTileSquare: {
-    aspectRatio: 1,
   },
   pulseLabelRow: {
     flexDirection: 'row',
@@ -1784,27 +1711,6 @@ const styleDefinitions = {
     gap: 10,
     marginTop: 6,
   },
-  pulseDelta: {
-    color: colors.lime,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  pulseDeltaDown: {
-    color: colors.muted,
-  },
-  pulseWeekPlot: {
-    flexDirection: 'row',
-    gap: 10,
-    height: 92,
-    marginTop: 16,
-  },
-  pulseWeekColumn: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: '#20251B',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
   pulseFill: {
     backgroundColor: colors.lime,
     transformOrigin: 'bottom',
@@ -1830,33 +1736,8 @@ const styleDefinitions = {
     textAlign: 'center',
   },
   pulseDayToday: {
-    backgroundColor: '#30372A',
-    color: colors.text,
-  },
-  pulseRingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pulseRingValue: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    lineHeight: 26,
-    textAlign: 'center',
-  },
-  pulseRingUnit: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  pulseFoot: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
+    backgroundColor: '#2B3821',
+    color: colors.lime,
   },
   pulseStreakNumber: {
     color: colors.text,
@@ -1947,53 +1828,52 @@ const styleDefinitions = {
   pulseMixGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
+    columnGap: 12,
+    rowGap: 16,
+    marginTop: 12,
   },
-  pulseMix: {
-    flexBasis: '46%',
-    flexGrow: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 52,
-    padding: 4,
-    paddingRight: 8,
-    borderRadius: 14,
-    backgroundColor: '#252C20',
+  // Mixes and Jump back in: open on the page, no card.
+  pulseOpen: {
+    paddingTop: 16,
   },
   pulseShelf: {
-    marginHorizontal: -14,
-    marginTop: 10,
+    marginHorizontal: -24,
+    marginTop: 12,
   },
   pulseShelfContent: {
-    gap: 10,
-    paddingHorizontal: 14,
+    gap: 12,
+    paddingHorizontal: 24,
   },
   pulseShelfItem: {
     width: 76,
+  },
+  pulseFooterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 28,
   },
   pulseFooter: {
     color: colors.muted,
     fontSize: 12,
     lineHeight: 19,
     textAlign: 'center',
-    marginTop: 28,
   },
-  pulseNew: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  pulseCopyright: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  // A Home tile that grows past its square when text is large, never clipping.
+  pulseTileFill: {
+    flexGrow: 1,
   },
   pulseNewDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-  },
-  pulseNewText: {
-    color: colors.lime,
-    fontSize: 12,
-    fontWeight: '800',
   },
   pulseCta: {
     flexDirection: 'row',
@@ -2007,15 +1887,6 @@ const styleDefinitions = {
     fontSize: 14,
     fontWeight: '700',
   },
-  pulseStack: {
-    flexDirection: 'row',
-  },
-  pulseStackItem: {
-    marginLeft: -14,
-    borderWidth: 2,
-    borderColor: colors.surface,
-    borderRadius: 12,
-  },
   pulseFan: {
     flexDirection: 'row',
     alignSelf: 'flex-start',
@@ -2028,96 +1899,857 @@ const styleDefinitions = {
     elevation: 3,
     borderRadius: 10,
   },
-  // ---- Profile ----
-  pulseProfileCard: {
-    alignItems: 'center',
-    paddingTop: 6,
-  },
-  pulseCamBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // A ring in the sheet's color, so the badge sits clear of the avatar.
-    borderWidth: 4,
-    borderColor: colors.background,
-  },
-  pulseNameInput: {
-    alignSelf: 'stretch',
-    marginTop: 18,
-    marginHorizontal: 24,
-    paddingTop: 6,
-    paddingBottom: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: '#30362A',
-    color: colors.lime,
-    fontSize: 26,
+  // ---- Home: section titles, header, big greeting ----
+  pulseSectionTitle: {
+    color: colors.text,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.4,
+    lineHeight: 24,
   },
-  // The listening name, in the accent color wherever it shows.
-  pulseName: {
+  pulseSectionGap: {
+    marginTop: 16,
+  },
+  pulseGreeting: {
+    color: colors.text,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+    lineHeight: 38,
+  },
+  pulseGreetingName: {
     color: colors.lime,
   },
-  pulseNameInputFocus: {
-    borderBottomColor: colors.lime,
+  pulseHelloRow: {
+    marginTop: 22,
   },
-  pulseNameMeta: {
-    alignSelf: 'stretch',
+  pulseDateRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    marginHorizontal: 24,
+    alignItems: 'center',
+    marginTop: 6,
   },
-  pulsePresetStrip: {
+  pulseCompact: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 2,
+    paddingLeft: 24,
+    paddingRight: 16,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  pulseStripItem: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+  pulseCompactTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  pulseCustomizeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 8,
+    height: 44,
+    marginTop: 28,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pulseCustomizeText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // ---- Home cards ----
+  pulseDeltaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'center',
+    height: 24,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    backgroundColor: '#2B3821',
+  },
+  pulseDeltaPillDown: {
+    backgroundColor: '#30372A',
+  },
+  pulseDeltaPillText: {
+    color: colors.lime,
+    fontSize: 13,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  pulseDeltaPillTextDown: {
+    color: colors.muted,
+  },
+  pulseWeekPlot2: {
+    flexDirection: 'row',
+    height: 96,
+    marginTop: 30,
+  },
+  pulseWeekSlot: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  pulseGhost: {
+    position: 'absolute',
+    bottom: 0,
+    width: 26,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 7,
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: '#30372A',
+    transformOrigin: 'bottom',
+  },
+  pulseWeekBarBox: {
+    position: 'absolute',
+    bottom: 0,
+    width: 14,
+    height: '100%',
+    transformOrigin: 'bottom',
+  },
+  pulseWeekBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '100%',
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    backgroundColor: colors.lime,
+    transformOrigin: 'bottom',
+  },
+  pulseWeekValue: {
+    position: 'absolute',
+    bottom: 0,
+    left: -24,
+    right: -24,
+    textAlign: 'center',
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  pulseGaugeWrap: {
+    alignItems: 'center',
+  },
+  pulseGaugeCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: '10%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Only the chosen one gets a border; light mode would turn a transparent one grey.
-  pulseStripItemOn: {
-    borderWidth: 3,
+  pulseGaugeValue: {
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    lineHeight: 36,
+  },
+  pulseGaugeUnit: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  pulseGaugeGap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+  },
+  pulseGaugeGapText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  pulseDoneBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  pulseDoneBar: {
+    width: 5,
+    borderRadius: 3,
+    backgroundColor: colors.lime,
+    transformOrigin: 'bottom',
+  },
+  pulseSegs: {
+    flexDirection: 'row',
+    gap: 3,
+    height: 10,
+    marginTop: 10,
+  },
+  pulseSeg: {
+    flex: 1,
+    borderRadius: 3,
+    backgroundColor: '#30372A',
+  },
+  pulseSegLit: {
+    backgroundColor: colors.lime,
+  },
+  pulseLabelAccent: {
+    color: colors.lime,
+  },
+  pulseNowDot: {
+    position: 'absolute',
+    top: -9,
+    width: 5,
+    height: 5,
+    marginLeft: -2.5,
+    borderRadius: 3,
+    backgroundColor: colors.text,
+  },
+  pulseAlbumRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 10,
+  },
+  pulseAlbumCount: {
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    lineHeight: 34,
+  },
+  pulseAlbumUnit: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  pulsePill: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#30372A',
+    marginTop: 12,
+  },
+  pulsePillFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 5,
+    backgroundColor: colors.lime,
+    transformOrigin: 'left',
+  },
+  pulseNotch: {
+    position: 'absolute',
+    top: -4,
+    width: 3,
+    height: 18,
+    marginLeft: -1.5,
+    borderRadius: 2,
+    backgroundColor: colors.text,
+  },
+  pulseMeterPart: {
+    backgroundColor: colors.lime,
+    transformOrigin: 'left',
+  },
+  pulseXHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  pulseWaffle: {
+    width: 58,
+    gap: 1,
+  },
+  pulseWaffleRow: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  pulseWaffleCell: {
+    width: 4.9,
+    height: 4.9,
+    borderRadius: 1,
+    backgroundColor: '#30372A',
+  },
+  pulseWaffleOn: {
+    backgroundColor: colors.lime,
+  },
+  // ---- Your week in music: a tinted story card that folds ----
+  pulseRecap: {
+    backgroundColor: '#2B3821',
+    borderColor: '#2B3821',
+  },
+  pulseStorySegs: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  pulseStorySeg: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.lime,
+    opacity: 0.35,
+    transformOrigin: 'left',
+  },
+  pulseRecapTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 18,
+    marginTop: 12,
+  },
+  pulseRecapNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pulseRecapNewText: {
+    color: colors.lime,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pulseRecapRange: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pulseTextButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    marginVertical: -11,
+    marginRight: -8,
+  },
+  pulseTextButtonText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pulseRecapBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  pulseRecapTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  pulseRecapHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+  pulseRecapTotal: {
+    color: colors.text,
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    lineHeight: 40,
+  },
+  pulseRecapPill: {
+    backgroundColor: colors.surface,
+  },
+  pulseRecapDays: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+  },
+  pulseRecapDay: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  pulseRecapDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#606A54',
+  },
+  pulseRecapDotPlayed: {
     borderColor: colors.lime,
   },
-  pulseCheck: {
+  pulseRecapDotGoal: {
+    borderColor: colors.lime,
+    backgroundColor: colors.lime,
+  },
+  pulseRecapDayLetter: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  pulseRecapCaption: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  pulseRecapFan: {
+    width: 108,
+    height: 84,
+  },
+  pulseRecapFanCover: {
     position: 'absolute',
-    right: -3,
-    bottom: -3,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    borderRadius: 12,
+  },
+  pulseRecapFold: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: colors.background,
+    gap: 10,
   },
-  pulseLinkButton: {
-    alignSelf: 'center',
-    minHeight: 44,
-    justifyContent: 'center',
-    marginTop: 8,
+  pulseRecapMini: {
+    flexDirection: 'row',
   },
-  pulseLinkText: {
+  pulseRecapFoldTitle: {
+    color: colors.text,
     fontSize: 14,
     fontWeight: '700',
   },
-  pulseNote: {
+  pulseRecapFoldSub: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  pulseRecapShow: {
+    color: colors.lime,
+  },
+  // ---- Skeleton: the same frames, while a slow load runs ----
+  pulseSkel: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+  },
+  pulseSkelCard: {
+    backgroundColor: '#252C20',
+    borderRadius: 8,
+  },
+  pulseSkelLine: {
+    height: 11,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  // ---- Detail sheets ----
+  pulseSheetBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  pulseSheet: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    transformOrigin: 'top left',
+  },
+  pulseSheetGrab: {
+    paddingTop: 10,
+    paddingBottom: 6,
+    alignItems: 'center',
+  },
+  pulseSheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#30372A',
+  },
+  pulseSheetHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+  pulseSheetEyebrow: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pulseSheetTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginTop: 2,
+  },
+  pulseSheetClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#252C20',
+  },
+  pulseSheetBody: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  pulseSegControl: {
+    flexDirection: 'row',
+    gap: 2,
+    padding: 3,
+    borderRadius: 12,
+    backgroundColor: '#252C20',
+  },
+  pulseSegItem: {
+    flex: 1,
+    height: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseSegItemOn: {
+    backgroundColor: colors.surface,
+  },
+  pulseSegText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pulseSegTextOn: {
+    color: colors.text,
+  },
+  pulseSheetHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 20,
+  },
+  pulseSheetHeroText: {
+    color: colors.text,
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+    lineHeight: 44,
+  },
+  pulseSheetCaption: {
+    color: colors.muted,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  pulseSheetChart: {
+    marginTop: 20,
+  },
+  pulseFacts: {
+    marginTop: 22,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  pulseFact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pulseFactKey: {
+    color: colors.muted,
+    fontSize: 15,
+  },
+  pulseFactValue: {
+    flexShrink: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  pulseSheetActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 22,
+  },
+  pulseSheetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+  },
+  pulseSheetGhost: {
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pulseSheetButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  pulseSheetGhostText: {
+    color: colors.text,
+  },
+  pulseRankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 56,
+  },
+  pulseRankN: {
+    width: 14,
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  pulseRankBar: {
+    height: 5,
+    borderRadius: 3,
+    marginTop: 7,
+    backgroundColor: colors.lime,
+    transformOrigin: 'left',
+  },
+  pulseRankValue: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  pulseCalRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  pulseCalCellBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  pulseCalCell: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#30372A',
+  },
+  pulseCalOn: {
+    backgroundColor: colors.lime,
+  },
+  pulseCalHalf: {
+    backgroundColor: colors.lime,
+    opacity: 0.4,
+  },
+  pulseCalLetter: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  pulseCmpTrack: {
+    height: 12,
+    borderRadius: 6,
+    marginTop: 6,
+    overflow: 'hidden',
+    backgroundColor: '#30372A',
+  },
+  pulseCmpFill: {
+    height: '100%',
+    borderRadius: 6,
+    backgroundColor: colors.lime,
+    transformOrigin: 'left',
+  },
+  pulseBigWaffle: {
+    gap: 4,
+  },
+  pulseBigWaffleRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  pulseBigWaffleCell: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 4,
+    backgroundColor: '#30372A',
+  },
+  pulseMixHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 16,
+  },
+  pulseMixAbout: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  pulseMixMeta: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  pulseMixCoverLinks: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 6,
+  },
+  pulseMixCoverLink: {
+    color: colors.lime,
+    fontSize: 13,
+    fontWeight: '700',
+    paddingVertical: 6,
+  },
+  pulseSongRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 60,
+  },
+  pulseSongTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  pulseSongArtist: {
+    color: colors.muted,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  pulseSongTime: {
+    color: colors.muted,
+    fontSize: 13,
+    fontVariant: ['tabular-nums'],
+  },
+  // ---- Profile ----
+  profilePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 16,
+    marginTop: 4,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  profileCamBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // A ring in the card's color, so the badge sits clear of the avatar.
+    borderWidth: 3,
+    borderColor: colors.surface,
+  },
+  profilePreviewLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  profilePreviewHello: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    lineHeight: 26,
+  },
+  profileField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  profileFieldFocus: {
+    borderColor: colors.lime,
+  },
+  profileInput: {
+    flex: 1,
+    paddingVertical: 12,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  profileCount: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  profileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingTop: 4,
+  },
+  profilePhotoCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.muted,
+    backgroundColor: colors.surface,
+  },
+  // Only the chosen one gets a ring; light mode would turn a transparent one grey.
+  profileRing: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderWidth: 2.5,
+    borderColor: colors.lime,
+  },
+  profileTick: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: colors.background,
+  },
+  profileError: {
+    color: colors.muted,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  profileNote: {
     color: colors.muted,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  profileSave: {
+    height: 52,
+    borderRadius: 26,
+    marginTop: 14,
   },
   pulseAvatarButton: {
     width: 44,
@@ -2198,55 +2830,10 @@ const styleDefinitions = {
     backgroundColor: '#252C20',
     marginTop: 18,
   },
-  homeFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    marginTop: 28,
-    minHeight: 44,
-  },
-  homeFooterText: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  insightTrack: {
-    paddingHorizontal: 24,
-    gap: 12,
-  },
-  insightCard: {
-    minHeight: 168,
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: 16,
-  },
   insightRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-  },
-  insightBig: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: -0.8,
-    lineHeight: 29,
-  },
-  insightGap: {
-    marginBottom: 10,
-  },
-  insightDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
-  },
-  insightDot: {
-    height: 6,
-    borderRadius: 3,
   },
   // More tab, playlists and the song menu.
   coverCollage: {
@@ -2259,9 +2846,11 @@ const styleDefinitions = {
     overflow: 'hidden',
     backgroundColor: '#252C20',
   },
-  coverCollageNote: {
-    color: colors.lime,
-    fontWeight: '700',
+  /** No songs yet: a soft filled tile under a muted icon, apart from the New playlist tile. */
+  coverCollageEmpty: {
+    // The collage wraps for its 2x2 grid, and wrapped lines pack to the top; one icon must not wrap.
+    flexWrap: 'nowrap',
+    backgroundColor: '#30372A',
   },
   starRow: {
     flexDirection: 'row',
@@ -2278,6 +2867,87 @@ const styleDefinitions = {
   },
   sheetBody: {
     gap: 4,
+  },
+  // Confirm sheet: the Muse stand-in for the system alert.
+  confirmBody: {
+    gap: 14,
+    marginTop: 14,
+  },
+  confirmIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2B3821',
+  },
+  confirmIconGlyph: {
+    color: colors.lime,
+  },
+  confirmMessage: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  confirmButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+  },
+  confirmSecondary: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  confirmSecondaryText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  /** Removes or replaces something: a red outline, never a red fill. */
+  confirmDanger: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EAA38E',
+  },
+  confirmDangerText: {
+    color: '#EAA38E',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  /** Release notes in the update sheet: a quiet box that scrolls when long. */
+  confirmNotes: {
+    maxHeight: 220,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+  },
+  confirmNotesContent: {
+    padding: 14,
+    gap: 6,
+  },
+  confirmNotesHeading: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  confirmNotesText: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  /** A sheet of fields and buttons, not rows: room below the title and between parts. */
+  sheetForm: {
+    gap: 12,
+    marginTop: 18,
   },
   sheetRow: {
     flexDirection: 'row',
@@ -2404,87 +3074,10 @@ const styleDefinitions = {
   coverChoiceSelected: {
     borderColor: colors.lime,
   },
-  moreFeatureRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
-  moreFeature: {
-    flex: 1,
-    gap: 4,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: 14,
-  },
-  moreFeatureIcon: {
-    width: 64,
-    height: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2B3821',
-    borderRadius: 10,
-  },
-  moreRowIcon: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2B3821',
-    borderRadius: 11,
-  },
-  moreRowCount: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '600',
-    marginRight: 2,
-  },
   moreTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  morePageHeader: {
-    marginTop: 8,
-    marginBottom: 12,
-    gap: 8,
-  },
-  moreTile: {
-    marginBottom: 18,
-  },
-  moreBanner: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  moreWideBanner: {
-    height: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderRadius: 20,
-    backgroundColor: '#252C20',
-  },
-  moreBannerBadge: {
-    position: 'absolute',
-    right: 10,
-    bottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  moreActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  moreActionMain: {
-    flex: 1,
-    minHeight: 48,
   },
   moreActionSoft: {
     flex: 1,
@@ -2496,19 +3089,217 @@ const styleDefinitions = {
     backgroundColor: '#2B3821',
     borderRadius: 17,
   },
-  moreChipRow: {
+  // Collections tab: playlists grid, smart lists shelf, Browse rows, list pages with a big cover.
+  collSectionHead: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    minHeight: 44,
+    marginTop: 26,
+    marginBottom: 8,
   },
-  moreNewTile: {
+  collSectionTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  /** A section title without a sort beside it: same height as one with. */
+  collSectionGap: {
+    marginTop: 6,
+    marginBottom: 8,
+    lineHeight: 44,
+  },
+  collTile: {
+    marginBottom: 20,
+  },
+  collTileTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  collTileHint: {
+    color: '#B3B7A9',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  /** An empty list keeps the title size, so its lines match the full tiles beside it. */
+  collTileTitleMuted: {
+    color: '#B3B7A9',
+  },
+  collNewTile: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#46513A',
-    borderStyle: 'dashed',
-    borderRadius: 12,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+  },
+  collShelf: {
+    marginHorizontal: -24,
+  },
+  collShelfContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    gap: 12,
+  },
+  collSmart: {
+    width: 132,
+  },
+  /** A smart list with nothing in it yet. */
+  collFaded: {
+    opacity: 0.7,
+  },
+  /** Playlists page: the name search under the count and sort. */
+  collSearch: {
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  /** "See all N playlists" under the first few tiles. */
+  collSeeAll: {
+    marginTop: 2,
+  },
+  collRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 70,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+  },
+  collRowCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  collRowTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  collRowHint: {
+    color: '#B3B7A9',
+    fontSize: 13,
+  },
+  collRowCount: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  collPageTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  collNavButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+  },
+  collPageTitle: {
+    marginTop: 18,
+  },
+  collListMeta: {
+    marginTop: 22,
+  },
+  collHero: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  collHeroTitle: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    lineHeight: 31,
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  collHeroMeta: {
+    color: '#B3B7A9',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  collHeroActions: {
+    width: 296,
+    maxWidth: '100%',
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  collHeroButton: {
+    flex: 1,
+    minHeight: 48,
+    gap: 8,
+    borderRadius: 24,
+  },
+  collHeroAdd: {
+    flex: 0,
+    paddingHorizontal: 22,
+    marginTop: 16,
+  },
+  collHeroEmpty: {
+    maxWidth: 260,
+    color: '#B3B7A9',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 14,
+  },
+  collEditList: {
+    marginTop: 8,
+  },
+  // Muse art style picker (Settings › Appearance).
+  artSheetBody: {
+    paddingBottom: 12,
+  },
+  artPreviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    rowGap: 14,
+    marginTop: 4,
+  },
+  artPreviewLabel: {
+    color: '#B3B7A9',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  artPreviewName: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginTop: 16,
+  },
+  artPreviewHint: {
+    color: '#B3B7A9',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  artPreviewWhere: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  artChoices: {
+    gap: 4,
+    marginTop: 16,
+  },
+  artChoiceTiles: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  artUseButton: {
+    marginTop: 12,
   },
   // Seek bar. SVG reads its two colors from these, so it follows the theme.
   sliderActive: {
@@ -2715,8 +3506,221 @@ const styleDefinitions = {
   /** Songs, Albums, Artists as text tabs; a short line marks the selected one. */
   libraryViewTabs: {
     flexDirection: 'row',
-    gap: 26,
+    gap: 22,
+  },
+  /** The views on the left, the sort on the right, one row. */
+  libraryViewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
     marginTop: 14,
+  },
+  /** The big title folds (fade and a little shrink) from its top-left corner. */
+  libraryIntroFold: {
+    transformOrigin: 'left top',
+  },
+  libraryShuffleButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#252C20',
+  },
+  libraryCountLine: {
+    color: '#B3B7A9',
+    fontSize: 13,
+    marginTop: 12,
+    paddingLeft: 4,
+    fontVariant: ['tabular-nums'],
+  },
+  librarySlimBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  librarySlimBack: {
+    backgroundColor: colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#30362A',
+  },
+  librarySlimTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  librarySlimTools: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginRight: -10,
+  },
+  librarySlimTool: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  librarySelectBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    backgroundColor: colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#30362A',
+  },
+  librarySelectButton: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    justifyContent: 'center',
+  },
+  librarySelectButtonText: {
+    color: colors.lime,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  librarySelectCount: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
+  },
+  /** Where the dock was, while songs are picked. */
+  librarySelectActions: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    height: 72,
+    borderRadius: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    boxShadow: '0px 18px 40px -20px rgba(0, 0, 0, 0.55)',
+  },
+  librarySelectAction: {
+    minWidth: 60,
+    minHeight: 58,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  librarySelectActionText: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  /** A row that can be swiped is opaque, so the strip only shows where it slid away. */
+  libraryTrackRowSolid: {
+    backgroundColor: colors.background,
+  },
+  libraryTrackRowSelected: {
+    backgroundColor: '#252C20',
+    borderRadius: 14,
+    marginHorizontal: -10,
+    paddingLeft: 10,
+    paddingRight: 4,
+  },
+  libraryCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#46513A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  libraryCheckOn: {
+    backgroundColor: colors.lime,
+    borderColor: colors.lime,
+  },
+  /** Under a swiped row: the action it will do. */
+  swipeStrip: {
+    borderRadius: 14,
+    backgroundColor: '#252C20',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+  },
+  swipeStripArmed: {
+    borderRadius: 14,
+    backgroundColor: colors.lime,
+  },
+  swipeAction: {
+    flexDirection: 'row',
+  },
+  swipeActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  swipeActionRowTrailing: {
+    flexDirection: 'row-reverse',
+  },
+  swipeActionText: {
+    color: colors.lime,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  swipeRow: {
+    zIndex: 1,
+  },
+  toastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  toast: {
+    maxWidth: '90%',
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingLeft: 15,
+    paddingRight: 20,
+    paddingVertical: 10,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    elevation: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+  },
+  toastCopy: {
+    flexShrink: 1,
+  },
+  toastText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  toastDetail: {
+    marginTop: 1,
+    fontSize: 12.5,
+    fontWeight: '500',
   },
   libraryViewTab: {
     minHeight: 44,
@@ -2739,11 +3743,6 @@ const styleDefinitions = {
     height: 3,
     borderRadius: 2,
     transformOrigin: 'left center',
-  },
-  libraryMetaLeft: {
-    flexShrink: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   libraryShuffle: {
     minHeight: 44,
@@ -2803,38 +3802,6 @@ const styleDefinitions = {
     minHeight: 40,
     marginTop: 12,
   },
-  /** Quick-return bar over the list: page background, so rows pass under it. */
-  libraryTopBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingBottom: 10,
-    backgroundColor: colors.background,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  libraryTopBarText: {
-    flex: 1,
-    color: colors.muted,
-    fontSize: 16,
-  },
-  libraryTopBarQuery: {
-    color: colors.text,
-  },
-  libraryTopBarSort: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 24,
-  },
   librarySortButtonText: {
     flexShrink: 1,
     color: colors.text,
@@ -2847,11 +3814,6 @@ const styleDefinitions = {
   },
   libraryActionPressed: {
     backgroundColor: '#252C20',
-  },
-  libraryActionLabel: {
-    color: colors.lime,
-    fontSize: 16,
-    fontWeight: '600',
   },
   libraryAlbumCard: {
     flex: 1,
@@ -2922,16 +3884,6 @@ const styleDefinitions = {
   librarySortChipPressed: {
     opacity: 0.7,
   },
-  // Flips the order in one tap without opening the sheet.
-  librarySortDirection: {
-    minWidth: 48,
-    height: 36,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 11,
-  },
   libraryTrackRow: {
     minHeight: 64,
     flexDirection: 'row',
@@ -2949,12 +3901,6 @@ const styleDefinitions = {
     marginHorizontal: -10,
     paddingLeft: 10,
     paddingRight: 4,
-  },
-  libraryNowPlaying: {
-    color: colors.lime,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
   },
   libraryTrackFavorite: {
     color: colors.muted,
@@ -2990,38 +3936,6 @@ const styleDefinitions = {
   libraryTrackSortValue: {
     color: colors.lime,
     fontWeight: '600',
-  },
-  playbackPause: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  playbackPauseBar: {
-    borderRadius: 1,
-  },
-  playbackTriangle: {
-    width: 0,
-    height: 0,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-  },
-  playbackSkip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
-  },
-  playbackSkipPrevious: {
-    flexDirection: 'row-reverse',
-  },
-  playbackSkipBar: {
-    borderRadius: 1,
-  },
-  settingsSectionLabel: {
-    color: '#858D78',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginTop: 28,
-    marginBottom: 9,
   },
   settingsTitle: {
     color: colors.text,
@@ -3212,6 +4126,90 @@ const styleDefinitions = {
     marginBottom: 6,
     marginLeft: 16,
   },
+  // Settings pages: bold headings and rounder cards, set 14 from the screen edge like the dock.
+  settingsEdge: {
+    marginHorizontal: -10,
+  },
+  settingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 26,
+    paddingHorizontal: 6,
+  },
+  settingsLede: {
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 6,
+  },
+  /** Library's search pill, without the flex it needs in Library's row. */
+  settingsSearchField: {
+    flex: 0,
+    marginTop: 16,
+  },
+  settingsRoundButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  settingsPageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 26,
+    paddingHorizontal: 6,
+  },
+  settingsPageSubtitle: {
+    color: colors.muted,
+    fontSize: 14,
+    marginTop: 4,
+    paddingHorizontal: 6,
+  },
+  prefSectionLarge: {
+    marginTop: 28,
+  },
+  prefSectionLargeUntitled: {
+    marginTop: 14,
+  },
+  prefSectionHeaderLarge: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginBottom: 8,
+    marginLeft: 6,
+  },
+  prefCardLarge: {
+    borderRadius: 20,
+  },
+  settingsPreview: {
+    marginTop: 20,
+    borderRadius: 20,
+    padding: 12,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  settingsPreviewCaption: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  settingsPreviewLabel: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  settingsPreviewValue: {
+    color: colors.muted,
+    fontSize: 13,
+  },
   prefSectionFooter: {
     color: colors.muted,
     fontSize: 13,
@@ -3286,13 +4284,6 @@ const styleDefinitions = {
     maxWidth: 170,
     textAlign: 'right',
   },
-  prefRowError: {
-    color: '#EAA38E',
-    fontSize: 13,
-    lineHeight: 18,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
   prefSeparator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border,
@@ -3346,6 +4337,56 @@ const styleDefinitions = {
     borderRadius: 15,
   },
   // About: the app, its promises, and who made it.
+  // Settings › Updates: the installed version, when it was checked, a status, one button.
+  updateCard: {
+    padding: 16,
+    gap: 16,
+  },
+  updateHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  updateTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  updateSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  updateStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#252C20',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  updateDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.lime,
+  },
+  updateDotQuiet: {
+    backgroundColor: colors.muted,
+  },
+  updateDotError: {
+    backgroundColor: '#EAA38E',
+  },
+  updateStatusText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  updateButton: {
+    minHeight: 48,
+    borderRadius: 15,
+  },
   aboutCard: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -3426,94 +4467,11 @@ const styleDefinitions = {
     justifyContent: 'center',
     gap: 18,
   },
-  launchMotto: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  launchCreditRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  launchCreditText: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  settingsGroup: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  dropdownScrim: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
-  },
-  dropdownPanel: {
-    position: 'absolute',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-  },
-  accentOption: {
-    width: '100%',
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 10,
-    paddingHorizontal: 11,
-  },
-  themeError: {
-    color: '#EAA38E',
-    fontSize: 10,
-    lineHeight: 15,
-    paddingBottom: 10,
-  },
-  settingRow: {
-    minHeight: 72,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#292E23',
-  },
-  settingRowLast: {
-    borderBottomWidth: 0,
-  },
   settingRowPressed: {
     opacity: 0.7,
   },
   settingCopy: {
     flex: 1,
-  },
-  settingTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  settingSubtitle: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 3,
   },
   // Floating glass dock: notice, mini player, then the tab pill and search.
   // Glass fills and edges come from Glass.tsx, not from here.
@@ -3522,6 +4480,10 @@ const styleDefinitions = {
     left: 0,
     right: 0,
     bottom: 0,
+    gap: 6,
+  },
+  /** The dock's contents, in one wrapper that slides away while Library picks songs. */
+  dockStack: {
     gap: 6,
   },
   /** Notice and mini player, which float in every glass style. */
@@ -3537,46 +4499,31 @@ const styleDefinitions = {
     paddingHorizontal: 0,
     gap: 0,
   },
-  bottomDockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-  },
   // Solid style: one opaque bar along the bottom edge, Android style. Colors
   // are theme tokens here (not in Glass.tsx), so every accent maps them.
+  // Card tone, so the bar sits a step above the page instead of blending in.
   solidBar: {
-    backgroundColor: '#171A14',
+    backgroundColor: '#1C2118',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#2A3024',
-    paddingHorizontal: 4,
-    paddingTop: 8,
+    paddingHorizontal: 6,
+    paddingTop: 10,
   },
   solidTabRow: {
     flexDirection: 'row',
-    paddingBottom: 6,
+    paddingBottom: 8,
   },
   solidItem: {
     flex: 1,
-    minHeight: 56,
+    minHeight: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 5,
   },
-  solidIndicatorWrap: {
-    width: 56,
+  solidIconWrap: {
     height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  solidIndicator: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: '#2B3821',
-    borderRadius: 15,
   },
   solidIcon: {
     color: '#858D78',
@@ -3586,11 +4533,12 @@ const styleDefinitions = {
   },
   solidLabel: {
     color: '#858D78',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
   solidLabelActive: {
-    color: colors.text,
+    color: colors.lime,
     fontWeight: '700',
   },
   solidSearchRow: {
@@ -3740,9 +4688,177 @@ const styleDefinitions = {
     backgroundColor: '#252C20',
     borderRadius: 10,
   },
+  /** A sheet's labelled close button, such as "Done", in place of the cross. */
+  // Same height as the close cross, so a Done sheet's heading lines up with the rest.
+  sheetDone: {
+    height: 34,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.lime,
+  },
+  sheetDoneText: {
+    color: '#202719',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // Change cover: the big preview, then one grid of covers to tap. 8 dp grid.
+  coverSheetPreview: {
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  coverSheetSong: {
+    color: colors.muted,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  coverSheetSongTitle: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  coverSheetHint: {
+    color: colors.muted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  coverSheetLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 24,
+    marginBottom: 10,
+  },
+  coverPickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    rowGap: 16,
+  },
+  coverTilePic: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  /** The chosen tile's outline, a little outside its picture. */
+  coverTileRing: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 18,
+    borderWidth: 3,
+    borderColor: colors.lime,
+  },
+  coverTileCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.lime,
+  },
+  coverTileName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  coverTileNameOn: {
+    color: colors.lime,
+  },
+  coverTilePressed: {
+    opacity: 0.7,
+  },
+  coverMessage: {
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+  },
+  coverMessageTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  coverMessageText: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  coverLink: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 8,
+  },
+  coverLinkCentered: {
+    alignSelf: 'center',
+  },
+  coverLinkText: {
+    color: colors.lime,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  coverSearchRow: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 14,
+    paddingRight: 6,
+    borderRadius: 16,
+    marginTop: 12,
+    backgroundColor: colors.surface,
+  },
+  coverSearchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 16,
+    paddingVertical: 0,
+  },
+  coverSearchButton: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.lime,
+  },
+  coverSearchButtonText: {
+    color: '#202719',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  coverError: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 12,
+  },
 } as const;
 
+/**
+ * Accent-filled buttons and the text on them: the accent's action color and its readable label color.
+ * Declared before the theme styles below, which are built while this file loads.
+ */
+const ACTION_FILLS = new Set(['primaryButton', 'sheetDone', 'coverSearchButton']);
+const ACTION_LABELS = new Set(['primaryButtonLabel', 'buttonArrow', 'sheetDoneText', 'coverSearchButtonText']);
+
 const lightThemeStyles = {
+  lime: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'lime')),
   muse: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'muse')),
   ocean: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'ocean')),
   sunset: StyleSheet.create(createLightStyleDefinitions(styleDefinitions, 'sunset')),
@@ -3753,6 +4869,7 @@ const lightThemeStyles = {
 };
 
 const darkThemeStyles = {
+  lime: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'lime', false)),
   muse: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'muse', false)),
   ocean: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'ocean', false)),
   sunset: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'sunset', false)),
@@ -3763,6 +4880,7 @@ const darkThemeStyles = {
 };
 
 const amoledThemeStyles = {
+  lime: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'lime', true)),
   muse: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'muse', true)),
   ocean: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'ocean', true)),
   sunset: StyleSheet.create(createDarkStyleDefinitions(styleDefinitions, 'sunset', true)),
@@ -3786,6 +4904,14 @@ function createDarkStyleDefinitions<T extends Record<string, object>>(
   isAmoled: boolean,
 ): T {
   const accent = {
+    // Muse Lime: the app icon's lime.
+    lime: {
+      primary: '#C4F27A',
+      action: '#C4F27A',
+      onAction: '#24331A',
+      muted: '#93BF55',
+      surface: '#313E1F',
+    },
     muse: {
       primary: '#B9E77B',
       action: '#B9E77B',
@@ -3911,13 +5037,10 @@ function createDarkStyleDefinitions<T extends Record<string, object>>(
             return [property, value];
           }
           const color = value.toUpperCase();
-          if (styleName === 'primaryButton' && property === 'backgroundColor') {
+          if (ACTION_FILLS.has(styleName) && property === 'backgroundColor') {
             return [property, accent.action];
           }
-          if (
-            (styleName === 'primaryButtonLabel' || styleName === 'buttonArrow') &&
-            property === 'color'
-          ) {
+          if (ACTION_LABELS.has(styleName) && property === 'color') {
             return [property, accent.onAction];
           }
           if (property === 'backgroundColor') {
@@ -3954,8 +5077,18 @@ function createLightStyleDefinitions<T extends Record<string, object>>(
   accentTheme: Accent,
 ): T {
   const accent = {
+    // Muse Lime: deeper than the icon's lime so text reads on light backgrounds (4.7:1).
+    lime: {
+      primary: '#4F7A12',
+      action: '#B5E36F',
+      onAction: '#1C2913',
+      border: '#5E8A1C',
+      surface: '#F2F8E6',
+      tint: '#E9F4D6',
+    },
     muse: {
-      primary: '#739B42',
+      // Was #739B42, only 3:1 on the light background.
+      primary: '#4A7323',
       action: '#A5D66A',
       onAction: '#1C2913',
       border: '#739B42',
@@ -4023,13 +5156,10 @@ function createLightStyleDefinitions<T extends Record<string, object>>(
             return [property, value];
           }
           const color = value.toUpperCase();
-          if (styleName === 'primaryButton' && property === 'backgroundColor') {
+          if (ACTION_FILLS.has(styleName) && property === 'backgroundColor') {
             return [property, accent.action];
           }
-          if (
-            (styleName === 'primaryButtonLabel' || styleName === 'buttonArrow') &&
-            property === 'color'
-          ) {
+          if (ACTION_LABELS.has(styleName) && property === 'color') {
             return [property, accent.onAction];
           }
           if (
@@ -4058,6 +5188,21 @@ function createLightStyleDefinitions<T extends Record<string, object>>(
           }
           if (color === '#C4F078') {
             return [property, property === 'borderColor' ? accent.border : accent.primary];
+          }
+          // Home: the recap's tint needs more colour than the surface to stand out on a pale page.
+          if (styleName === 'pulseRecap') {
+            return [property, property === 'borderColor' ? `${accent.border}4D` : accent.tint];
+          }
+          // Dark marks on white cards (the text colour would turn white as a background).
+          if ((styleName === 'pulseNowDot' || styleName === 'pulseNotch') && property === 'backgroundColor') {
+            return [property, '#26302A'];
+          }
+          // Skeleton shapes: white on a near-white page would vanish.
+          if (styleName === 'pulseSkel' && property === 'backgroundColor') {
+            return [property, '#E3E8DB'];
+          }
+          if (styleName === 'pulseSkelCard' && property === 'backgroundColor') {
+            return [property, '#ECF0E6'];
           }
           if (property === 'backgroundColor') {
             if (color === '#2B3821' || color === '#20271A' || color === '#22291D') {

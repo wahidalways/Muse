@@ -37,6 +37,8 @@ export type AudioDetails = {
   bitrate: number | null;
   sampleRate: number | null;
   channels: number | null;
+  /** Bits per sample, for lossless files (FLAC, ALAC, WAV). Missing from builds made before it was added. */
+  bitDepth?: number | null;
   /** File size in bytes. Missing from builds made before it was added. */
   size?: number | null;
 };
@@ -44,13 +46,27 @@ export type AudioDetails = {
 /** A cover's main hue (0-360) and how colorful it is (0 grey to 1 vivid). */
 export type CoverColor = { hue: number; colorfulness: number };
 
+/** A cover image saved as a file, with its size in pixels. */
+export type CoverFile = { uri: string; width: number; height: number };
+/** One picture stored inside a song's file. `type` is the ID3/FLAC picture type (3 front, 4 back...), -1 when unknown. */
+export type FilePicture = CoverFile & { type: number; best: boolean };
+
 type MuseAudioMetadataModule = {
   getAudioLibrary(): Promise<NativeAudioTrack[]>;
   getLibraryVersion(): Promise<string | null>;
   getArtworkFile(trackId: string): Promise<string | null>;
+  // Missing from builds made before the cover picker.
+  getCoverThumb?(trackId: string): Promise<string | null>;
+  getFullCover?(trackId: string, best: boolean): Promise<CoverFile | null>;
+  getFilePictures?(trackId: string): Promise<FilePicture[]>;
+  getImageColor?(uri: string): Promise<CoverColor | null>;
   getAudioDetails(trackId: string): Promise<AudioDetails | null>;
   getArtworkColor(trackId: string): Promise<CoverColor | null>;
-  addListener(event: 'onAudioBecomingNoisy', listener: () => void): { remove(): void };
+  addListener(event: 'onAudioBecomingNoisy' | 'onHeadphonesConnected', listener: () => void): { remove(): void };
+  // Missing from builds made before app icons.
+  setAppIcon?(id: string): void;
+  canSetAppIcon?(): boolean;
+  closeApp?(): void;
   addListener(
     event: 'onVolumeChange',
     listener: (event: { volume: number }) => void,
@@ -102,6 +118,52 @@ export async function getArtworkFile(trackId: string): Promise<string | null> {
   }
 }
 
+/**
+ * The list-size cover made from the best picture in the song's file (the
+ * biggest front cover). Falls back to Android's own cover on older builds.
+ */
+export async function getCoverThumb(trackId: string): Promise<string | null> {
+  if (!nativeModule?.getCoverThumb) {
+    return getArtworkFile(trackId);
+  }
+  try {
+    return await nativeModule.getCoverThumb(trackId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The song's cover at its full stored size: the best picture in the file
+ * (`best`), or the one Android picks. Null without a cover, or on builds
+ * made before the cover picker.
+ */
+export async function getFullCover(trackId: string, best: boolean): Promise<CoverFile | null> {
+  try {
+    return (await nativeModule?.getFullCover?.(trackId, best)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Every picture inside the song's file, full size, in file order. */
+export async function getFilePictures(trackId: string): Promise<FilePicture[]> {
+  try {
+    return (await nativeModule?.getFilePictures?.(trackId)) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** The main hue of an image file (file:// uri), or null when unknown. */
+export async function getImageColor(uri: string): Promise<CoverColor | null> {
+  try {
+    return (await nativeModule?.getImageColor?.(uri)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Format, bitrate, sample rate and channels of a song, or null when unknown. */
 export async function getAudioDetails(trackId: string): Promise<AudioDetails | null> {
   try {
@@ -117,6 +179,49 @@ export async function getAudioDetails(trackId: string): Promise<AudioDetails | n
  */
 export function addAudioBecomingNoisyListener(listener: () => void): { remove(): void } {
   return nativeModule?.addListener('onAudioBecomingNoisy', listener) ?? { remove: () => undefined };
+}
+
+/**
+ * Calls `listener` when headphones or Bluetooth audio connect. Does nothing
+ * without the native module, or on builds made before it was added.
+ */
+export function addHeadphonesConnectedListener(listener: () => void): { remove(): void } {
+  try {
+    return nativeModule?.addListener('onHeadphonesConnected', listener) ?? { remove: () => undefined };
+  } catch {
+    return { remove: () => undefined };
+  }
+}
+
+/** Ends Muse's process (after a restore). False when this build cannot, such as Expo Go. */
+export function closeApp(): boolean {
+  if (!nativeModule?.closeApp) {
+    return false;
+  }
+  nativeModule.closeApp();
+  return true;
+}
+
+/** True when this build can switch its launcher icon (not Expo Go). */
+export function canSetAppIcon(): boolean {
+  try {
+    return nativeModule?.canSetAppIcon?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** Switches the launcher icon. False when the switch did not happen. */
+export function setAppIcon(id: string): boolean {
+  try {
+    if (!nativeModule?.setAppIcon) {
+      return false;
+    }
+    nativeModule.setAppIcon(id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The main hue of a song's cover, or null without a cover (or native module). */

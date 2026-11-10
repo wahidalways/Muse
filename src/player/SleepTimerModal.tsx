@@ -9,15 +9,20 @@ import { SHEET_IN } from '../motion/motion';
 export function SleepTimerModal({
   visible,
   endsAt,
+  atTrackEnd,
   onClose,
   onSelectMinutes,
+  onSelectTrackEnd,
   onCancelTimer,
 }: {
   visible: boolean;
   /** When the timer ends, or null when none is set. */
   endsAt: number | null;
+  /** The timer pauses when the current song ends. */
+  atTrackEnd: boolean;
   onClose: () => void;
   onSelectMinutes: (minutes: number) => void;
+  onSelectTrackEnd: () => void;
   onCancelTimer: () => void;
 }) {
   // Only count down while the sheet is showing.
@@ -66,15 +71,23 @@ export function SleepTimerModal({
           <Text style={styles.sleepTimerDescription}>
             Pause your music after a set time.
           </Text>
-          {secondsLeft > 0 && (
+          {(secondsLeft > 0 || atTrackEnd) && (
             <View style={styles.sleepTimerActiveCard}>
               <View style={styles.sleepTimerActiveDot} />
               <Text style={styles.sleepTimerActiveText}>
-                Pauses in {formatSleepTimer(secondsLeft)}
+                {atTrackEnd ? 'Pauses when this song ends' : `Pauses in ${formatSleepTimer(secondsLeft)}`}
               </Text>
             </View>
           )}
           <View style={styles.sleepTimerOptions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: atTrackEnd }}
+              onPress={onSelectTrackEnd}
+              style={[styles.sleepTimerOption, styles.sleepTimerOptionWide, atTrackEnd && styles.sleepTimerOptionOn]}
+            >
+              <Text style={styles.sleepTimerOptionValue}>End of this song</Text>
+            </Pressable>
             {timerOptions.map((minutes) => (
               <Pressable
                 key={minutes}
@@ -88,7 +101,7 @@ export function SleepTimerModal({
               </Pressable>
             ))}
           </View>
-          {secondsLeft > 0 ? (
+          {secondsLeft > 0 || atTrackEnd ? (
             <Pressable
               accessibilityRole="button"
               onPress={onCancelTimer}

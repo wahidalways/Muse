@@ -18,9 +18,9 @@ export function setWeekStart(weekStart: WeekStart) {
   store.update((current) => ({ ...current, weekStart }));
 }
 
-/** Default widgets, order and sizes, and a hidden recap back. The week start is left as chosen. */
+/** Default widgets, order and sizes, and the recap folded again. The week start is left as chosen. */
 export function resetBoard() {
-  store.update((current) => ({ ...current, board: DEFAULT_PULSE.board.map((item) => ({ ...item })), recapHidden: null }));
+  store.update((current) => ({ ...current, board: DEFAULT_PULSE.board.map((item) => ({ ...item })), recapOpen: null }));
 }
 
 /** The recap for the week starting on `weekKey` was opened. */
@@ -28,7 +28,12 @@ export function markRecapSeen(weekKey: string) {
   store.update((current) => (current.recapSeen === weekKey ? current : { ...current, recapSeen: weekKey }));
 }
 
-/** Hides the recap tile until the next week's recap. */
-export function hideRecap(weekKey: string) {
-  store.update((current) => ({ ...current, recapHidden: weekKey }));
+/** Opens the recap of the week starting on `weekKey`, or folds it to its slim row (null). Every new week's recap starts folded. */
+export function openRecapCard(weekKey: string | null) {
+  store.update((current) => ({ ...current, recapOpen: weekKey }));
+}
+
+/** The goal moment played today (a day key), so it plays once a day. */
+export function markGoalCelebrated(day: string) {
+  store.update((current) => (current.goalCelebrated === day ? current : { ...current, goalCelebrated: day }));
 }

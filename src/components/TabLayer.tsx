@@ -1,10 +1,16 @@
-import { memo, useEffect, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, memo, useContext, useEffect, useState, type ReactNode, type RefObject } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useAppStyles } from '../theme/styles';
 import { EASE_OUT } from '../motion/motion';
 
 const FADE_OUT = { duration: 180, easing: EASE_OUT };
+
+/**
+ * False while a page cannot be seen (a hidden tab, or under the full
+ * player), so looping animations on it rest instead of drawing every frame.
+ */
+export const PageVisible = createContext(true);
 
 type Props = {
   active: boolean;
@@ -31,6 +37,7 @@ type Props = {
 function TabLayerBase({ active, warm = false, swipe, children }: Props) {
   const styles = useAppStyles();
   const reduceMotion = useReducedMotion();
+  const visible = useContext(PageVisible) && active;
   const [hasMounted, setHasMounted] = useState(active);
   if ((active || warm) && !hasMounted) {
     setHasMounted(true);
@@ -55,7 +62,7 @@ function TabLayerBase({ active, warm = false, swipe, children }: Props) {
       // Leaving pages sit above the new one while they dissolve.
       style={[StyleSheet.absoluteFill, styles.screen, { zIndex: active ? 0 : 1 }, fadeStyle]}
     >
-      {children}
+      <PageVisible.Provider value={visible}>{children}</PageVisible.Provider>
     </Animated.View>
   );
 }

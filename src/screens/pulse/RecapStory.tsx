@@ -13,7 +13,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import type { ListeningEvent, MusicTrack } from '../../types';
 import { computeStats, getWeek, peakIndex, type ListeningStats, type WeekStart } from '../../history/stats';
 import { AlbumArtwork } from '../../components/AlbumArtwork';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { formatHour, formatListeningTime, percentChange } from '../../utils/format';
 import { EASE_OUT } from '../../motion/motion';
 import { cardFromStats, type CardData } from './ShareCard';

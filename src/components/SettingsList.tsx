@@ -1,6 +1,6 @@
 import { Children, Fragment, useEffect, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useAppStyles } from '../theme/styles';
 import { EASE_OUT } from '../motion/motion';
@@ -26,6 +26,7 @@ export const TILE = {
   green: '#30D158',
   teal: '#40C8E0',
   gray: '#8E8E93',
+  slate: '#64748B',
 } as const;
 
 const SWITCH_TIMING = { duration: 180, easing: EASE_OUT };
@@ -33,12 +34,18 @@ const SWITCH_TIMING = { duration: 180, easing: EASE_OUT };
 export function SettingsSection({
   title,
   footer,
+  large = false,
+  inset,
   children,
 }: {
   /** Left out on the main list, where the groups speak for themselves. */
   title?: string;
   /** A short note under the card that explains the rows. */
   footer?: string;
+  /** Settings pages: a bold heading and rounder card. Equalizer and setup keep the small caps. */
+  large?: boolean;
+  /** Where separators start; 16 for rows without icons. */
+  inset?: number;
   children: ReactNode;
 }) {
   const styles = useAppStyles();
@@ -48,16 +55,16 @@ export function SettingsSection({
   return (
     // Untitled groups (the main list) sit close together, so they read as one
     // list in a few parts; titled sections on a page get a little more air.
-    <View style={title ? styles.prefSection : styles.prefSectionGrouped}>
+    <View style={large ? (title ? styles.prefSectionLarge : styles.prefSectionLargeUntitled) : title ? styles.prefSection : styles.prefSectionGrouped}>
       {title ? (
-        <Text accessibilityRole="header" style={styles.prefSectionHeader}>
+        <Text accessibilityRole="header" style={large ? styles.prefSectionHeaderLarge : styles.prefSectionHeader}>
           {title}
         </Text>
       ) : null}
-      <View style={styles.prefCard}>
+      <View style={[styles.prefCard, large && styles.prefCardLarge]}>
         {rows.map((row, index) => (
           <Fragment key={index}>
-            {index > 0 && <View style={styles.prefSeparator} />}
+            {index > 0 && <View style={[styles.prefSeparator, inset !== undefined && { marginLeft: inset }]} />}
             {row}
           </Fragment>
         ))}
@@ -67,8 +74,11 @@ export function SettingsSection({
   );
 }
 
-function IconTile({ name, tint }: { name: IoniconName; tint: string }) {
+function IconTile({ name, tint }: { name?: IoniconName; tint?: string }) {
   const styles = useAppStyles();
+  if (!name || !tint) {
+    return null;
+  }
   return (
     <View style={[styles.prefIconTile, { backgroundColor: tint }]}>
       <Ionicons accessible={false} name={name} size={opticalSize(name, 18)} color="#FFFFFF" />
@@ -93,12 +103,16 @@ export function SettingsRow({
   disabled = false,
   busy = false,
   accessibilityHint,
+  trailing,
 }: {
-  icon: IoniconName;
-  tint: string;
+  /** Left out on settings pages, where the heading says what the rows are about. */
+  icon?: IoniconName;
+  tint?: string;
   title: string;
   subtitle?: string;
   detail?: string;
+  /** Something drawn before the chevron, such as the app icon in use. */
+  trailing?: ReactNode;
   /** A small color dot before `detail`, such as the current accent. */
   swatch?: string;
   onPress: () => void;
@@ -158,12 +172,28 @@ export function SettingsRow({
         {subtitle ? <Text style={styles.prefRowSubtitle}>{subtitle}</Text> : null}
       </View>
       {valueBesideTitle ? null : value}
+      {trailing}
       {busy ? (
         <ActivityIndicator size="small" />
       ) : chevron ? (
         <ControlIcon name="chevron-right" size={15} tone="muted" />
       ) : null}
     </Pressable>
+  );
+}
+
+/** A fact, not a control: a title and its value, such as a size in Storage. */
+export function SettingsInfoRow({ title, detail }: { title: string; detail: string }) {
+  const styles = useAppStyles();
+  return (
+    <View accessible accessibilityLabel={`${title}, ${detail}`} style={styles.prefRow}>
+      <View style={styles.prefRowCopy}>
+        <Text style={styles.prefRowTitle}>{title}</Text>
+      </View>
+      <Text numberOfLines={1} style={styles.prefRowDetail}>
+        {detail}
+      </Text>
+    </View>
   );
 }
 
@@ -178,8 +208,8 @@ export function SettingsSwitchRow({
   accent,
   disabled = false,
 }: {
-  icon: IoniconName;
-  tint: string;
+  icon?: IoniconName;
+  tint?: string;
   title: string;
   subtitle?: string;
   value: boolean;
@@ -189,11 +219,14 @@ export function SettingsSwitchRow({
   disabled?: boolean;
 }) {
   const styles = useAppStyles();
+  // A disabled switch shows off, in grey: the setting does nothing right now.
+  // The saved value is kept and shows again once the row is usable.
+  const shown = value && !disabled;
   // Starts where it rests, so opening Settings does not animate it.
-  const on = useSharedValue(value ? 1 : 0);
+  const on = useSharedValue(shown ? 1 : 0);
   useEffect(() => {
-    on.set(withTiming(value ? 1 : 0, SWITCH_TIMING));
-  }, [on, value]);
+    on.set(withTiming(shown ? 1 : 0, SWITCH_TIMING));
+  }, [on, shown]);
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: on.get() * 20 }],
   }));
@@ -202,7 +235,7 @@ export function SettingsSwitchRow({
       accessibilityRole="switch"
       accessibilityLabel={title}
       accessibilityHint={subtitle}
-      accessibilityState={{ checked: value, disabled }}
+      accessibilityState={{ checked: shown, disabled }}
       disabled={disabled}
       onPress={() => {
         hapticSelection();
@@ -219,7 +252,7 @@ export function SettingsSwitchRow({
         <Text style={styles.prefRowTitle}>{title}</Text>
         {subtitle ? <Text style={styles.prefRowSubtitle}>{subtitle}</Text> : null}
       </View>
-      <View style={[styles.prefSwitchTrack, value && { backgroundColor: accent }]}>
+      <View style={[styles.prefSwitchTrack, shown && { backgroundColor: accent }]}>
         <Animated.View style={[styles.prefSwitchThumb, thumbStyle]} />
       </View>
     </Pressable>
@@ -234,8 +267,8 @@ export function SettingsBlock({
   subtitle,
   children,
 }: {
-  icon: IoniconName;
-  tint: string;
+  icon?: IoniconName;
+  tint?: string;
   title: string;
   subtitle?: string;
   children: ReactNode;

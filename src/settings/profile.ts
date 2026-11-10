@@ -13,7 +13,7 @@ export type Profile = {
 };
 
 export const NAME_LIMIT = 24;
-export const PRESET_COUNT = 8;
+export const PRESET_COUNT = 12;
 const EMPTY: Profile = { name: '', preset: -1, photoUri: null };
 
 function parseProfile(value: unknown): Profile | null {

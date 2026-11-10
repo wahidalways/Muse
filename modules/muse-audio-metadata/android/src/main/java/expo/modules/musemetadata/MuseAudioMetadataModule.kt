@@ -1,6 +1,7 @@
 package expo.modules.musemetadata
 
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
@@ -10,7 +11,11 @@ import android.database.ContentObserver
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioFormat
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -28,7 +33,6 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -39,18 +43,106 @@ import kotlin.math.sin
 private const val BUCKET_ID = "bucket_id"
 private const val BUCKET_DISPLAY_NAME = "bucket_display_name"
 private const val ARTWORK_SIZE = 512
+/** Album art for songs without a picture of their own is asked for at up to this size. */
+private const val FULL_ARTWORK_SIZE = 4096
+/** Pictures with more pixels than this (4000 x 4000) are scaled down: Android cannot draw bitmaps over about 100 MB. */
+private const val MAX_FULL_PIXELS = 16_000_000L
 private val ALBUM_ART_URI: Uri = Uri.parse("content://media/external/audio/albumart")
+/** Launcher aliases made by plugins/withAppIcons.js; keep in step with plugins/app-icons.json. */
+private val APP_ICON_IDS = listOf("muse", "light", "lime", "mono", "paper", "ocean")
+/** Outputs that count as headphones coming back (not the speaker, not HDMI). */
+private val HEADPHONE_TYPES = setOf(
+  AudioDeviceInfo.TYPE_WIRED_HEADSET,
+  AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+  AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+  AudioDeviceInfo.TYPE_USB_HEADSET,
+  // TYPE_BLE_HEADSET (API 31) by value, so older SDKs still compile.
+  26,
+)
 
 class MuseAudioMetadataModule : Module() {
   /** Headphones or Bluetooth audio went away. Registered only while JS listens. */
   private var noisyReceiver: BroadcastReceiver? = null
   /** Media volume changes (buttons, other apps). Registered only while JS listens. */
   private var volumeObserver: ContentObserver? = null
+  /** Headphones or Bluetooth audio came back. Registered only while JS listens. */
+  private var deviceCallback: AudioDeviceCallback? = null
 
   override fun definition() = ModuleDefinition {
     Name("MuseAudioMetadata")
 
-    Events("onAudioBecomingNoisy", "onVolumeChange")
+    Events("onAudioBecomingNoisy", "onVolumeChange", "onHeadphonesConnected")
+
+    OnStartObserving("onHeadphonesConnected") {
+      val audio = audioManager() ?: return@OnStartObserving
+      if (deviceCallback != null) {
+        return@OnStartObserving
+      }
+      val callback = object : AudioDeviceCallback() {
+        // Android reports every device already connected right after
+        // registering; only the ones that arrive later are a reconnect.
+        private var primed = false
+
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+          if (!primed) {
+            primed = true
+            return
+          }
+          if (addedDevices.any { it.isSink && it.type in HEADPHONE_TYPES }) {
+            sendEvent("onHeadphonesConnected", emptyMap<String, Any>())
+          }
+        }
+      }
+      audio.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+      deviceCallback = callback
+    }
+
+    OnStopObserving("onHeadphonesConnected") {
+      val callback = deviceCallback ?: return@OnStopObserving
+      deviceCallback = null
+      runCatching { audioManager()?.unregisterAudioDeviceCallback(callback) }
+    }
+
+    // Switches the launcher icon: enables one alias, then turns the others off,
+    // so there is never a moment with no launcher entry. Throws (and changes
+    // nothing) when this build has no such alias, such as Expo Go.
+    Function("setAppIcon") { id: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Muse cannot change its icon right now.")
+      val packageManager = context.packageManager
+      val alias = { name: String -> ComponentName(context.packageName, "${context.packageName}.MuseIcon_$name") }
+      packageManager.getActivityInfo(alias(id), PackageManager.MATCH_DISABLED_COMPONENTS)
+      packageManager.setComponentEnabledSetting(
+        alias(id),
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+        PackageManager.DONT_KILL_APP,
+      )
+      APP_ICON_IDS.filter { it != id }.forEach { other ->
+        packageManager.setComponentEnabledSetting(
+          alias(other),
+          PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+          PackageManager.DONT_KILL_APP,
+        )
+      }
+    }
+
+    // Ends Muse's process after a backup restore. Closing the screen is not
+    // enough: media playback keeps the process (and its old saved values in
+    // memory) alive, and they would be written back over the restored ones.
+    Function("closeApp") {
+      android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
+    // True when this build has the icon aliases (a Muse build made with the plugin).
+    Function("canSetAppIcon") {
+      val context = appContext.reactContext ?: return@Function false
+      runCatching {
+        context.packageManager.getActivityInfo(
+          ComponentName(context.packageName, "${context.packageName}.MuseIcon_muse"),
+          PackageManager.MATCH_DISABLED_COMPONENTS,
+        )
+      }.isSuccess
+    }
 
     // The phone's media volume, 0 to 1: the same one the volume buttons move.
     Function("getVolume") {
@@ -166,6 +258,32 @@ class MuseAudioMetadataModule : Module() {
       val context = appContext.reactContext
         ?: throw IllegalStateException("Muse cannot access the Android media library.")
       readArtworkFile(context.contentResolver, context.cacheDir, trackId)
+    }
+
+    // The list-size cover made from the best picture in the file.
+    AsyncFunction("getCoverThumb") { trackId: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Muse cannot access the Android media library.")
+      readBestThumb(context.contentResolver, context.cacheDir, trackId)
+    }
+
+    // The cover at its full size: the best picture in the file, or Android's own choice.
+    AsyncFunction("getFullCover") { trackId: String, best: Boolean ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Muse cannot access the Android media library.")
+      readFullCover(context.contentResolver, context.cacheDir, trackId, best)
+    }
+
+    // Every picture in the file, full size, for Change cover.
+    AsyncFunction("getFilePictures") { trackId: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Muse cannot access the Android media library.")
+      readAllPictures(context.contentResolver, context.cacheDir, trackId)
+    }
+
+    // The main hue of any image file, such as a cover picked for a song.
+    AsyncFunction("getImageColor") { uri: String ->
+      Uri.parse(uri).path?.let { path -> colorOf(path) }
     }
   }
 
@@ -374,7 +492,23 @@ class MuseAudioMetadataModule : Module() {
    */
   private fun readArtworkFile(resolver: ContentResolver, cacheDir: File, trackId: String): String? {
     val trackRowId = trackId.toLongOrNull() ?: return null
-    val albumId = resolver.query(
+    // Per song: Android groups untagged files in one folder into one album,
+    // so an album-keyed file showed the first song's cover on all of them.
+    val file = File(artworkDirectory(cacheDir), "track-$trackId.jpg")
+    if (file.exists() && file.length() > 0) {
+      return Uri.fromFile(file).toString()
+    }
+
+    val bitmap = loadArtworkBitmap(resolver, trackRowId, albumIdOf(resolver, trackId)) ?: return null
+    return if (writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }) {
+      Uri.fromFile(file).toString()
+    } else {
+      null
+    }
+  }
+
+  private fun albumIdOf(resolver: ContentResolver, trackId: String): Long? =
+    resolver.query(
       MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
       arrayOf(MediaStore.Audio.Media.ALBUM_ID),
       "${MediaStore.Audio.Media._ID} = ?",
@@ -384,22 +518,146 @@ class MuseAudioMetadataModule : Module() {
       if (result.moveToFirst()) result.longOrNull(MediaStore.Audio.Media.ALBUM_ID) else null
     }?.takeIf { it > 0 }
 
-    val directory = File(cacheDir, "muse-artwork").apply { mkdirs() }
-    // Per song: Android groups untagged files in one folder into one album,
-    // so an album-keyed file showed the first song's cover on all of them.
-    val file = File(directory, "track-$trackId.jpg")
+  /** Saved covers live under cache/muse-artwork (Settings › Storage clears it); full-size ones in "full". */
+  private fun artworkDirectory(cacheDir: File, child: String? = null): File {
+    val root = File(cacheDir, "muse-artwork")
+    return (if (child == null) root else File(root, child)).apply { mkdirs() }
+  }
+
+  /** Writes through a .part file, so a half-written cover is never picked up. */
+  private fun writeAtomically(file: File, write: (FileOutputStream) -> Unit): Boolean {
+    val partial = File(file.parentFile, "${file.name}.part")
+    val saved = runCatching {
+      FileOutputStream(partial).use(write)
+      partial.renameTo(file)
+    }.getOrDefault(false)
+    if (!saved) {
+      partial.delete()
+    }
+    return saved
+  }
+
+  private fun trackUriOf(trackId: String): Uri? =
+    trackId.toLongOrNull()?.let { ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it) }
+
+  /** Every picture in the song's tags (FilePictures.kt). */
+  private fun picturesOf(resolver: ContentResolver, trackId: String): List<FilePicture> {
+    val uri = trackUriOf(trackId) ?: return emptyList()
+    return runCatching {
+      resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+        // Not closed itself: `use` closes the descriptor under it.
+        readFilePictures(FileInputStream(descriptor.fileDescriptor).channel)
+      }
+    }.getOrNull() ?: emptyList()
+  }
+
+  /**
+   * The list-size cover made from the best picture in the file (see
+   * bestPicture). A file whose pictures Muse cannot read gets Android's.
+   */
+  private fun readBestThumb(resolver: ContentResolver, cacheDir: File, trackId: String): String? {
+    val file = File(artworkDirectory(cacheDir), "best-$trackId.jpg")
     if (file.exists() && file.length() > 0) {
       return Uri.fromFile(file).toString()
     }
-
-    val bitmap = loadArtworkBitmap(resolver, trackRowId, albumId) ?: return null
-    val partial = File(directory, "${file.name}.part")
-    FileOutputStream(partial).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-    if (!partial.renameTo(file)) {
-      partial.delete()
-      return null
+    val best = bestPicture(picturesOf(resolver, trackId)) ?: return readArtworkFile(resolver, cacheDir, trackId)
+    val bitmap = decodeScaled(best.bytes, ARTWORK_SIZE) ?: return readArtworkFile(resolver, cacheDir, trackId)
+    return if (writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }) {
+      Uri.fromFile(file).toString()
+    } else {
+      null
     }
-    return Uri.fromFile(file).toString()
+  }
+
+  /**
+   * The cover at its full stored size, never re-compressed: the best picture
+   * in the file (`best`), or the one Android picks. With no picture in the
+   * file, the album's art as big as Android has it.
+   */
+  private fun readFullCover(resolver: ContentResolver, cacheDir: File, trackId: String, best: Boolean): Map<String, Any>? {
+    val directory = artworkDirectory(cacheDir, "full")
+    val name = if (best) "best-$trackId" else "file-$trackId"
+    directory.listFiles()?.firstOrNull { it.nameWithoutExtension == name && it.length() > 0 }?.let {
+      return describeImage(it)
+    }
+    val bytes = (if (best) bestPicture(picturesOf(resolver, trackId))?.bytes else null)
+      ?: trackUriOf(trackId)?.let { embeddedBytes(resolver, it) }
+    if (bytes != null) {
+      val picture = FilePicture(-1, bytes)
+      val file = File(directory, "$name.${picture.extension}")
+      return if (savePicture(picture, file)) describeImage(file) else null
+    }
+    val bitmap = albumArtBitmap(resolver, trackId) ?: return null
+    val file = File(directory, "$name.jpg")
+    return if (writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }) describeImage(file) else null
+  }
+
+  /** Every picture in the file at full size, in file order, for Change cover. */
+  private fun readAllPictures(resolver: ContentResolver, cacheDir: File, trackId: String): List<Map<String, Any>> {
+    val pictures = picturesOf(resolver, trackId)
+    val best = bestPicture(pictures)
+    val directory = artworkDirectory(cacheDir, "full")
+    return pictures.mapIndexedNotNull { index, picture ->
+      val file = File(directory, "pic-$trackId-$index.${picture.extension}")
+      if ((!file.exists() || file.length() == 0L) && !savePicture(picture, file)) {
+        return@mapIndexedNotNull null
+      }
+      mapOf(
+        "uri" to Uri.fromFile(file).toString(),
+        "width" to picture.width,
+        "height" to picture.height,
+        "type" to picture.type,
+        "best" to (picture === best),
+      )
+    }
+  }
+
+  /**
+   * Writes a picture exactly as stored. Only one too big for Android to draw
+   * (over MAX_FULL_PIXELS) is scaled down, by halves, and saved as JPEG.
+   */
+  private fun savePicture(picture: FilePicture, file: File): Boolean {
+    if (picture.area <= MAX_FULL_PIXELS) {
+      return writeAtomically(file) { it.write(picture.bytes) }
+    }
+    var sample = 2
+    while (picture.area / (sample.toLong() * sample) > MAX_FULL_PIXELS) {
+      sample *= 2
+    }
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    val bitmap = runCatching {
+      BitmapFactory.decodeByteArray(picture.bytes, 0, picture.bytes.size, options)
+    }.getOrNull() ?: return false
+    return writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }.also { bitmap.recycle() }
+  }
+
+  private fun describeImage(file: File): Map<String, Any> {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    return mapOf(
+      "uri" to Uri.fromFile(file).toString(),
+      "width" to bounds.outWidth.coerceAtLeast(0),
+      "height" to bounds.outHeight.coerceAtLeast(0),
+    )
+  }
+
+  /** The album's art at the biggest size Android keeps, for songs with no picture of their own. */
+  private fun albumArtBitmap(resolver: ContentResolver, trackId: String): Bitmap? {
+    val albumId = albumIdOf(resolver, trackId) ?: return null
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      return runCatching {
+        resolver.loadThumbnail(
+          ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, albumId),
+          Size(FULL_ARTWORK_SIZE, FULL_ARTWORK_SIZE),
+          null,
+        )
+      }.getOrNull()
+    }
+    return runCatching {
+      resolver.openInputStream(ContentUris.withAppendedId(ALBUM_ART_URI, albumId))?.use {
+        BitmapFactory.decodeStream(it)
+      }
+    }.getOrNull()
   }
 
   private fun loadArtworkBitmap(resolver: ContentResolver, trackRowId: Long, albumId: Long?): Bitmap? {
@@ -429,8 +687,12 @@ class MuseAudioMetadataModule : Module() {
   }
 
   /** Android 9 and older: the cover embedded in the file, scaled near ARTWORK_SIZE. */
-  private fun readEmbeddedPicture(resolver: ContentResolver, trackUri: Uri): Bitmap? {
-    val bytes = runCatching {
+  private fun readEmbeddedPicture(resolver: ContentResolver, trackUri: Uri): Bitmap? =
+    embeddedBytes(resolver, trackUri)?.let { decodeScaled(it, ARTWORK_SIZE) }
+
+  /** The one embedded picture Android picks, as stored in the file. */
+  private fun embeddedBytes(resolver: ContentResolver, trackUri: Uri): ByteArray? =
+    runCatching {
       resolver.openFileDescriptor(trackUri, "r")?.use { descriptor ->
         val retriever = MediaMetadataRetriever()
         try {
@@ -440,11 +702,14 @@ class MuseAudioMetadataModule : Module() {
           retriever.release()
         }
       }
-    }.getOrNull() ?: return null
+    }.getOrNull()
+
+  /** Decodes at the smallest power-of-two step that stays at or above `size`. */
+  private fun decodeScaled(bytes: ByteArray, size: Int): Bitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= ARTWORK_SIZE) {
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) {
       sample *= 2
     }
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
@@ -485,6 +750,7 @@ class MuseAudioMetadataModule : Module() {
     var codec: String? = null
     var sampleRate: Int? = null
     var channels: Int? = null
+    var bitDepth: Int? = null
     runCatching {
       val extractor = MediaExtractor()
       try {
@@ -507,11 +773,20 @@ class MuseAudioMetadataModule : Module() {
           if (bitrate == null && format.containsKey(MediaFormat.KEY_BIT_RATE)) {
             bitrate = format.getInteger(MediaFormat.KEY_BIT_RATE).toLong().takeIf { it > 0 }
           }
+          bitDepth = extractorBitDepth(format)
           break
         }
       } finally {
         extractor.release()
       }
+    }
+    // FLAC and WAV state it in the header, for phones whose extractor does not.
+    if (bitDepth == null) {
+      bitDepth = runCatching {
+        resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+          readBitDepth(FileInputStream(descriptor.fileDescriptor).channel)
+        }
+      }.getOrNull()
     }
     val bytes = size
     val length = durationMs
@@ -524,8 +799,29 @@ class MuseAudioMetadataModule : Module() {
       "bitrate" to bitrate,
       "sampleRate" to sampleRate,
       "channels" to channels,
+      "bitDepth" to bitDepth,
       "size" to size,
     )
+  }
+
+  /**
+   * Bits per sample as the extractor reports it: "bits-per-sample" (FLAC,
+   * ALAC on newer Android) or the PCM encoding (WAV). Null for lossy codecs.
+   */
+  private fun extractorBitDepth(format: MediaFormat): Int? {
+    if (format.containsKey("bits-per-sample")) {
+      return runCatching { format.getInteger("bits-per-sample") }.getOrNull()?.takeIf { it in 4..64 }
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && format.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+      return when (runCatching { format.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()) {
+        AudioFormat.ENCODING_PCM_8BIT -> 8
+        AudioFormat.ENCODING_PCM_16BIT -> 16
+        AudioFormat.ENCODING_PCM_24BIT_PACKED -> 24
+        AudioFormat.ENCODING_PCM_32BIT, AudioFormat.ENCODING_PCM_FLOAT -> 32
+        else -> null
+      }
+    }
+    return null
   }
 
   /**
@@ -536,8 +832,19 @@ class MuseAudioMetadataModule : Module() {
    */
   private fun readArtworkColor(resolver: ContentResolver, cacheDir: File, trackId: String): Map<String, Double>? {
     val uri = readArtworkFile(resolver, cacheDir, trackId) ?: return null
-    val path = Uri.parse(uri).path ?: return null
-    val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = 16 })
+    return Uri.parse(uri).path?.let { colorOf(it) }
+  }
+
+  /** The main hue of an image file, measured on a small copy (see readArtworkColor). */
+  private fun colorOf(path: String): Map<String, Double>? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    // About 32 pixels a side is plenty for an average color, at any cover size.
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 32) {
+      sample *= 2
+    }
+    val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
       ?: return null
     try {
       val hsv = FloatArray(3)
@@ -599,34 +906,6 @@ class MuseAudioMetadataModule : Module() {
       else -> null
     }
   }
-
-  /** `length` bytes at `position`, or null if the file is shorter. */
-  private fun readAt(channel: FileChannel, position: Long, length: Int): ByteArray? {
-    if (length < 0 || position < 0 || position + length > channel.size()) {
-      return null
-    }
-    val buffer = ByteBuffer.allocate(length)
-    var offset = position
-    while (buffer.hasRemaining()) {
-      val read = channel.read(buffer, offset)
-      if (read <= 0) {
-        return null
-      }
-      offset += read
-    }
-    return buffer.array()
-  }
-
-  private fun u8(bytes: ByteArray, at: Int): Int = bytes[at].toInt() and 0xFF
-
-  private fun int32(bytes: ByteArray, at: Int): Int =
-    (u8(bytes, at) shl 24) or (u8(bytes, at + 1) shl 16) or (u8(bytes, at + 2) shl 8) or u8(bytes, at + 3)
-
-  private fun int32le(bytes: ByteArray, at: Int): Int =
-    u8(bytes, at) or (u8(bytes, at + 1) shl 8) or (u8(bytes, at + 2) shl 16) or (u8(bytes, at + 3) shl 24)
-
-  private fun syncsafe(bytes: ByteArray, at: Int): Int =
-    (u8(bytes, at) shl 21) or (u8(bytes, at + 1) shl 14) or (u8(bytes, at + 2) shl 7) or u8(bytes, at + 3)
 
   /** MP3: the USLT frame of an ID3v2.2, 2.3 or 2.4 tag. */
   private fun id3Lyrics(channel: FileChannel, header: ByteArray): String? {
@@ -769,50 +1048,6 @@ class MuseAudioMetadataModule : Module() {
     // data: 4 bytes type, 4 bytes locale, then UTF-8 text.
     val start = text.first + 8
     return if (start < text.second) String(data, start, text.second - start, Charsets.UTF_8) else null
-  }
-
-  /** A top-level box's content as [start, end) file offsets. */
-  private fun mp4BoxInFile(channel: FileChannel, type: String): Pair<Long, Long>? {
-    var position = 0L
-    val fileSize = channel.size()
-    repeat(1_000) {
-      if (position + 8 > fileSize) {
-        return null
-      }
-      val header = readAt(channel, position, 16.coerceAtMost((fileSize - position).toInt())) ?: return null
-      var size = int32(header, 0).toLong() and 0xFFFFFFFFL
-      var headerSize = 8
-      if (size == 1L && header.size >= 16) {
-        size = ByteBuffer.wrap(header, 8, 8).long
-        headerSize = 16
-      } else if (size == 0L) {
-        size = fileSize - position
-      }
-      if (size < headerSize) {
-        return null
-      }
-      if (String(header, 4, 4, Charsets.ISO_8859_1) == type) {
-        return Pair(position + headerSize, position + size)
-      }
-      position += size
-    }
-    return null
-  }
-
-  /** A child box's content as [start, end) offsets within `data`. */
-  private fun mp4Box(data: ByteArray, from: Int, to: Int, type: String): Pair<Int, Int>? {
-    var position = from
-    while (position + 8 <= to) {
-      val size = int32(data, position)
-      if (size < 8 || position + size > to) {
-        return null
-      }
-      if (String(data, position + 4, 4, Charsets.ISO_8859_1) == type) {
-        return Pair(position + 8, position + size)
-      }
-      position += size
-    }
-    return null
   }
 
   /** Trimmed value, with blanks and MediaStore's "<unknown>" treated as missing. */

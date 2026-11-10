@@ -10,8 +10,9 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Svg, { Path } from 'react-native-svg';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -27,7 +28,8 @@ import Animated, {
   type ExitAnimationsValues,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { setBarMinimized, useBarMinimized } from '../motion/barScroll';
+import { setBarMinimized, useBarMinimized, useDockHidden } from '../motion/barScroll';
+import { usePreferences } from '../settings/preferences';
 import type { MusicTrack, Tab } from '../types';
 import { useAppStyles } from '../theme/styles';
 import { EASE_OUT } from '../motion/motion';
@@ -48,12 +50,11 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 /**
  * Each glyph names a place, not an action: Library is your songs,
  * Collections the ways your songs are grouped (playlists, favorites,
- * albums, artists, smart lists). The glass bar shows the filled glyph on
- * every tab, as iOS 26 does, and colors only the selected one; Solid keeps
- * Android's outline at rest. The Collections tab's id stays 'more', so saved
+ * albums, artists, smart lists). Outline at rest; the selected tab fills
+ * in and takes the accent, on the glass bar and Solid alike. The Collections tab's id stays 'more', so saved
  * start-tab choices keep working; so does Home's ('home'). Equalizer lives in Settings.
  */
-const TABS: { id: Tab; label: string; icon: IconName; iconSelected: IconName }[] = [
+export const TABS: { id: Tab; label: string; icon: IconName; iconSelected: IconName }[] = [
   { id: 'home', label: 'Home', icon: 'home-outline', iconSelected: 'home' },
   { id: 'library', label: 'Library', icon: 'musical-notes-outline', iconSelected: 'musical-notes' },
   { id: 'more', label: 'Collections', icon: 'albums-outline', iconSelected: 'albums' },
@@ -66,7 +67,6 @@ const CAPSULE_SPRING = { damping: 18, stiffness: 200, mass: 0.8 };
 const LIFT_SPRING = { damping: 14, stiffness: 320, mass: 0.6 };
 /** Close behind the finger without lag. */
 const FOLLOW_SPRING = { damping: 26, stiffness: 520, mass: 0.5 };
-const INDICATOR_TIMING = { duration: 220, easing: EASE_OUT };
 /** The search glyph: no label under it, so a touch smaller than the tab icons. */
 const SEARCH_GLYPH = 22;
 /** The cover in the shrunk bar's song. */
@@ -186,6 +186,8 @@ type BarProps = {
   bottomInset: number;
   /** The song in the mini player, which joins the shrunk bar's row. */
   nowPlaying: NowPlaying | null;
+  /** The mini player sits on the tab pill as one card, so the pill's top is square. */
+  joined?: boolean;
 };
 
 /** Frosted and Full blur float as glass; Solid is a classic bar on the edge. */
@@ -282,17 +284,7 @@ function SolidItem({
   onPress: () => void;
 }) {
   const styles = useAppStyles();
-  // Starts at rest, so nothing animates on launch.
-  const progress = useSharedValue(selected ? 1 : 0);
-  useEffect(() => {
-    progress.set(withTiming(selected ? 1 : 0, INDICATOR_TIMING));
-  }, [progress, selected]);
-  // The pill grows out from the icon's middle, the way Android's own bar does.
-  const indicatorStyle = useAnimatedStyle(() => ({
-    opacity: progress.get(),
-    transform: [{ scaleX: 0.4 + progress.get() * 0.6 }],
-  }));
-
+  // No pill behind the icon: the filled glyph and accent color mark the tab.
   return (
     <Pressable
       accessibilityRole={role}
@@ -301,12 +293,10 @@ function SolidItem({
       onPress={onPress}
       style={styles.solidItem}
     >
-      <View style={styles.solidIndicatorWrap}>
-        <Animated.View style={[styles.solidIndicator, indicatorStyle]} />
-        <Ionicons
-          accessible={false}
+      <View style={styles.solidIconWrap}>
+        <TabGlyph
           name={selected ? iconSelected : icon}
-          size={opticalSize(selected ? iconSelected : icon, 22)}
+          size={opticalSize(selected ? iconSelected : icon, 24)}
           style={[styles.solidIcon, selected && styles.solidIconActive]}
         />
       </View>
@@ -322,10 +312,9 @@ function SolidItem({
 /**
  * Three fixed layouts, swapped with a short fade. (Resizing glass on every
  * frame made Android rebuild its blur every frame, which was slow.)
- * - at rest: tab pill and search circle;
- * - scrolled down: the current tab's circle, the playing song, search;
+ * - at rest: the tab pill, with Search as its fifth item;
+ * - scrolled down: the current tab's circle, the playing song, a search circle;
  * - searching: the current tab's circle (tap to leave) and the field.
- * The search circle stays put across rest and scrolled, so a fold mounts less.
  */
 function GlassBar({
   activeTab,
@@ -338,14 +327,18 @@ function GlassBar({
   onCloseSearch,
   bottomInset,
   nowPlaying,
+  joined = false,
 }: BarProps) {
   const styles = useAppStyles();
   // Read here, not in the app root, so a fold redraws only the bar.
   const minimized = useBarMinimized() && !isSearching;
   const tab = TABS.find((item) => item.id === shownTabFor(activeTab)) ?? TABS[0];
+  // Joined keeps Search in the tab row; Floating keeps the round button beside it, as before.
+  // Read from the setting, so Search never moves when a song starts or stops.
+  const searchInRow = usePreferences().miniDock === 'joined';
 
   return (
-    <View style={[localStyles.dock, { paddingBottom: 6 + bottomInset }]}>
+    <View style={[localStyles.dock, { paddingBottom: 10 + bottomInset }]}>
       <View style={localStyles.slot}>
         {isSearching ? (
           <View key="search" style={localStyles.layout}>
@@ -384,11 +377,17 @@ function GlassBar({
           </View>
         ) : (
           <Animated.View key="full" entering={SWAP_IN} exiting={SWAP_OUT} style={localStyles.layout}>
-            <TabPill activeTab={activeTab} onSelectTab={onSelectTab} blurTarget={blurTarget} />
-            <View style={localStyles.searchSpace} />
+            <TabPill
+              activeTab={activeTab}
+              onSelectTab={onSelectTab}
+              onSearch={searchInRow ? onSearch : null}
+              blurTarget={blurTarget}
+              joined={joined}
+            />
+            {!searchInRow && <View style={localStyles.searchSpace} />}
           </Animated.View>
         )}
-        {!isSearching && (
+        {!isSearching && (minimized || !searchInRow) && (
           <Animated.View entering={CIRCLE_IN} exiting={CIRCLE_OUT} style={localStyles.searchCircle}>
             <Glass blurTarget={blurTarget} radius={SLOT / 2} style={styles.bottomSearch}>
               <Pressable
@@ -434,8 +433,7 @@ function TabCircle({
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.bottomSearchButton}>
         {({ pressed }) => (
           <PressScale pressed={pressed}>
-            <Ionicons
-              accessible={false}
+            <TabGlyph
               name={tab.iconSelected}
               size={opticalSize(tab.iconSelected, 24)}
               style={styles.bottomTabIconActive}
@@ -574,11 +572,16 @@ function SongInBar({
 function TabPill({
   activeTab,
   onSelectTab,
+  onSearch,
   blurTarget,
+  joined,
 }: {
   activeTab: Tab;
   onSelectTab: (tab: Tab) => void;
+  /** Search as the row's fifth item (Joined); null when it is the round button beside the pill. */
+  onSearch: (() => void) | null;
   blurTarget: BlurTarget;
+  joined: boolean;
 }) {
   const styles = useAppStyles();
   const glass = useGlassColors();
@@ -720,11 +723,13 @@ function TabPill({
   });
 
   return (
-    <Glass blurTarget={blurTarget} radius={SLOT / 2} style={styles.bottomTabs}>
+    <Glass blurTarget={blurTarget} radius={SLOT / 2} seam={joined ? 'top' : undefined} style={styles.bottomTabs}>
+      <View style={localStyles.pillRow}>
+      {/* The four tabs, where the capsule and the lens live; Search sits after them. */}
       <GestureDetector gesture={lens}>
         <View
           accessibilityRole="tablist"
-          style={styles.bottomTabRow}
+          style={[styles.bottomTabRow, localStyles.tabsArea]}
           onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         >
           {tabWidth > 0 && (
@@ -790,18 +795,29 @@ function TabPill({
           )}
         </View>
       </GestureDetector>
+      {onSearch && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Search your music" onPress={onSearch} style={styles.bottomTab}>
+          {({ pressed }) => <TabFace tab={SEARCH_ITEM} lit={false} pressed={pressed} />}
+        </Pressable>
+      )}
+      </View>
     </Glass>
   );
 }
+
+/** Search, drawn like a tab so the row reads as five equal places. */
+const SEARCH_ITEM: TabItem = { label: 'Search', icon: 'search-outline', iconSelected: 'search' };
 
 /**
  * Icon and label. Sinks a little under the finger and pops back with a
  * small bounce when it lights up. Scale only, so it never waits on React.
  */
-function TabFace({ tab, lit, pressed = false }: { tab: (typeof TABS)[number]; lit: boolean; pressed?: boolean }) {
+type TabItem = { label: string; icon: IconName; iconSelected: IconName };
+
+function TabFace({ tab, lit, pressed = false }: { tab: TabItem; lit: boolean; pressed?: boolean }) {
   const styles = useAppStyles();
-  // Filled on every tab (iOS 26); the color alone says which is selected.
-  const name = tab.iconSelected;
+  // Outline at rest; the selected tab fills in and takes the accent.
+  const name = lit ? tab.iconSelected : tab.icon;
   const scale = useSharedValue(1);
   const wasLit = useRef(lit);
   useEffect(() => {
@@ -818,8 +834,7 @@ function TabFace({ tab, lit, pressed = false }: { tab: (typeof TABS)[number]; li
   const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return (
     <Animated.View style={[localStyles.face, scaleStyle]}>
-      <Ionicons
-        accessible={false}
+      <TabGlyph
         name={name}
         size={opticalSize(name, 24)}
         style={[styles.bottomTabIcon, lit && styles.bottomTabIconActive]}
@@ -835,6 +850,40 @@ function TabFace({ tab, lit, pressed = false }: { tab: (typeof TABS)[number]; li
  * Hides the floating mini player while the bar is shrunk (the song sits in
  * the bar then). Its own component, so a fold redraws only this.
  */
+// Home's own glyph: a soft rounded house with the Muse level bars as its door.
+const HOUSE = 'M4.5 10.6 11 5a1.6 1.6 0 0 1 2 0l6.5 5.6c.3.3.5.7.5 1.1V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-7.3c0-.4.2-.8.5-1.1z';
+const levelBar = (x: number, top: number, height: number) =>
+  `M${x} ${top}a.8.8 0 0 1 .8.8v${height - 1.6}a.8.8 0 0 1-1.6 0v${1.6 - height}a.8.8 0 0 1 .8-.8z`;
+const HOME_BARS = levelBar(9.4, 14.2, 3.4) + levelBar(12, 12.4, 5.2) + levelBar(14.6, 13.6, 4);
+
+/** A tab icon: Home draws its own house, the rest are Ionicons. Color comes from `style`. */
+export function TabGlyph({ name, size, style }: { name: IconName; size: number; style: StyleProp<TextStyle> }) {
+  if (name !== 'home' && name !== 'home-outline') {
+    return <Ionicons accessible={false} name={name} size={size} style={style} />;
+  }
+  const color = String(StyleSheet.flatten(style)?.color ?? '#000');
+  return (
+    // Cropped so the house's ink matches the Ionicons tabs (~0.8 of the box); the
+    // outline's stroke already adds width, so it crops less than the fill.
+    <Svg
+      accessible={false}
+      width={size}
+      height={size}
+      viewBox={name === 'home' ? '2 2.55 20 20' : '0.95 1.5 22.1 22.1'}
+    >
+      {name === 'home' ? (
+        // Selected: a filled house with the bars cut out, so the bar's glass shows through.
+        <Path d={HOUSE + HOME_BARS} fill={color} fillRule="evenodd" />
+      ) : (
+        <>
+          <Path d={HOUSE} fill="none" stroke={color} strokeWidth={1.9} strokeLinejoin="round" />
+          <Path d={HOME_BARS} fill={color} />
+        </>
+      )}
+    </Svg>
+  );
+}
+
 export function HideWhenBarFolded({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const hidden = useBarMinimized() && enabled;
   const style = useAnimatedStyle(() => ({
@@ -843,6 +892,25 @@ export function HideWhenBarFolded({ enabled, children }: { enabled: boolean; chi
   }));
   return (
     <Animated.View style={style} pointerEvents={hidden ? 'none' : 'auto'}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * The dock (mini player and tab bar) slides away while Library picks songs,
+ * so its selection bar can sit there. Transform and opacity only: the dock's
+ * measured height stays the same, so nothing below relays out.
+ */
+export function HideForSelection({ style: layout, children }: { style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const hidden = useDockHidden();
+  const style = useAnimatedStyle(() => ({
+    opacity: withTiming(hidden ? 0 : 1, { duration: hidden ? 160 : 220 }),
+    transform: [{ translateY: withTiming(hidden ? 72 : 0, { duration: 260, easing: EASE_OUT }) }],
+  }));
+  return (
+    // `layout` carries the dock's spacing, since this wrapper is now its only child.
+    <Animated.View style={[layout, style]} pointerEvents={hidden ? 'none' : 'box-none'}>
       {children}
     </Animated.View>
   );
@@ -873,8 +941,15 @@ const localStyles = StyleSheet.create({
     flex: 1,
     height: SLOT,
   },
+  // The folded row keeps room for the search circle, which floats over it.
   searchSpace: {
     width: SLOT,
+  },
+  pillRow: {
+    flexDirection: 'row',
+  },
+  tabsArea: {
+    flex: TABS.length,
   },
   searchCircle: {
     position: 'absolute',

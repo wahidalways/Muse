@@ -10,12 +10,15 @@ import {
 } from '../library/playlists';
 import { canDeleteTrack } from '../library/library';
 import { AlbumArtwork } from './AlbumArtwork';
+import { openChangeCover } from './CoverSheets';
 import { ControlIcon } from './icons';
 import { NamePrompt } from './NamePrompt';
 import { SongInfo } from './SongInfo';
 import { Sheet, SheetRow } from './Sheet';
 import { StarRating } from './StarRating';
 import { useAppStyles } from '../theme/styles';
+import { getPlaybackController } from '../playback/PlaybackController';
+import { addToQueue, playNext } from '../playback/queueActions';
 
 /**
  * Everything you can do to one song: rate it, love it, add it to or remove
@@ -106,6 +109,8 @@ function SongMenuBody({
   // Playlists and Song info open in place, inside the same sheet.
   const [view, setView] = useState<'actions' | 'playlists' | 'info'>(initialView ?? 'actions');
   const current = playlists.find((playlist) => playlist.id === playlistId);
+  // The playing song cannot be queued after itself.
+  const isPlayingNow = getPlaybackController().getSnapshot().currentTrack?.id === track.id;
 
   if (view === 'info') {
     return <SongInfo track={track} playCount={playCount} />;
@@ -153,6 +158,26 @@ function SongMenuBody({
           <StarRating trackId={track.id} size={22} />
         </View>
       </View>
+      {!isPlayingNow && (
+        <>
+          <SheetRow
+            icon={<ControlIcon name="play-next" size={18} tone="accent" />}
+            label="Play next"
+            onPress={() => {
+              onClose();
+              playNext([track]);
+            }}
+          />
+          <SheetRow
+            icon={<ControlIcon name="queue-add" size={18} tone="accent" />}
+            label="Add to queue"
+            onPress={() => {
+              onClose();
+              addToQueue([track]);
+            }}
+          />
+        </>
+      )}
       <SheetRow
         icon={<ControlIcon name={isFavorite ? 'heart' : 'heart-outline'} size={18} tone="accent" />}
         label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -162,6 +187,14 @@ function SongMenuBody({
         icon={<ControlIcon name="playlist-add" size={18} tone="accent" />}
         label="Add to playlist"
         onPress={() => setView('playlists')}
+      />
+      <SheetRow
+        icon={<ControlIcon name="image" size={18} tone="accent" />}
+        label="Change cover"
+        onPress={() => {
+          onClose();
+          openChangeCover(track, true);
+        }}
       />
       <SheetRow
         icon={<ControlIcon name="info" size={18} tone="accent" />}

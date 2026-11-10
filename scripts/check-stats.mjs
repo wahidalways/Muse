@@ -26,8 +26,12 @@ import {
   searchLibrary,
   searchWords,
 } from '../src/library/search.ts';
-import { formatAudioDetails, formatBytes, formatPlayCount } from '../src/utils/format.ts';
+import { formatAudioDetails, formatBytes, formatPlayCount, formatSleepTimer } from '../src/utils/format.ts';
 import { accentForCover } from '../src/theme/dynamicAccent.ts';
+import { withQueued } from '../src/playback/queueOrder.ts';
+import { minimalLabels, minimalTitleSize } from '../src/player/minimalType.ts';
+import { coverQuery, mergeCovers, parseApple, parseDeezer } from '../src/library/coverSearch.ts';
+import { ringPath } from '../src/components/ringPath.ts';
 import { indexLetter, letterPositions } from '../src/library/alphabet.ts';
 import { activeLyricsLine, parseLyrics } from '../src/library/lyrics.ts';
 
@@ -72,7 +76,11 @@ assert.equal(all.bucketUnit, 'week');
 assert.equal(all.previous, null);
 assert.equal(all.buckets.reduce((sum, bucket) => sum + bucket.plays, 0), 5);
 
-assert.deepEqual(getStreaks(history, now), { current: 2, best: 2 });
+assert.deepEqual(getStreaks(history, now), { current: 2, best: 2, previousBest: 1, playedToday: true });
+// Played yesterday but not today: the run still counts, and today is not played yet.
+assert.deepEqual(getStreaks(history.slice(2), now), { current: 1, best: 1, previousBest: 1, playedToday: false });
+// A run longer than every earlier one is a new best; previousBest leaves the current run out.
+assert.equal(getStreaks([play('a', 0), play('a', 1), play('a', 2), play('a', 5)], now).previousBest, 1);
 assert.equal(isSkip({ listenedSeconds: 20, duration: 20 }), false, 'a short song played through is not a skip');
 assert.equal(isSkip({ listenedSeconds: 5, duration: 20 }), true);
 assert.deepEqual(getRecentTracks(history, 5).map((event) => event.trackId), ['a', 'b']);
@@ -101,7 +109,7 @@ assert.equal(genres.genrePlays, 3, 'plays of untagged songs are left out');
 // A 3-minute daily goal: met today (190s) and yesterday (200s), not 3 days ago (100s).
 const goal = getGoalSummary(history, lookup, 180, now);
 assert.equal(goal.todaySeconds, 190);
-assert.deepEqual(goal.streaks, { current: 2, best: 2 });
+assert.deepEqual(goal.streaks, { current: 2, best: 2, previousBest: 1, playedToday: true });
 assert.equal(goal.metDays.size, 3, 'today, yesterday and 9 days ago');
 assert.equal(getGoalSummary(history, lookup, 0, now).metDays.size, 0, 'no goal, no met days');
 
@@ -158,11 +166,11 @@ assert.equal(mixes.get('shuffle').hint, '5 songs');
 // Settings: audio details, sizes and play counts.
 assert.equal(
   formatAudioDetails({ mimeType: 'audio/flac', codec: 'audio/flac', bitrate: 1_411_200, sampleRate: 44_100, channels: 2 }, 'a.flac'),
-  'FLAC · 1,411 kbps · 44.1 kHz · Stereo',
+  'FLAC · Lossless · 44.1 kHz · 1,411 kbps · Stereo',
 );
-assert.equal(formatAudioDetails({ mimeType: 'audio/mp4', codec: 'audio/mp4a-latm', bitrate: 256_000, sampleRate: 48_000, channels: 1 }, 'b.m4a'), 'AAC · 256 kbps · 48 kHz · Mono');
+assert.equal(formatAudioDetails({ mimeType: 'audio/mp4', codec: 'audio/mp4a-latm', bitrate: 256_000, sampleRate: 48_000, channels: 1 }, 'b.m4a'), 'AAC · 48 kHz · 256 kbps · Mono');
 assert.equal(formatAudioDetails(null, 'morning-light.mp3'), 'MP3', 'falls back to the extension');
-assert.equal(formatAudioDetails({ mimeType: null, codec: null, bitrate: null, sampleRate: 22_050, channels: 6 }, 'c.wav'), 'WAV · 22.1 kHz · 6 ch');
+assert.equal(formatAudioDetails({ mimeType: null, codec: null, bitrate: null, sampleRate: 22_050, channels: 6 }, 'c.wav'), 'WAV · Lossless · 22.1 kHz · 6 ch');
 assert.equal(formatBytes(512), '1 KB');
 assert.equal(formatBytes(5 * 1024 * 1024 + 300_000), '5.3 MB');
 assert.equal(formatBytes(250 * 1024 * 1024), '250 MB');
@@ -373,7 +381,7 @@ assert.equal(titles(sortGroups(artists, 'songCount', 'descending')), 'Bo,Amy,Unk
 // Pulse board: saved layouts are cleaned up; squares pair without holes.
 {
   const ids = (rows) => rows.map((row) => row.map((item) => item.id).join('+')).join(' / ');
-  assert.equal(ids(packRows(DEFAULT_PULSE.board)), 'recap / mixes / jump / week / goal+streak / artist+hour / repeat / genre+explore');
+  assert.equal(ids(packRows(DEFAULT_PULSE.board)), 'recap / mixes / jump / week / goal+streak / artist+hour / repeat / album+session / genre+explore');
   const sq = (id) => ({ id, on: true, size: 'square' });
   assert.equal(ids(packRows([sq('goal'), { id: 'week', on: true, size: 'wide' }, sq('streak')])), 'goal+streak / week');
   assert.equal(ids(packRows([sq('goal'), { ...sq('streak'), on: false }])), 'goal', 'hidden widgets take no space');
@@ -383,7 +391,103 @@ assert.equal(titles(sortGroups(artists, 'songCount', 'descending')), 'Bo,Amy,Unk
   const goal = parsed.board.find((item) => item.id === 'goal');
   assert.deepEqual([goal.on, goal.size], [false, 'square'], 'kept hidden; goal cannot be wide');
   assert.equal(parsed.board[0].id, 'recap', 'missing widgets return to their default place');
-  assert.deepEqual([parsed.recapSeen, parsed.recapHidden], [null, null]);
+  assert.deepEqual([parsed.recapSeen, parsed.recapOpen, parsed.goalCelebrated], [null, null, null]);
 }
 
+// Change cover: search words, both services' answers, one list without repeats.
+assert.equal(coverQuery({ title: 'Song', artist: 'Nora Vale', album: 'Glass Harbor' }), 'Nora Vale Glass Harbor');
+assert.equal(coverQuery({ title: 'Song', artist: null, album: null }), 'Song', 'no album: the title');
+{
+  const apple = parseApple({
+    results: [
+      { collectionName: 'Glass Harbor', artworkUrl100: 'https://is1.mzstatic.com/image/thumb/a/b.jpg/100x100bb.jpg' },
+      { collectionName: 'No art' },
+      { collectionName: 'Odd link', artworkUrl100: 'https://example.com/cover.jpg' },
+    ],
+  });
+  assert.equal(apple.length, 1, 'results without a sizable link are skipped');
+  assert.equal(apple[0].full, 'https://is1.mzstatic.com/image/thumb/a/b.jpg/3000x3000bb.jpg', 'the biggest Apple has');
+  assert.equal(apple[0].preview, 'https://is1.mzstatic.com/image/thumb/a/b.jpg/300x300bb.jpg');
+  const deezer = parseDeezer({
+    data: [
+      {
+        title: 'Glass Harbor',
+        cover_medium: 'https://cdn.dz/images/cover/x/250x250-000000-80-0-0.jpg',
+        cover_xl: 'https://cdn.dz/images/cover/x/1000x1000-000000-80-0-0.jpg',
+      },
+    ],
+  });
+  assert.equal(deezer[0].full, 'https://cdn.dz/images/cover/x/1800x1800-000000-100-0-0.jpg', 'the biggest Deezer serves');
+  assert.deepEqual(parseApple(null), []);
+  assert.deepEqual(parseDeezer({ error: 'quota' }), []);
+  const merged = mergeCovers([apple[0], { ...apple[0], id: 'same picture' }], deezer);
+  assert.deepEqual(merged.map((cover) => cover.source), ['Apple Music', 'Deezer'], 'takes turns, repeats dropped');
+}
+// The hold ring: its length is the dash, so it must match the shape it draws.
+assert.equal(ringPath(100, 0, 0, 3).length, 400, 'square: four sides');
+assert.ok(Math.abs(ringPath(100, 50, 0, 3).length - Math.PI * 100) < 1e-9, 'round (vinyl): a circle');
+assert.equal(ringPath(100, 10, 5, 3).box, 116, 'room for the ring outside the cover');
+assert.equal(ringPath(100, 0, -10, 3).extent, 3, 'inside ring: no room needed outside');
+
+// Minimal type: as big as fits (each word on one line, three lines at most), on a 360 dp phone (312 wide).
+assert.equal(minimalTitleSize('Hello', 312), 72, 'a short title is a poster');
+assert.equal(minimalTitleSize('Blinding Lights', 312), 56, '"Blinding" is too wide at 72');
+assert.equal(minimalTitleSize('Blinding Lights', 312, 40), 40, 'short phones cap the size');
+assert.equal(minimalTitleSize('The Less I Know The Better Than You Ever Will', 312), 32, 'a long title steps down');
+assert.equal(minimalTitleSize('Supercalifragilisticexpialidocious', 312), 32, 'nothing fits: smallest size');
+assert.equal(minimalTitleSize('Lights', 312), 72);
+assert.equal(minimalTitleSize('Lights', 312 / 1.3), 56, 'big system text means a smaller step');
+assert.deepEqual(minimalLabels({ genre: 'Pop', year: 2020 }, 3, 28), ['SONG 4 OF 28', 'POP · 2020']);
+assert.deepEqual(minimalLabels({ genre: null, year: null }, 0, 1), ['', '']);
+
+// Sleep timer: one width all the way down, so the player bar never shifts.
+assert.deepEqual([3600, 600, 599, 61, 0].map(formatSleepTimer), ['60:00', '10:00', '09:59', '01:01', '00:00']);
+
 console.log('stats checks passed');
+
+// Play next / Add to queue: right after the current song or at the end; a song
+// already coming up moves instead of playing twice; what played stays put.
+{
+  const t = (id) => ({ id });
+  const ids = (list) => list.map((track) => track.id).join('');
+  const queue = ['a', 'b', 'c', 'd', 'e'].map(t);
+  assert.equal(ids(withQueued(queue, 1, [t('x')], 'next')), 'abxcde');
+  assert.equal(ids(withQueued(queue, 1, [t('x')], 'end')), 'abcdex');
+  assert.equal(ids(withQueued(queue, 1, [t('d')], 'next')), 'abdce');
+  assert.equal(ids(withQueued(queue, 1, [t('c')], 'end')), 'abdec');
+  assert.equal(ids(withQueued(queue, 3, [t('a')], 'next')), 'abcdae', 'played songs are not moved');
+  assert.equal(ids(withQueued(queue, 4, [t('x'), t('y')], 'next')), 'abcdexy');
+}
+console.log('queue order checks passed');
+
+// Settings › Check for updates: which GitHub release counts as newer.
+{
+  const { isNewer } = await import('../src/settings/updates.ts');
+  assert.equal(isNewer('v1.1', '1.0'), true);
+  assert.equal(isNewer('1.0.0', '1.0'), false, 'same version, different length');
+  assert.equal(isNewer('v1.0.1', '1.0'), true);
+  assert.equal(isNewer('0.9.9', '1.0'), false);
+  assert.equal(isNewer('v2', '1.10'), true);
+  assert.equal(isNewer('1.10', '1.9'), true, 'numbers, not text');
+
+  // Release notes: Markdown to plain bullets for the update sheet.
+  const { releaseNotes } = await import('../src/settings/updates.ts');
+  assert.equal(
+    releaseNotes("## What's new\r\n\r\n\r\n- **Hi-Res** badge\n* See [the docs](https://x.y) for `more`\n"),
+    "What's new\n\n• Hi-Res badge\n• See the docs for more",
+  );
+  assert.equal(releaseNotes('one\ntwo\nthree', 8), 'one\ntwo\n…', 'cut at a line');
+  assert.equal(releaseNotes(''), '');
+}
+console.log('update checks passed');
+
+// Onboarding › Surprise me: funky names fit the name limit and never repeat back to back.
+{
+  const { funkyName, FUNKY_WORDS } = await import('../src/settings/funkyNames.ts');
+  for (const adjective of FUNKY_WORDS.ADJECTIVES) {
+    for (const noun of FUNKY_WORDS.NOUNS) assert.ok(`${adjective} ${noun}`.length <= 24, `${adjective} ${noun}`);
+  }
+  assert.notEqual(funkyName('Velvet Bassline', () => 0), 'Velvet Bassline', 'a stuck random still changes the name');
+  assert.match(funkyName(), /^\S+ \S+$/);
+}
+console.log('funky name checks passed');

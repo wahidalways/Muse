@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+// The one icon set Muse uses: the package root would ship all 19 icon fonts.
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ACCENT_KEY, AMOLED_KEY, FULL_SCREEN_KEY, THEME_KEY } from './src/constants';
 import { ACCENT_OPTIONS, type Accent, type Appearance, ThemeContext } from './src/theme/theme';
@@ -10,7 +11,7 @@ import { MuseApp } from './src/MuseApp';
 import { useCurrentTrackId } from './src/playback/usePlayback';
 import { usePreferences } from './src/settings/preferences';
 import { accentForCover } from './src/theme/dynamicAccent';
-import { getArtworkColor } from './modules/muse-audio-metadata';
+import { coverColor, useSongCover } from './src/library/covers';
 
 // Start loading the icon font at launch so controls do not appear late.
 // Icons render on their own once it is ready, so a failure is not fatal.
@@ -22,7 +23,8 @@ export default function App() {
   const [appearance, setAppearance] = useState<Appearance>('system');
   const theme =
     appearance === 'system' ? (systemColorScheme === 'dark' ? 'dark' : 'light') : appearance;
-  const [accent, setAccent] = useState<Accent>('muse');
+  // Muse Lime until a choice is saved; anyone who picked a color keeps it.
+  const [accent, setAccent] = useState<Accent>('lime');
   const [isAmoled, setIsAmoled] = useState(false);
   const [themeError, setThemeError] = useState('');
   const [amoledError, setAmoledError] = useState('');
@@ -56,7 +58,7 @@ export default function App() {
           savedTheme === 'ocean' ||
           savedTheme === 'sunset'
             ? savedTheme
-            : 'muse';
+            : 'lime';
         const savedAccentOption = ACCENT_OPTIONS.find(
           (option) => option.id === savedAccent,
         );
@@ -139,12 +141,15 @@ export default function App() {
   // pause and buffering change.
   const playingTrackId = useCurrentTrackId();
   const [coverAccent, setCoverAccent] = useState<Accent | null>(null);
+  // The cover the song shows: re-read when one is chosen in Change cover.
+  const ownCover = useSongCover(playingTrackId ?? '');
+  const { bestFileCover } = usePreferences();
   useEffect(() => {
     if (!dynamicAccent || !playingTrackId) {
       return;
     }
     let isActive = true;
-    void getArtworkColor(playingTrackId).then((color) => {
+    void coverColor(playingTrackId).then((color) => {
       if (isActive) {
         setCoverAccent(accentForCover(color, accent, ACCENT_OPTIONS));
       }
@@ -152,7 +157,7 @@ export default function App() {
     return () => {
       isActive = false;
     };
-  }, [accent, dynamicAccent, playingTrackId]);
+  }, [accent, bestFileCover, dynamicAccent, ownCover, playingTrackId]);
   const shownAccent = dynamicAccent && playingTrackId && coverAccent ? coverAccent : accent;
   // Every component reads this (useAppStyles). A new object each render made
   // the whole app, memoized parts and hidden tabs included, re-render on any

@@ -1,4 +1,4 @@
-import { useRef, type ComponentRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ComponentRef, type ReactNode } from 'react';
 import { Modal, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,10 @@ type SheetProps = {
   children: ReactNode;
   /** Fills most of the screen, for long lists. */
   tall?: boolean;
+  /** Unsaved changes: onClose asks first, so a drag springs back instead of sliding the sheet away. */
+  guarded?: boolean;
+  /** A labelled button (such as "Done") in place of the close cross. */
+  closeLabel?: string;
 };
 
 /**
@@ -41,7 +45,7 @@ export function Sheet(props: SheetProps) {
 }
 
 /** Mounts with each opening, so a drag never carries over to the next one. */
-function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false }: SheetProps) {
+function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, guarded = false, closeLabel }: SheetProps) {
   const styles = useAppStyles();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -52,6 +56,10 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false }
 
   const dragY = useSharedValue(0);
   const sheetHeight = useSharedValue(0);
+  const isGuarded = useSharedValue(guarded);
+  useEffect(() => {
+    isGuarded.set(guarded);
+  }, [guarded, isGuarded]);
   // Same rule as the player: past a third of the way down (counting the
   // flick's momentum) it closes; otherwise it springs back.
   const drag = usePanGesture({
@@ -64,7 +72,10 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false }
     onDeactivate: (event) => {
       'worklet';
       const projected = event.translationY + project(event.velocityY);
-      if (!event.canceled && projected > sheetHeight.get() / 3) {
+      if (!event.canceled && projected > sheetHeight.get() / 3 && isGuarded.get()) {
+        dragY.set(withSpring(0, { ...SNAP_BACK_SPRING, velocity: event.velocityY }));
+        scheduleOnRN(onClose);
+      } else if (!event.canceled && projected > sheetHeight.get() / 3) {
         dragY.set(
           withTiming(sheetHeight.get(), { duration: 180, easing: EASE_OUT }, (finished) => {
             if (finished) {
@@ -109,14 +120,24 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false }
                     {title}
                   </Text>
                 </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Close"
-                  onPress={onClose}
-                  style={styles.sleepTimerClose}
-                >
-                  <CloseIcon color="text" size={13} />
-                </Pressable>
+                {closeLabel ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={onClose}
+                    style={({ pressed }) => [styles.sheetDone, pressed && styles.primaryButtonPressed]}
+                  >
+                    <Text style={styles.sheetDoneText}>{closeLabel}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    onPress={onClose}
+                    style={styles.sleepTimerClose}
+                  >
+                    <CloseIcon color="text" size={13} />
+                  </Pressable>
+                )}
               </View>
             </View>
           </GestureDetector>

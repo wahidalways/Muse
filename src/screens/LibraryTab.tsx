@@ -1,4 +1,6 @@
 import {
+  createContext,
+  forwardRef,
   memo,
   useCallback,
   useContext,
@@ -9,32 +11,45 @@ import {
   useState,
   type ComponentRef,
   type ReactNode,
+  type Ref,
 } from 'react';
 import {
+  BackHandler,
   Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
+  type ScrollViewProps,
   type StyleProp,
   type TextInput,
   type ViewStyle,
 } from 'react-native';
 import Animated, {
   Easing,
+  Extrapolation,
+  FadeIn,
   FadeInDown,
   FadeInLeft,
   FadeInRight,
+  FadeInUp,
+  FadeOut,
+  FadeOutDown,
+  interpolate,
+  useAnimatedReaction,
+  useAnimatedRef,
   useAnimatedStyle,
+  useScrollOffset,
   useSharedValue,
+  withDelay,
   withTiming,
+  type AnimatedRef,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EASE_OUT } from '../motion/motion';
 import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   buildSearchIndex,
   hiddenMatch,
@@ -66,20 +81,25 @@ import { ControlIcon } from '../components/icons';
 import { EqualizerBars } from '../components/EqualizerBars';
 import { SearchInput } from '../components/SearchInput';
 import { SortSheet, type SortChoice } from '../components/SortSheet';
+import { Sheet, SheetRow } from '../components/Sheet';
+import { SwipeQueue } from '../components/SwipeQueue';
+import { PlaylistPickerSheet } from '../components/PlaylistPickerSheet';
+import { setListSort, useListSorts, type ListSort } from '../library/listSorts';
 import { AlphabetIndex, letterPositions } from '../components/AlphabetIndex';
 import { LIBRARY_SORT_OPTIONS } from '../constants';
 import { useAppStyles } from '../theme/styles';
-import { hapticSelection } from '../utils/haptics';
-import { useBarScroll } from '../motion/barScroll';
+import { hapticImpact, hapticSelection } from '../utils/haptics';
+import { setDockHidden, useBarScroll } from '../motion/barScroll';
+import { sidewaysDragLock } from '../motion/gestureLock';
+import { addToQueue, playNext } from '../playback/queueActions';
 import { formatListeningTime, formatTrackDuration } from '../utils/format';
 
 const NO_ANCHOR = { disabled: true };
-/** How far a scroll up (or down) must go to bring back (or hide) the top bar. */
-const TOP_BAR_TRAVEL = 24;
-const TOP_BAR_TIMING = { duration: 180, easing: EASE_OUT };
 const ROW_ART = 46;
 const ROW_PRESSED = { transform: [{ scale: 0.985 }] };
 const CARD_PRESSED = { transform: [{ scale: 0.97 }] };
+/** Height of the slim bar under the status bar. */
+const SLIM_BAR = 52;
 /** View and sort changes: the first rows settle in, one after another. */
 const INTRO_ROWS = 12;
 const INTRO_MS = 650;
@@ -93,10 +113,17 @@ const rowIntro = (index: number, kind: 'rise' | 'left' | 'right') => {
   return (kind === 'left' ? FadeInLeft : FadeInRight).duration(380).delay(delay).easing(EASE_OUT)
     .withInitialValues({ opacity: 0, transform: [{ translateX: kind === 'left' ? -12 : 12 }] });
 };
+const BAR_IN = FadeInUp.duration(280).easing(EASE_OUT).withInitialValues({ opacity: 0, transform: [{ translateY: 24 }] });
+const BAR_OUT = FadeOutDown.duration(180).withInitialValues({ opacity: 1, transform: [{ translateY: 0 }] });
+const TOP_IN = FadeIn.duration(200);
+const TOP_OUT = FadeOut.duration(160);
 /** The line under the selected view: glides, no bounce. */
 const UNDERLINE_TIMING = { duration: 320, easing: Easing.bezier(0.25, 0.9, 0.3, 1) };
+/** The trailing edge waits this long, so the line stretches toward the new tab, then catches up. */
+const UNDERLINE_TRAIL_DELAY = 90;
 /** The line's drawn width; scaleX stretches it to each word's width. */
 const UNDERLINE_BASE = 100;
+const TOOLS_TIMING = { duration: 180, easing: EASE_OUT };
 
 const getTrackKey = (track: MusicTrack) => track.id;
 const getGroupKey = (group: TrackGroup) => group.key;
@@ -131,8 +158,38 @@ const ARTIST_SORTS: SortChoice[] = [
   { id: 'songCount', label: 'Number of songs', kind: 'count' },
 ];
 type GroupSortState = { by: GroupSort; direction: SortDirection };
-// shortcut: album and artist sorts last until the app closes; save them with the song sort if people want them kept.
 const DEFAULT_GROUP_SORT: GroupSortState = { by: 'name', direction: 'ascending' };
+/** A saved album or artist sort, if it is still one of the choices. */
+const savedGroupSort = (saved: ListSort | undefined, choices: SortChoice[]): GroupSortState =>
+  saved && choices.some((choice) => choice.id === saved.by)
+    ? { by: saved.by as GroupSort, direction: saved.direction }
+    : DEFAULT_GROUP_SORT;
+
+/**
+ * The list's scroll view, from Reanimated, so the title fold reads the
+ * scroll offset on the UI thread (no JS work per frame). FlashList still
+ * gets its own ref and plain onScroll; the animated ref rides alongside.
+ */
+const FoldScrollContext = createContext<AnimatedRef<Animated.ScrollView> | null>(null);
+const FoldScrollView = forwardRef(function FoldScrollView(
+  props: ScrollViewProps,
+  ref: Ref<ComponentRef<typeof Animated.ScrollView>>,
+) {
+  const animatedRef = useContext(FoldScrollContext);
+  const setRef = useCallback(
+    (node: ComponentRef<typeof Animated.ScrollView> | null) => {
+      animatedRef?.(node);
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+    },
+    [animatedRef, ref],
+  );
+  return <Animated.ScrollView {...props} ref={setRef} />;
+});
+const renderFoldScroll = (props: ScrollViewProps) => <FoldScrollView {...props} />;
 
 /** `text` with the parts the search matched picked out in `matchStyle`. */
 function withMatches(text: string, words: string[] | undefined, matchStyle: object): ReactNode {
@@ -168,8 +225,10 @@ function trackSubtitle(track: MusicTrack): string {
 /**
  * One song row, shared with More's lists. Memoized so a play/pause or song
  * change only re-renders the rows whose `isCurrent` or `isPlaying` changed.
- * The playing song shows moving bars over its cover; tap plays, the ⋯ button
- * (or a long press) opens the song menu.
+ * The playing song shows moving bars over its cover and an accent title.
+ * Tap plays; the ⋯ button opens the song menu. With `swipeable`, a drag
+ * right is Play next and left is Add to queue. While `selected` is set the
+ * row is in a selection: tap toggles it, and a check replaces the ⋯.
  */
 export const LibraryTrackRow = memo(function LibraryTrackRow({
   track,
@@ -180,8 +239,11 @@ export const LibraryTrackRow = memo(function LibraryTrackRow({
   highlight,
   note,
   isFavorite = false,
+  swipeable = false,
+  selected,
   onPlayTrack,
   onLongPress,
+  onMenu,
 }: {
   track: MusicTrack;
   isCurrent: boolean;
@@ -196,87 +258,128 @@ export const LibraryTrackRow = memo(function LibraryTrackRow({
   highlight?: string[];
   /** Why a search found this song when the row would not show it ("Folder: Downloads"). */
   note?: string;
+  /** Drag sideways for Play next and Add to queue. */
+  swipeable?: boolean;
+  /** Undefined outside a selection; otherwise whether this row is picked. */
+  selected?: boolean;
   onPlayTrack: (track: MusicTrack) => void;
-  /** Opens the song menu. */
+  /** A long press: the song menu, or (Library) starting a selection. */
   onLongPress?: (track: MusicTrack) => void;
+  /** The ⋯ button. Defaults to `onLongPress`. */
+  onMenu?: (track: MusicTrack) => void;
 }) {
   const styles = useAppStyles();
   const subtitle = [note, subtitleOverride ?? trackSubtitle(track)].filter(Boolean).join(' · ');
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${isCurrent ? 'Open player for' : 'Play'} ${track.title}, ${subtitle}`}
-      accessibilityState={{ selected: isCurrent, disabled: !track.uri }}
-      disabled={!track.uri}
-      onPress={() => onPlayTrack(track)}
-      onLongPress={onLongPress ? () => onLongPress(track) : undefined}
-      accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Song options' }] : undefined}
-      onAccessibilityAction={() => onLongPress?.(track)}
-      style={({ pressed }) => [
-        styles.libraryTrackRow,
-        isCurrent && styles.libraryTrackRowPlaying,
-        !track.uri && styles.libraryTrackRowDisabled,
-        pressed && !isCurrent && styles.sortSheetOptionPressed,
-        // A gentle give under the finger; scale only, so it is instant.
-        pressed && ROW_PRESSED,
-      ]}
-    >
-      <View style={styles.libraryArtWrap}>
-        <AlbumArtwork track={track} size={ROW_ART} />
-        {isCurrent && (
-          <View style={styles.libraryArtOverlay}>
-            <EqualizerBars playing={isPlaying} size={16} />
-          </View>
-        )}
-      </View>
-      <View style={styles.libraryTrackCopy}>
-        <Text
-          style={[styles.libraryTrackTitle, isCurrent && styles.libraryTrackTitleCurrent]}
-          numberOfLines={1}
-        >
-          {withMatches(track.title, highlight, styles.libraryMatch)}
-        </Text>
-        <Text
-          style={styles.libraryTrackSubtitle}
-          numberOfLines={1}
-          // A file name or path keeps its end (the name) in view.
-          ellipsizeMode={subtitleOverride ? 'middle' : 'tail'}
-        >
+  const selecting = selected !== undefined;
+  const openMenu = onMenu ?? onLongPress;
+  const canQueue = swipeable && !selecting && Boolean(track.uri);
+  const row = (
+      <Pressable
+        accessibilityRole={selecting ? 'checkbox' : 'button'}
+        accessibilityLabel={
+          selecting
+            ? `${track.title}, ${subtitle}`
+            : `${isCurrent ? 'Open player for' : 'Play'} ${track.title}, ${subtitle}`
+        }
+        accessibilityState={selecting ? { checked: selected } : { selected: isCurrent, disabled: !track.uri }}
+        disabled={!selecting && !track.uri}
+        onPress={() => onPlayTrack(track)}
+        onLongPress={onLongPress ? () => onLongPress(track) : undefined}
+        accessibilityActions={[
+          ...(openMenu && !selecting ? [{ name: 'menu', label: 'Song options' }] : []),
+          ...(canQueue
+            ? [
+                { name: 'playNext', label: 'Play next' },
+                { name: 'addToQueue', label: 'Add to queue' },
+              ]
+            : []),
+        ]}
+        onAccessibilityAction={(event) => {
+          const action = event.nativeEvent.actionName;
+          if (action === 'playNext') playNext([track]);
+          else if (action === 'addToQueue') addToQueue([track]);
+          else openMenu?.(track);
+        }}
+        style={({ pressed }) => [
+          styles.libraryTrackRow,
+          // An opaque row, so the swipe strip only shows where the row slid away.
+          canQueue && styles.libraryTrackRowSolid,
+          isCurrent && styles.libraryTrackRowPlaying,
+          selected && styles.libraryTrackRowSelected,
+          !selecting && !track.uri && styles.libraryTrackRowDisabled,
+          pressed && !isCurrent && styles.sortSheetOptionPressed,
+          // A gentle give under the finger; scale only, so it is instant.
+          pressed && ROW_PRESSED,
+        ]}
+      >
+        <View style={styles.libraryArtWrap}>
+          <AlbumArtwork track={track} size={ROW_ART} />
           {isCurrent && (
-            <Text style={styles.libraryNowPlaying}>{isPlaying ? 'NOW PLAYING' : 'PAUSED'}  ·  </Text>
+            <View style={styles.libraryArtOverlay}>
+              <EqualizerBars playing={isPlaying} size={16} />
+            </View>
           )}
-          {withMatches(subtitle, highlight, styles.libraryMatch)}
-        </Text>
-      </View>
-      {isFavorite && (
-        <Ionicons
-          accessibilityLabel="Favorite"
-          name="heart"
-          size={12}
-          style={styles.libraryTrackFavorite}
-        />
-      )}
-      {valueLabel !== null ? (
-        <Text style={[styles.libraryTrackDuration, styles.libraryTrackSortValue]}>{valueLabel}</Text>
-      ) : (
-        track.duration > 0 && (
-          <Text style={styles.libraryTrackDuration}>{formatTrackDuration(track.duration)}</Text>
-        )
-      )}
-      {onLongPress ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`More options for ${track.title}`}
-          hitSlop={4}
-          onPress={() => onLongPress(track)}
-          style={styles.libraryRowMenu}
-        >
-          <ControlIcon name="more" size={16} tone="muted" />
-        </Pressable>
-      ) : (
-        <View style={{ width: 6 }} />
-      )}
-    </Pressable>
+        </View>
+        <View style={styles.libraryTrackCopy}>
+          <Text
+            style={[styles.libraryTrackTitle, isCurrent && styles.libraryTrackTitleCurrent]}
+            numberOfLines={1}
+          >
+            {withMatches(track.title, highlight, styles.libraryMatch)}
+          </Text>
+          <Text
+            style={styles.libraryTrackSubtitle}
+            numberOfLines={1}
+            // A file name or path keeps its end (the name) in view.
+            ellipsizeMode={subtitleOverride ? 'middle' : 'tail'}
+          >
+            {withMatches(subtitle, highlight, styles.libraryMatch)}
+          </Text>
+        </View>
+        {isFavorite && (
+          <Ionicons
+            accessibilityLabel="Favorite"
+            name="heart"
+            size={12}
+            style={styles.libraryTrackFavorite}
+          />
+        )}
+        {valueLabel !== null ? (
+          <Text style={[styles.libraryTrackDuration, styles.libraryTrackSortValue]}>{valueLabel}</Text>
+        ) : (
+          track.duration > 0 && (
+            <Text style={styles.libraryTrackDuration}>{formatTrackDuration(track.duration)}</Text>
+          )
+        )}
+        {selecting ? (
+          // In the ⋯'s place, so nothing in the row moves.
+          <View style={styles.libraryRowMenu}>
+            <View style={[styles.libraryCheck, selected && styles.libraryCheckOn]}>
+              {selected && <Ionicons name="checkmark" size={15} color={String(styles.primaryButtonLabel.color)} />}
+            </View>
+          </View>
+        ) : openMenu ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`More options for ${track.title}`}
+            hitSlop={4}
+            onPress={() => openMenu(track)}
+            style={styles.libraryRowMenu}
+          >
+            <ControlIcon name="more" size={16} tone="muted" />
+          </Pressable>
+        ) : (
+          <View style={{ width: 6 }} />
+        )}
+      </Pressable>
+  );
+  // Only lists that offer the swipe pay for its gesture and strip.
+  return swipeable ? (
+    <SwipeQueue enabled={canQueue} onPlayNext={() => playNext([track])} onAddToQueue={() => addToQueue([track])}>
+      {row}
+    </SwipeQueue>
+  ) : (
+    row
   );
 });
 
@@ -290,6 +393,7 @@ export function LibraryTab({
   onPlayAll,
   onOpenGroup,
   onOpenTrackMenu,
+  onDeleteTracks,
   onSearchEverywhere,
   searchText,
   onChangeSearchText: setSearchText,
@@ -311,6 +415,8 @@ export function LibraryTab({
   /** Opens an album or artist page (in More). */
   onOpenGroup: (route: MoreRoute) => void;
   onOpenTrackMenu: (track: MusicTrack) => void;
+  /** Deletes the files of the songs picked in a selection (one Android dialog). */
+  onDeleteTracks: (tracks: MusicTrack[]) => void;
   /** Opens the Search tab with this text, which also finds playlists and folders. */
   onSearchEverywhere: (query: string) => void;
   searchText: string;
@@ -323,7 +429,10 @@ export function LibraryTab({
 }) {
   const styles = useAppStyles();
   const { width: windowWidth } = useWindowDimensions();
-  const [view, setView] = useState<LibraryView>('songs');
+  // The tab row follows the tap at once; the heavy list swap renders behind it,
+  // so the line keeps sliding instead of freezing while albums/artists build.
+  const [tabView, setView] = useState<LibraryView>('songs');
+  const view = useDeferredValue(tabView);
   // Typing stays responsive; filtering catches up a moment later.
   const deferredSearchText = useDeferredValue(searchText);
   const [isSortSheetOpen, setIsSortSheetOpen] = useState(false);
@@ -371,8 +480,9 @@ export function LibraryTab({
       ),
     [allGroups],
   );
-  const [albumSort, setAlbumSort] = useState<GroupSortState>(DEFAULT_GROUP_SORT);
-  const [artistSort, setArtistSort] = useState<GroupSortState>(DEFAULT_GROUP_SORT);
+  const listSorts = useListSorts();
+  const albumSort = savedGroupSort(listSorts['library:albums'], ALBUM_SORTS);
+  const artistSort = savedGroupSort(listSorts['library:artists'], ARTIST_SORTS);
   const groupSort = view === 'albums' ? albumSort : artistSort;
   const sortedGroups = useMemo(
     () => (view === 'songs' ? [] : sortGroups(allGroups, groupSort.by, groupSort.direction)),
@@ -395,6 +505,63 @@ export function LibraryTab({
   const favoriteIds = useFavoriteIds();
   const { theme } = useContext(ThemeContext);
 
+  // ---------------------------------------------------------------------------
+  // Selection: hold a song to start; the dock steps aside for the action bar.
+
+  const [selection, setSelection] = useState<Set<string> | null>(null);
+  const isSelecting = selection !== null;
+  useEffect(() => {
+    setDockHidden(isSelecting);
+    // The page-wide tab swipe waits too: the dock that would bring you back is gone.
+    sidewaysDragLock.set(isSelecting);
+    if (!isSelecting) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSelection(null);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isSelecting]);
+  useEffect(
+    () => () => {
+      setDockHidden(false);
+      sidewaysDragLock.set(false);
+    },
+    [],
+  );
+  const toggleSelected = useCallback((track: MusicTrack) => {
+    hapticSelection();
+    setSelection((current) => {
+      const next = new Set(current ?? []);
+      if (next.has(track.id)) {
+        next.delete(track.id);
+      } else {
+        next.add(track.id);
+      }
+      // Android's way: picking the last one off ends the selection.
+      return next.size === 0 ? null : next;
+    });
+  }, []);
+  const startSelection = useCallback((track: MusicTrack) => {
+    hapticImpact();
+    setSelection(new Set([track.id]));
+  }, []);
+  /** The picked songs, in the order shown. */
+  const selectedTracks = useMemo(
+    () => (selection ? sortedTracks.filter((track) => selection.has(track.id)) : []),
+    [selection, sortedTracks],
+  );
+  const [pickerTracks, setPickerTracks] = useState<MusicTrack[] | null>(null);
+  const [groupMenu, setGroupMenu] = useState<TrackGroup | null>(null);
+  const endSelectionWith = (action: (list: MusicTrack[]) => void) => {
+    const list = selectedTracks;
+    setSelection(null);
+    if (list.length > 0) {
+      action(list);
+    }
+  };
+
   // For a short moment after a view or sort change, the first rows settle in
   // one after another. Rows that mount later (scrolling) never animate.
   const [intro, setIntro] = useState<'rise' | 'left' | 'right' | null>(null);
@@ -405,52 +572,78 @@ export function LibraryTab({
     introTimer.current = setTimeout(() => setIntro(null), INTRO_MS);
   }, []);
   useEffect(() => () => clearTimeout(introTimer.current), []);
+  // A view switch starts its clock only once the new list is on screen; a
+  // slow first build of albums or artists used to outlast it, so no intro.
+  useEffect(() => {
+    clearTimeout(introTimer.current);
+    introTimer.current = setTimeout(() => setIntro(null), INTRO_MS);
+  }, [view]);
 
   // The line under the selected view. It lives here, not in the list header,
   // so it keeps sliding while the list (and its header) is rebuilt for the
   // new view. Moved and sized with transforms only (a fixed-width bar,
   // scaled), so it never waits on React drawing the new list.
-  const viewIndex = VIEWS.findIndex((option) => option.id === view);
-  const [tabFrames, setTabFrames] = useState<({ x: number; width: number } | null)[]>([null, null, null]);
-  const lineX = useSharedValue(0);
-  const lineWidth = useSharedValue(0);
+  const viewIndex = VIEWS.findIndex((option) => option.id === tabView);
+  // A ref, not state: the three tabs measure in the same frame, and state
+  // updates from one stale copy kept only the last tab, so the line had
+  // nowhere to go on the first switch.
+  const tabFrames = useRef<({ x: number; width: number } | null)[]>([null, null, null]);
+  // The line's two edges, animated apart: the edge on the side it travels
+  // leads and the other trails, so it stretches over then settles.
+  const lineLeft = useSharedValue(0);
+  const lineRight = useSharedValue(0);
   const linePlaced = useRef(false);
   const placeLine = useCallback(
-    (index: number, frames: ({ x: number; width: number } | null)[], animate: boolean) => {
-      const frame = frames[index];
+    (index: number, animate: boolean) => {
+      const frame = tabFrames.current[index];
       if (!frame) {
         return;
       }
-      lineX.set(animate ? withTiming(frame.x, UNDERLINE_TIMING) : frame.x);
-      lineWidth.set(animate ? withTiming(frame.width, UNDERLINE_TIMING) : frame.width);
+      const left = frame.x;
+      const right = frame.x + frame.width;
+      if (!animate) {
+        lineLeft.set(left);
+        lineRight.set(right);
+        return;
+      }
+      const movingRight = left > lineLeft.get();
+      const edge = (to: number, trails: boolean) =>
+        trails ? withDelay(UNDERLINE_TRAIL_DELAY, withTiming(to, UNDERLINE_TIMING)) : withTiming(to, UNDERLINE_TIMING);
+      lineLeft.set(edge(left, movingRight));
+      lineRight.set(edge(right, !movingRight));
     },
-    [lineWidth, lineX],
+    [lineLeft, lineRight],
   );
   const measureTab = (index: number, x: number, width: number) => {
-    const known = tabFrames[index];
+    const known = tabFrames.current[index];
     if (known && known.x === x && known.width === width) {
       return;
     }
-    const next = tabFrames.map((frame, at) => (at === index ? { x, width } : frame));
-    setTabFrames(next);
-    // The first time the selected tab is measured, the line appears in place.
-    if (index === viewIndex && !linePlaced.current) {
+    tabFrames.current[index] = { x, width };
+    // The selected tab: first time the line appears in place; later (its bold
+    // label is a little wider) it follows the new width.
+    if (index === viewIndex) {
+      placeLine(index, linePlaced.current);
       linePlaced.current = true;
-      placeLine(index, next, false);
     }
   };
-  const lineStyle = useAnimatedStyle(() => ({
-    opacity: lineWidth.get() > 0 ? 1 : 0,
-    transform: [{ translateX: lineX.get() }, { scaleX: lineWidth.get() / UNDERLINE_BASE }],
-  }));
+  const lineStyle = useAnimatedStyle(() => {
+    const width = lineRight.get() - lineLeft.get();
+    return {
+      opacity: width > 0 ? 1 : 0,
+      transform: [{ translateX: lineLeft.get() }, { scaleX: Math.max(width, 0) / UNDERLINE_BASE }],
+    };
+  });
   const chooseView = (next: LibraryView) => {
-    if (next === view) {
+    if (next === tabView) {
       return;
     }
     hapticSelection();
+    setSelection(null);
     const nextIndex = VIEWS.findIndex((option) => option.id === next);
-    placeLine(nextIndex, tabFrames, true);
-    startIntro(nextIndex > viewIndex ? 'right' : 'left');
+    placeLine(nextIndex, true);
+    clearTimeout(introTimer.current);
+    setIntro(nextIndex > viewIndex ? 'right' : 'left');
     setView(next);
   };
 
@@ -461,8 +654,7 @@ export function LibraryTab({
         setSortBy(nextSortBy as LibrarySort);
         setSortDirection(nextDirection);
       } else {
-        const setGroupSort = view === 'albums' ? setAlbumSort : setArtistSort;
-        setGroupSort({ by: nextSortBy as GroupSort, direction: nextDirection });
+        setListSort(view === 'albums' ? 'library:albums' : 'library:artists', { by: nextSortBy, direction: nextDirection });
       }
     },
     [setSortBy, setSortDirection, startIntro, view],
@@ -478,47 +670,49 @@ export function LibraryTab({
     changeSort(shownSortBy, shownDirection === 'ascending' ? 'descending' : 'ascending');
   };
 
-  // The quick-return top bar. Only a change of direction flips it, so the
-  // JS thread sets a flag a few times per scroll, never per frame.
+  // ---------------------------------------------------------------------------
+  // The large title folds into a slim bar as the list scrolls. The offset is
+  // read on the UI thread; JS only hears when the bar's tools appear or go.
+
   const insets = useSafeAreaInsets();
+  const slimBarHeight = insets.top + SLIM_BAR;
   const searchInputRef = useRef<ComponentRef<typeof TextInput>>(null);
-  /** Scroll offset where the header's own search row has left the screen. */
-  const searchRowBottom = useRef(0);
-  const lastScrollY = useRef(0);
-  const scrollTravel = useRef(0);
-  const [isTopBarShown, setIsTopBarShown] = useState(false);
-  const barScroll = useBarScroll();
-  const onListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    barScroll(event);
-    const y = event.nativeEvent.contentOffset.y;
-    const delta = y - lastScrollY.current;
-    lastScrollY.current = y;
-    if (y <= searchRowBottom.current) {
-      // The header's own search is on screen.
-      scrollTravel.current = 0;
-      setIsTopBarShown(false);
-      return;
-    }
-    // Distance in one direction; turning around starts the count again.
-    scrollTravel.current =
-      Math.sign(delta) === Math.sign(scrollTravel.current) ? scrollTravel.current + delta : delta;
-    if (scrollTravel.current < -TOP_BAR_TRAVEL) {
-      setIsTopBarShown(true);
-    } else if (scrollTravel.current > TOP_BAR_TRAVEL) {
-      setIsTopBarShown(false);
-    }
-  }, [barScroll]);
-  const topBar = useSharedValue(0);
-  useEffect(() => {
-    topBar.set(withTiming(isTopBarShown ? 1 : 0, TOP_BAR_TIMING));
-  }, [isTopBarShown, topBar]);
-  const topBarStyle = useAnimatedStyle(() => ({
-    opacity: topBar.get(),
-    transform: [{ translateY: (topBar.get() - 1) * 24 }],
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollY = useScrollOffset(scrollRef);
+  /** Scroll offset where the header's search row has gone under the slim bar. */
+  const searchGone = useSharedValue(Number.MAX_SAFE_INTEGER);
+  const tools = useSharedValue(0);
+  const [areToolsShown, setAreToolsShown] = useState(false);
+  useAnimatedReaction(
+    () => scrollY.get() > searchGone.get(),
+    (shown, was) => {
+      if (shown !== was) {
+        tools.set(withTiming(shown ? 1 : 0, TOOLS_TIMING));
+        scheduleOnRN(setAreToolsShown, shown);
+      }
+    },
+  );
+  const titleFoldStyle = useAnimatedStyle(() => {
+    const fold = interpolate(scrollY.get(), [4, 48], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: 1 - fold,
+      transform: [{ translateY: -8 * fold }, { scale: 1 - 0.06 * fold }],
+    };
+  });
+  const slimBackStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.get(), [20, 50], [0, 1], Extrapolation.CLAMP),
   }));
-  /** The top bar's search: back up to the real field, ready to type. */
+  const slimTitleStyle = useAnimatedStyle(() => {
+    const shown = interpolate(scrollY.get(), [36, 60], [0, 1], Extrapolation.CLAMP);
+    return { opacity: shown, transform: [{ translateY: (1 - shown) * 6 }] };
+  });
+  const toolsStyle = useAnimatedStyle(() => ({
+    opacity: tools.get(),
+    transform: [{ translateY: (1 - tools.get()) * 6 }],
+  }));
+  const barScroll = useBarScroll();
+  /** The slim bar's search: back up to the real field, ready to type. */
   const jumpToSearch = () => {
-    setIsTopBarShown(false);
     void listRef.current?.scrollToOffset({ offset: 0, animated: true });
     setTimeout(() => searchInputRef.current?.focus(), 300);
   };
@@ -557,6 +751,12 @@ export function LibraryTab({
     },
     [paddingTop, view],
   );
+  const listKey =
+    view === 'songs' ? `songs:${listSortBy}:${listSortDirection}` : `${view}:${groupSort.by}:${groupSort.direction}`;
+  // A rebuilt list starts at the top; the fold must not stay folded from the old one.
+  useEffect(() => {
+    scrollY.set(0);
+  }, [listKey, scrollY]);
 
   // Sorting only changes the order; rows look the same under every sort.
   const renderTrack = useCallback<ListRenderItem<MusicTrack>>(
@@ -573,13 +773,16 @@ export function LibraryTab({
             valueLabel={null}
             highlight={searching ? words : undefined}
             note={hidden ? `${hidden.label}: ${hidden.value}` : undefined}
-            onPlayTrack={playFromShown}
-            onLongPress={onOpenTrackMenu}
+            swipeable
+            selected={selection ? selection.has(item.id) : undefined}
+            onPlayTrack={selection ? toggleSelected : playFromShown}
+            onLongPress={selection ? toggleSelected : startSelection}
+            onMenu={onOpenTrackMenu}
           />
         </Animated.View>
       );
     },
-    [currentTrackId, favoriteIds, intro, isPlaying, onOpenTrackMenu, playFromShown, searching, words],
+    [currentTrackId, favoriteIds, intro, isPlaying, onOpenTrackMenu, playFromShown, searching, selection, startSelection, toggleSelected, words],
   );
   const albumArt = Math.floor((windowWidth - Number(paddingHorizontal) * 2 - 14) / 2);
   const renderGroup = useCallback<ListRenderItem<TrackGroup>>(
@@ -590,6 +793,11 @@ export function LibraryTab({
         hapticSelection();
         onOpenGroup({ kind: 'group', group: view === 'albums' ? 'album' : 'artist', key: item.key });
       };
+      const openMenu = () => {
+        hapticImpact();
+        setGroupMenu(item);
+      };
+      const menuAction = [{ name: 'menu', label: 'Options' }];
       if (view === 'albums') {
         // The album's year is its newest song's, as the Year sort uses.
         let year: number | null = null;
@@ -607,7 +815,11 @@ export function LibraryTab({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${item.title}${item.subtitle ? `, ${item.subtitle}` : ''}, ${detail}`}
+              accessibilityHint="Hold for Play next, Add to queue and more"
+              accessibilityActions={menuAction}
+              onAccessibilityAction={openMenu}
               onPress={open}
+              onLongPress={openMenu}
               style={({ pressed }) => pressed && CARD_PRESSED}
             >
               <AlbumArtwork track={item.tracks[0]} size={albumArt} radius={16} />
@@ -633,7 +845,10 @@ export function LibraryTab({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${item.title}, ${detail}`}
+            accessibilityActions={menuAction}
+            onAccessibilityAction={openMenu}
             onPress={open}
+            onLongPress={openMenu}
             style={({ pressed }) => [
               styles.libraryArtistRow,
               pressed && styles.sortSheetOptionPressed,
@@ -657,31 +872,33 @@ export function LibraryTab({
     },
     [albumArt, intro, onOpenGroup, styles, view],
   );
-  const rowState = `${currentTrackId ?? ''}:${isPlaying}:${view}:${favoriteIds.size}:${intro ?? ''}`;
-  const playable = useMemo(() => filteredTracks.filter((track) => track.uri), [filteredTracks]);
+  const rowState = useMemo(
+    () => ({ currentTrackId, isPlaying, view, favoriteIds, intro, selection }),
+    [currentTrackId, favoriteIds, intro, isPlaying, selection, view],
+  );
+  /** What Shuffle plays: the songs shown, or the songs of the albums or artists shown. */
+  const shuffleList = useMemo(
+    () => (view === 'songs' ? filteredTracks : groups.flatMap((group) => group.tracks)).filter((track) => track.uri),
+    [filteredTracks, groups, view],
+  );
   const totalSeconds = useMemo(
     () => includedTracks.reduce((sum, track) => sum + (track.duration > 0 ? track.duration : 0), 0),
     [includedTracks],
   );
   const plural = (count: number, one: string, many: string) =>
     `${count.toLocaleString()} ${count === 1 ? one : many}`;
-  // The whole library is under the title, so this line only counts what
-  // differs from it: search matches, or the albums and artists.
-  const countLine =
-    view === 'songs'
-      ? searching
-        ? `${filteredTracks.length.toLocaleString()} of ${plural(includedTracks.length, 'song', 'songs')}`
-        : null
-      : searching
-        ? `${groups.length.toLocaleString()} of ${plural(allGroups.length, view.slice(0, -1), view)}`
-        : plural(groups.length, view.slice(0, -1), view);
-  const showShuffle = view === 'songs' && playable.length > 0;
+  // The title's summary counts everything, so this line only shows while searching.
+  const countLine = !searching
+    ? null
+    : view === 'songs'
+      ? `${filteredTracks.length.toLocaleString()} of ${plural(includedTracks.length, 'song', 'songs')}`
+      : `${groups.length.toLocaleString()} of ${plural(allGroups.length, view.slice(0, -1), view)}`;
 
-  // The top, in order: title and a one-line summary of the whole library,
-  // the view switch, search, then one quiet line for count, Shuffle and sort.
+  // The top, in order: the title and a one-line summary (they fold away),
+  // the views with the sort beside them, then search with Shuffle beside it.
   const listHeader = (
     <>
-      <View style={styles.libraryIntro}>
+      <Animated.View style={[styles.libraryIntro, styles.libraryIntroFold, titleFoldStyle]}>
         <Text accessibilityRole="header" style={styles.libraryHeading}>
           Library
         </Text>
@@ -694,42 +911,66 @@ export function LibraryTab({
             .filter(Boolean)
             .join(' · ')}
         </Text>
+      </Animated.View>
+
+      {/* Songs, Albums, Artists as text tabs, the sort at the right of the same row. */}
+      <View style={styles.libraryViewRow}>
+        <View accessibilityRole="tablist" style={styles.libraryViewTabs}>
+          {VIEWS.map((option, index) => {
+            const selected = option.id === tabView;
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                hitSlop={{ left: 10, right: 10 }}
+                onPress={() => chooseView(option.id)}
+                onLayout={(event) => measureTab(index, event.nativeEvent.layout.x, event.nativeEvent.layout.width)}
+                style={styles.libraryViewTab}
+              >
+                <Text style={[styles.libraryViewTabLabel, selected && styles.libraryViewTabLabelActive]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Animated.View
+            pointerEvents="none"
+            // Theme colors set here: the style converter has no light match for a light bar.
+            style={[styles.libraryViewTabLine, { backgroundColor: theme === 'light' ? '#192218' : '#F5F5F7' }, lineStyle]}
+          />
+        </View>
+        {/* The arrow reverses in one tap; the name opens the sheet. */}
+        <View style={styles.librarySortControls}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Reverse order. Now ${directionLabels[shownDirection]}`}
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 2 }}
+            onPress={reverseSort}
+            style={({ pressed }) => [styles.librarySortReverse, pressed && styles.librarySortChipPressed]}
+          >
+            <ControlIcon name={shownDirection === 'ascending' ? 'sort-up' : 'sort-down'} size={14} tone="accent" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={sortButtonLabel}
+            hitSlop={{ top: 6, bottom: 6 }}
+            onPress={openSortSheet}
+            style={({ pressed }) => [styles.librarySortLink, pressed && styles.librarySortChipPressed]}
+          >
+            <Text numberOfLines={1} style={styles.librarySortButtonText}>
+              {selectedSortLabel}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Songs, Albums, Artists: text tabs with a short line under the selected one. */}
-      <View accessibilityRole="tablist" style={styles.libraryViewTabs}>
-        {VIEWS.map((option, index) => {
-          const selected = option.id === view;
-          return (
-            <Pressable
-              key={option.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              hitSlop={{ left: 10, right: 10 }}
-              onPress={() => chooseView(option.id)}
-              onLayout={(event) => measureTab(index, event.nativeEvent.layout.x, event.nativeEvent.layout.width)}
-              style={styles.libraryViewTab}
-            >
-              <Text style={[styles.libraryViewTabLabel, selected && styles.libraryViewTabLabelActive]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-        <Animated.View
-          pointerEvents="none"
-          // Theme colors set here: the style converter has no light match for a light bar.
-          style={[styles.libraryViewTabLine, { backgroundColor: theme === 'light' ? '#192218' : '#F5F5F7' }, lineStyle]}
-        />
-      </View>
-
-      {/* Search gets the full width; sort moved to the line below it. */}
       <View
         style={styles.librarySearchRow}
-        // Once scrolled past this row, the top bar may take over (see onListScroll).
+        // Once scrolled past this row, the slim bar takes over search and sort.
         onLayout={(event) => {
           const { y, height } = event.nativeEvent.layout;
-          searchRowBottom.current = Number(paddingTop) + y + height;
+          searchGone.set(Number(paddingTop) + y + height - slimBarHeight);
         }}
       >
         <View
@@ -748,67 +989,30 @@ export function LibraryTab({
             accessibilityLabel={`Search ${view}`}
           />
         </View>
+        {/* Shuffles exactly what is shown: after a search, just those songs. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Shuffle ${plural(shuffleList.length, 'song', 'songs')}`}
+          disabled={shuffleList.length === 0}
+          onPress={() => {
+            hapticSelection();
+            onPlayAll(shuffleList, true, 'Library');
+          }}
+          style={({ pressed }) => [
+            styles.libraryShuffleButton,
+            shuffleList.length === 0 && styles.libraryTrackRowDisabled,
+            pressed && styles.libraryActionPressed,
+            pressed && CARD_PRESSED,
+          ]}
+        >
+          <ControlIcon name="shuffle" size={18} tone="accent" />
+        </Pressable>
       </View>
-      {/* "3 of 24 songs · Shuffle" on the left, the sort on the right. */}
-      <View style={styles.libraryListMeta}>
-        <View style={styles.libraryMetaLeft}>
-          {countLine !== null && (
-            <Text
-              numberOfLines={1}
-              style={styles.libraryListMetaText}
-              accessibilityLiveRegion={searching ? 'polite' : 'none'}
-            >
-              {countLine}
-              {showShuffle ? '  ·' : ''}
-            </Text>
-          )}
-          {showShuffle && (
-            // Shuffles exactly what is shown: after a search, just those songs.
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Shuffle ${plural(playable.length, 'song', 'songs')}`}
-              hitSlop={{ top: 4, bottom: 4 }}
-              onPress={() => {
-                hapticSelection();
-                onPlayAll(playable, true, 'Library');
-              }}
-              style={({ pressed }) => [
-                styles.libraryShuffle,
-                countLine === null && styles.libraryShuffleFirst,
-                pressed && styles.librarySortChipPressed,
-                pressed && CARD_PRESSED,
-              ]}
-            >
-              <ControlIcon name="shuffle" size={15} tone="accent" />
-              <Text style={styles.libraryShuffleText}>Shuffle</Text>
-            </Pressable>
-          )}
-        </View>
-        {/* The arrow reverses in one tap; the words open the sheet. */}
-        <View style={styles.librarySortControls}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Reverse order. Now ${directionLabels[shownDirection]}`}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 4 }}
-            onPress={reverseSort}
-            style={({ pressed }) => [styles.librarySortReverse, pressed && styles.librarySortChipPressed]}
-          >
-            <ControlIcon name={shownDirection === 'ascending' ? 'sort-up' : 'sort-down'} size={14} tone="accent" />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={sortButtonLabel}
-            hitSlop={{ top: 4, bottom: 4 }}
-            onPress={openSortSheet}
-            style={({ pressed }) => [styles.librarySortLink, pressed && styles.librarySortChipPressed]}
-          >
-            <Text numberOfLines={1} style={styles.librarySortButtonText}>
-              {selectedSortLabel}
-              <Text style={styles.librarySortButtonDetail}>, {directionLabels[shownDirection]}</Text>
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+      {countLine !== null && (
+        <Text numberOfLines={1} style={styles.libraryCountLine} accessibilityLiveRegion="polite">
+          {countLine}
+        </Text>
+      )}
       <View style={styles.libraryRows} />
     </>
   );
@@ -852,6 +1056,14 @@ export function LibraryTab({
       </View>
     );
 
+  const selectedCount = selection?.size ?? 0;
+  const groupKind = view === 'albums' ? 'ALBUM' : 'ARTIST';
+  const closeGroupMenu = (then?: () => void) => {
+    setGroupMenu(null);
+    then?.();
+  };
+  const playableOf = (group: TrackGroup) => group.tracks.filter((track) => track.uri);
+
   return (
     <View style={styles.mainScroll}>
       {/*
@@ -859,89 +1071,98 @@ export function LibraryTab({
         ones, which keeps scrolling smooth on slow phones. Rows must not set
         a `key` inside, or reuse is lost. Each tab is its own list.
       */}
-      {view === 'songs' ? (
-        <FlashList
-          // A new sort rebuilds the list, so the new order settles in from the top.
-          key={`songs:${listSortBy}:${listSortDirection}`}
-          ref={listRef as React.Ref<FlashListRef<MusicTrack>>}
-          data={filteredTracks}
-          keyExtractor={getTrackKey}
-          // Filtering must not scroll to wherever the old top row went (FlashList
-          // keeps it in view by default, which suits chats, not search).
-          maintainVisibleContentPosition={NO_ANCHOR}
-          renderItem={renderTrack}
-          // Rows depend on the current song and play state as well as the data.
-          extraData={rowState}
-          ListHeaderComponent={listHeader}
-          ListEmptyComponent={listEmpty}
-          contentContainerStyle={contentContainerStyle}
-          keyboardShouldPersistTaps="handled"
-          // Scrolling the results puts the keyboard away, as in Search.
-          keyboardDismissMode="on-drag"
-          onScroll={onListScroll}
-          scrollEventThrottle={32}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <FlashList
-          key={`${view}:${groupSort.by}:${groupSort.direction}`}
-          ref={listRef as React.Ref<FlashListRef<TrackGroup>>}
-          data={groups}
-          keyExtractor={getGroupKey}
-          numColumns={view === 'albums' ? albumColumns : 1}
-          maintainVisibleContentPosition={NO_ANCHOR}
-          renderItem={renderGroup}
-          extraData={rowState}
-          ListHeaderComponent={listHeader}
-          ListEmptyComponent={listEmpty}
-          contentContainerStyle={contentContainerStyle}
-          keyboardShouldPersistTaps="handled"
-          // Scrolling the results puts the keyboard away, as in Search.
-          keyboardDismissMode="on-drag"
-          onScroll={onListScroll}
-          scrollEventThrottle={32}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <FoldScrollContext.Provider value={scrollRef}>
+        {view === 'songs' ? (
+          <FlashList
+            // A new sort rebuilds the list, so the new order settles in from the top.
+            key={listKey}
+            ref={listRef as React.Ref<FlashListRef<MusicTrack>>}
+            data={filteredTracks}
+            keyExtractor={getTrackKey}
+            // Filtering must not scroll to wherever the old top row went (FlashList
+            // keeps it in view by default, which suits chats, not search).
+            maintainVisibleContentPosition={NO_ANCHOR}
+            renderItem={renderTrack}
+            renderScrollComponent={renderFoldScroll}
+            // Rows depend on the current song, play state and selection as well as the data.
+            extraData={rowState}
+            ListHeaderComponent={listHeader}
+            ListEmptyComponent={listEmpty}
+            contentContainerStyle={contentContainerStyle}
+            keyboardShouldPersistTaps="handled"
+            // Scrolling the results puts the keyboard away, as in Search.
+            keyboardDismissMode="on-drag"
+            onScroll={barScroll}
+            scrollEventThrottle={32}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <FlashList
+            key={listKey}
+            ref={listRef as React.Ref<FlashListRef<TrackGroup>>}
+            data={groups}
+            keyExtractor={getGroupKey}
+            numColumns={view === 'albums' ? albumColumns : 1}
+            maintainVisibleContentPosition={NO_ANCHOR}
+            renderItem={renderGroup}
+            renderScrollComponent={renderFoldScroll}
+            extraData={rowState}
+            ListHeaderComponent={listHeader}
+            ListEmptyComponent={listEmpty}
+            contentContainerStyle={contentContainerStyle}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            onScroll={barScroll}
+            scrollEventThrottle={32}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </FoldScrollContext.Provider>
+
       {/*
-        Quick return: scrolled past the header, a slight scroll up brings back
-        a top bar with search and sort, so neither needs a trip to the top.
-        It only toggles on a change of direction and animates on the UI
-        thread, so it never jitters with the finger.
+        The slim bar: the page color fades in as the big title folds away,
+        then search and sort join it once the header's own row has gone.
       */}
-      <Animated.View
-        pointerEvents={isTopBarShown ? 'box-none' : 'none'}
-        importantForAccessibility={isTopBarShown ? 'auto' : 'no-hide-descendants'}
+      <View
+        pointerEvents="box-none"
         style={[
-          styles.libraryTopBar,
-          { paddingTop: insets.top + 8, paddingHorizontal: Number(paddingHorizontal) },
-          topBarStyle,
+          styles.librarySlimBar,
+          { height: slimBarHeight, paddingTop: insets.top, paddingHorizontal: Number(paddingHorizontal) },
         ]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={searchText ? `Search: ${searchText}. Edit search` : `Search ${view}`}
-          onPress={jumpToSearch}
-          style={[styles.searchPill, styles.librarySearchField]}
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.librarySlimBack, slimBackStyle]} />
+        <Animated.Text
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.librarySlimTitle, slimTitleStyle]}
         >
-          <ControlIcon name="search" size={18} tone="muted" />
-          <Text
-            numberOfLines={1}
-            style={[styles.libraryTopBarText, searchText.length > 0 && styles.libraryTopBarQuery]}
+          Library
+        </Animated.Text>
+        <Animated.View
+          pointerEvents={areToolsShown ? 'auto' : 'none'}
+          importantForAccessibility={areToolsShown ? 'auto' : 'no-hide-descendants'}
+          style={[styles.librarySlimTools, toolsStyle]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={searchText ? `Search: ${searchText}. Edit search` : `Search ${view}`}
+            onPress={jumpToSearch}
+            style={({ pressed }) => [styles.librarySlimTool, pressed && styles.libraryActionPressed]}
           >
-            {searchText || searchPlaceholder}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={sortButtonLabel}
-          onPress={openSortSheet}
-          style={({ pressed }) => [styles.libraryTopBarSort, pressed && styles.libraryActionPressed]}
-        >
-          <ControlIcon name={shownDirection === 'ascending' ? 'sort-up' : 'sort-down'} size={16} tone="accent" />
-        </Pressable>
-      </Animated.View>
-      {positions.length > 1 && (
+            <ControlIcon name="search" size={18} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={sortButtonLabel}
+            onPress={openSortSheet}
+            style={({ pressed }) => [styles.librarySlimTool, pressed && styles.libraryActionPressed]}
+          >
+            <ControlIcon name={shownDirection === 'ascending' ? 'sort-up' : 'sort-down'} size={16} tone="accent" />
+          </Pressable>
+        </Animated.View>
+      </View>
+
+      {positions.length > 1 && !isSelecting && (
         <AlphabetIndex
           positions={positions}
           onJump={jumpTo}
@@ -949,6 +1170,62 @@ export function LibraryTab({
           bottom={Number(paddingBottom)}
         />
       )}
+
+      {/* Selecting: a count with Cancel and Select all on top, the actions where the dock was. */}
+      {isSelecting && (
+        <Animated.View
+          entering={TOP_IN}
+          exiting={TOP_OUT}
+          style={[styles.librarySelectBar, { height: slimBarHeight, paddingTop: insets.top }]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSelection(null)}
+            hitSlop={8}
+            style={({ pressed }) => [styles.librarySelectButton, pressed && styles.libraryActionPressed]}
+          >
+            <Text style={styles.librarySelectButtonText}>Cancel</Text>
+          </Pressable>
+          <Text accessibilityLiveRegion="polite" style={styles.librarySelectCount}>
+            {selectedCount.toLocaleString()} selected
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              hapticSelection();
+              setSelection(new Set(filteredTracks.map((track) => track.id)));
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [styles.librarySelectButton, pressed && styles.libraryActionPressed]}
+          >
+            <Text style={styles.librarySelectButtonText}>Select all</Text>
+          </Pressable>
+        </Animated.View>
+      )}
+      {isSelecting && (
+        <Animated.View
+          entering={BAR_IN}
+          exiting={BAR_OUT}
+          accessibilityRole="toolbar"
+          accessibilityLabel={`${selectedCount} selected songs`}
+          style={[styles.librarySelectActions, { bottom: insets.bottom + 14 }]}
+        >
+          <SelectAction icon="play" label="Play" onPress={() => endSelectionWith((list) => onPlayAll(list, false, 'Library'))} />
+          <SelectAction icon="play-next" label="Play next" onPress={() => endSelectionWith(playNext)} />
+          <SelectAction icon="queue-add" label="Queue" onPress={() => endSelectionWith(addToQueue)} />
+          <SelectAction
+            icon="playlist-add"
+            label="Playlist"
+            onPress={() => {
+              const list = selectedTracks;
+              setSelection(null);
+              setPickerTracks(list);
+            }}
+          />
+          <SelectAction icon="delete" label="Delete" danger onPress={() => endSelectionWith(onDeleteTracks)} />
+        </Animated.View>
+      )}
+
       <SortSheet
         visible={isSortSheetOpen}
         title={`Sort ${view}`}
@@ -958,6 +1235,77 @@ export function LibraryTab({
         onChangeSort={changeSort}
         onClose={() => setIsSortSheetOpen(false)}
       />
+      {/* Hold an album or artist: play it, queue it, or add it to a playlist. */}
+      <Sheet
+        visible={groupMenu !== null}
+        eyebrow={groupKind}
+        title={groupMenu?.title ?? ''}
+        onClose={() => setGroupMenu(null)}
+      >
+        {groupMenu && (
+          <View style={styles.sheetList}>
+            <SheetRow
+              icon={<ControlIcon name="play" size={18} tone="accent" />}
+              label="Play"
+              onPress={() => closeGroupMenu(() => onPlayAll(playableOf(groupMenu), false, groupMenu.title))}
+            />
+            <SheetRow
+              icon={<ControlIcon name="shuffle" size={18} tone="accent" />}
+              label="Shuffle"
+              onPress={() => closeGroupMenu(() => onPlayAll(playableOf(groupMenu), true, groupMenu.title))}
+            />
+            <SheetRow
+              icon={<ControlIcon name="play-next" size={18} tone="accent" />}
+              label="Play next"
+              onPress={() => closeGroupMenu(() => playNext(groupMenu.tracks))}
+            />
+            <SheetRow
+              icon={<ControlIcon name="queue-add" size={18} tone="accent" />}
+              label="Add to queue"
+              onPress={() => closeGroupMenu(() => addToQueue(groupMenu.tracks))}
+            />
+            <SheetRow
+              icon={<ControlIcon name="playlist-add" size={18} tone="accent" />}
+              label="Add to playlist"
+              onPress={() => {
+                const list = groupMenu.tracks;
+                setGroupMenu(null);
+                // The menu fades out before the picker comes up (two sheets clash on Android).
+                setTimeout(() => setPickerTracks(list), 260);
+              }}
+            />
+          </View>
+        )}
+      </Sheet>
+      <PlaylistPickerSheet tracks={pickerTracks} onClose={() => setPickerTracks(null)} />
     </View>
+  );
+}
+
+function SelectAction({
+  icon,
+  label,
+  danger = false,
+  onPress,
+}: {
+  icon: 'play' | 'play-next' | 'queue-add' | 'playlist-add' | 'delete';
+  label: string;
+  danger?: boolean;
+  onPress: () => void;
+}) {
+  const styles = useAppStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label === 'Queue' ? 'Add to queue' : label === 'Playlist' ? 'Add to playlist' : label}
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.librarySelectAction, pressed && styles.libraryActionPressed]}
+    >
+      <ControlIcon name={icon} size={20} tone={danger ? 'muted' : 'accent'} />
+      <Text style={[styles.librarySelectActionText, danger && styles.sheetRowDanger]}>{label}</Text>
+    </Pressable>
   );
 }

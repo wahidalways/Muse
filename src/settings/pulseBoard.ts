@@ -5,7 +5,20 @@ import type { WeekStart } from '../history/stats';
  * runtime imports, so `scripts/check-stats.mjs` can run it in plain Node.
  */
 
-export type WidgetId = 'recap' | 'mixes' | 'jump' | 'week' | 'goal' | 'streak' | 'artist' | 'hour' | 'repeat' | 'genre' | 'explore';
+export type WidgetId =
+  | 'recap'
+  | 'mixes'
+  | 'jump'
+  | 'week'
+  | 'goal'
+  | 'streak'
+  | 'artist'
+  | 'hour'
+  | 'repeat'
+  | 'album'
+  | 'session'
+  | 'genre'
+  | 'explore';
 export type WidgetSize = 'square' | 'wide';
 export type BoardItem = { id: WidgetId; on: boolean; size: WidgetSize };
 
@@ -20,23 +33,29 @@ export const WIDGETS: { id: WidgetId; name: string; note?: string; sizes: Widget
   { id: 'artist', name: 'Top artist', note: 'Last 30 days', sizes: ['square', 'wide'] },
   { id: 'hour', name: 'Peak hour', note: 'Last 30 days', sizes: ['square', 'wide'] },
   { id: 'repeat', name: 'On repeat', note: 'Last 30 days', sizes: ['wide', 'square'] },
+  { id: 'album', name: 'Top album', note: 'Last 30 days', sizes: ['square'] },
+  { id: 'session', name: 'Longest session', note: 'Last 30 days', sizes: ['square'] },
   { id: 'genre', name: 'Genre mix', note: 'Last 30 days', sizes: ['square', 'wide'] },
-  { id: 'explore', name: 'Explorer', note: 'Last 30 days', sizes: ['square', 'wide'] },
+  { id: 'explore', name: 'Explorer', note: 'Your whole library', sizes: ['square', 'wide'] },
 ];
 
 export type PulseSettings = {
   board: BoardItem[];
   weekStart: WeekStart;
-  /** Day key of the recap week last opened (its New dot goes) and last hidden with ×. */
+  /** Day key of the recap week last opened (its New dot goes). */
   recapSeen: string | null;
-  recapHidden: string | null;
+  /** Day key of the recap week opened with Show. Every other week's recap sits folded to a slim row. */
+  recapOpen: string | null;
+  /** Day key of the day the goal moment last played, so it plays once a day. */
+  goalCelebrated: string | null;
 };
 
 export const DEFAULT_PULSE: PulseSettings = {
   board: WIDGETS.map((widget) => ({ id: widget.id, on: true, size: widget.sizes[0] })),
   weekStart: 6,
   recapSeen: null,
-  recapHidden: null,
+  recapOpen: null,
+  goalCelebrated: null,
 };
 
 const WEEK_STARTS: WeekStart[] = [6, 0, 1];
@@ -49,7 +68,7 @@ export function parsePulse(value: unknown): PulseSettings | null {
   if (typeof value !== 'object' || value === null) {
     return null;
   }
-  const saved = value as { board?: unknown; weekStart?: unknown; recapSeen?: unknown; recapHidden?: unknown };
+  const saved = value as { board?: unknown; weekStart?: unknown; recapSeen?: unknown; recapOpen?: unknown; goalCelebrated?: unknown };
   const board: BoardItem[] = [];
   if (Array.isArray(saved.board)) {
     saved.board.forEach((entry) => {
@@ -72,7 +91,8 @@ export function parsePulse(value: unknown): PulseSettings | null {
     board,
     weekStart: WEEK_STARTS.includes(saved.weekStart as WeekStart) ? (saved.weekStart as WeekStart) : DEFAULT_PULSE.weekStart,
     recapSeen: typeof saved.recapSeen === 'string' ? saved.recapSeen : null,
-    recapHidden: typeof saved.recapHidden === 'string' ? saved.recapHidden : null,
+    recapOpen: typeof saved.recapOpen === 'string' ? saved.recapOpen : null,
+    goalCelebrated: typeof saved.goalCelebrated === 'string' ? saved.goalCelebrated : null,
   };
 }
 

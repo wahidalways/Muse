@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 // The gesture library's ScrollView lets a handle's drag win over scrolling the list.
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { Sheet } from '../../components/Sheet';

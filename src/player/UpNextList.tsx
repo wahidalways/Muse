@@ -33,6 +33,7 @@ export function UpNextList({
   onSelect,
   onMove,
   onRemove,
+  removeLabel = 'Remove from Up Next',
 }: {
   /** Upcoming songs, in play order. */
   tracks: MusicTrack[];
@@ -41,6 +42,8 @@ export function UpNextList({
   onSelect: (queueIndex: number) => void;
   onMove: (fromQueueIndex: number, toQueueIndex: number) => void;
   onRemove: (queueIndex: number) => void;
+  /** What screen readers call the swipe-away action. */
+  removeLabel?: string;
 }) {
   const styles = useAppStyles();
   // Drag state lives on the UI thread, shared by every row: which row is
@@ -88,6 +91,7 @@ export function UpNextList({
             onSelect={onSelect}
             onMove={move}
             onRemove={onRemove}
+            removeLabel={removeLabel}
           />
         );
       })}
@@ -95,7 +99,8 @@ export function UpNextList({
   );
 }
 
-function QueueRow({
+/** One Up Next row; the full player's Up Next lists these in a recycling list. */
+export function QueueRow({
   track,
   index,
   count,
@@ -107,6 +112,9 @@ function QueueRow({
   onSelect,
   onMove,
   onRemove,
+  removeLabel,
+  plain = false,
+  onLift,
 }: {
   track: MusicTrack;
   index: number;
@@ -119,12 +127,26 @@ function QueueRow({
   onSelect: (queueIndex: number) => void;
   onMove: (from: number, to: number) => void;
   onRemove: (queueIndex: number) => void;
+  removeLabel: string;
+  /**
+   * The full player's Up Next: no card behind the rows (they sit on the
+   * player's tinted background), and the Remove strip rides in from the
+   * right edge as the row slides, instead of waiting under it.
+   */
+  plain?: boolean;
+  /** Told which row is lifted (or -1), for a list that must raise the row's cell. */
+  onLift?: (index: number) => void;
 }) {
   const styles = useAppStyles();
   const { width } = useWindowDimensions();
   const swipeX = useSharedValue(0);
   /** Row height: it folds to 0 after a swipe, so the rows below glide up. */
   const rowHeight = useSharedValue(QUEUE_ROW_HEIGHT);
+  // A recycled row (or the next song sliding into a removed one's slot) starts whole.
+  useLayoutEffect(() => {
+    swipeX.set(0);
+    rowHeight.set(QUEUE_ROW_HEIGHT);
+  }, [queueIndex, rowHeight, swipeX, track.id]);
 
   const drag = usePanGesture({
     // The handle is only for dragging, so it starts at once.
@@ -132,6 +154,9 @@ function QueueRow({
     onActivate: () => {
       'worklet';
       scheduleOnRN(hapticSelection);
+      if (onLift) {
+        scheduleOnRN(onLift, index);
+      }
       dragIndex.set(index);
       hoverIndex.set(index);
       dragY.set(0);
@@ -217,19 +242,34 @@ function QueueRow({
   return (
     <Animated.View style={[styles.queueRow, rowStyle, heightStyle]}>
       {/* Shows through as the row slides left. */}
-      <View style={styles.queueRowRemove} accessible={false}>
-        <ControlIcon name="delete" size={18} tone="muted" />
-        <Text style={styles.queueRowRemoveText}>Remove</Text>
-      </View>
+      {!plain && (
+        <View style={styles.queueRowRemove} accessible={false}>
+          <ControlIcon name="delete" size={18} tone="muted" />
+          <Text style={styles.queueRowRemoveText}>Remove</Text>
+        </View>
+      )}
       <GestureDetector gesture={swipe}>
-        <Animated.View style={[styles.queueRowContent, !last && styles.queueRowDivider, contentStyle]}>
+        <Animated.View
+          style={[
+            styles.queueRowContent,
+            plain ? styles.queueRowContentPlain : !last && styles.queueRowDivider,
+            contentStyle,
+          ]}
+        >
+          {plain && (
+            // Glued to the row's right edge, so it fills exactly the space the row slides out of.
+            <View style={styles.queueRowRemoveTrailing} accessible={false}>
+              <ControlIcon name="delete" size={18} tone="muted" />
+              <Text style={styles.queueRowRemoveText}>Remove</Text>
+            </View>
+          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Play now: ${track.title}${track.artist ? ` by ${track.artist}` : ''}`}
             accessibilityActions={[
               ...(index > 0 ? [{ name: 'moveUp', label: 'Move up' }] : []),
               ...(index < count - 1 ? [{ name: 'moveDown', label: 'Move down' }] : []),
-              { name: 'remove', label: 'Remove from Up Next' },
+              { name: 'remove', label: removeLabel },
             ]}
             onAccessibilityAction={(event) => {
               if (event.nativeEvent.actionName === 'moveUp') onMove(index, index - 1);
