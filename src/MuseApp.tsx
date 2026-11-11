@@ -83,6 +83,8 @@ import { PageVisible, TabLayer } from './components/TabLayer';
 import { setGlassChoice, useGlassStyle } from './theme/glassStyle';
 import { SearchScreen } from './screens/SearchScreen';
 import { LaunchScreen } from './components/LaunchScreen';
+import { WelcomeNote } from './components/WelcomeNote';
+import { markWelcomeSeen, useWelcomeDue } from './settings/welcome';
 import { CloseIcon } from './components/icons';
 import {
   DEFAULT_LIBRARY_VIEW,
@@ -262,6 +264,8 @@ export function MuseApp({
   }, [isLaunchPulsing, isLaunchShown, screen]);
   /** The launch screen is gone, or never came: Home may play its entrance. */
   const isLaunchTimeUp = screen !== 'starting' && !isLaunchShown;
+  /** Muse's one-time hello covers the app: after setup, or on the first open of an earlier setup. */
+  const isWelcomeShown = useWelcomeDue() && screen === 'app';
   // The splash hands over to the app, Welcome, or the pulsing launch screen.
   // App's saved theme is read before this restore's reads (one storage
   // queue), so the app never first shows in the wrong look.
@@ -1653,8 +1657,8 @@ export function MuseApp({
 
       <Animated.View
         style={[styles.mainScroll, recedeStyle]}
-        // Hidden from screen readers while the player sheet covers it.
-        importantForAccessibility={fullPlayerTrack ? 'no-hide-descendants' : 'auto'}
+        // Hidden from screen readers while the player sheet or the hello covers it.
+        importantForAccessibility={fullPlayerTrack || isWelcomeShown ? 'no-hide-descendants' : 'auto'}
       >
         <BlurTargetView ref={blurTarget} style={styles.mainScroll}>
         <GestureDetector gesture={tabSwipe}>
@@ -1704,10 +1708,10 @@ export function MuseApp({
                         currentTrack={currentTrack}
                         isPlaying={isPlaying}
                         queueSource={queueSource}
-                        // On screen: the launch screen is gone and Home is the page showing.
-                        revealed={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen}
+                        // On screen: the launch screen and the hello are gone, and Home is the page showing.
+                        revealed={isLaunchTimeUp && !isWelcomeShown && screen === 'app' && activeTab === 'home' && !isSearchOpen}
                         // Can be seen right now: loops and live numbers only run then.
-                        active={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen && !isFullPlayerOpen && isAppActive}
+                        active={isLaunchTimeUp && !isWelcomeShown && screen === 'app' && activeTab === 'home' && !isSearchOpen && !isFullPlayerOpen && isAppActive}
                         contentContainerStyle={appPageContent}
                         onBarScroll={homeBarScrollAt}
                         onPlayTrack={playTrack}
@@ -2052,11 +2056,13 @@ export function MuseApp({
         onSelectTrackEnd={sleepAtTrackEnd}
         onCancelTimer={clearSleepTimer}
       />
+      {isWelcomeShown && <WelcomeNote songCount={tracks.length} onDone={markWelcomeSeen} />}
       {/* On top of everything while the saved library restores. */}
       {isLaunchShown && <LaunchScreen pulsing={isLaunchPulsing} />}
       <ConfirmSheet
         // Not while starting (the launch screen is up then): the sheet is a window of its own and would sit over Android's splash.
-        request={isLaunchShown ? null : crashNotice}
+        // Nor over the hello: a crash report can wait until it is closed.
+        request={isLaunchShown || isWelcomeShown ? null : crashNotice}
         onClose={() => {
           // Muse can rebuild this screen (after an icon switch); the notice stays gone.
           pendingCrashNotice = null;

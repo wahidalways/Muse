@@ -61,6 +61,8 @@ export function createSavedStore<T>(
 
   return {
     get: () => current,
+    /** True once the saved copy, or the lack of one, is known. */
+    loaded: () => loaded,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

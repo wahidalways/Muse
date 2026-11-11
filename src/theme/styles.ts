@@ -4508,6 +4508,13 @@ const styleDefinitions = {
     justifyContent: 'center',
     gap: 18,
   },
+  // Muse's one-time hello (WelcomeNote): facts under the greeting, the credit under the button.
+  welcomeFacts: {
+    marginTop: 22,
+  },
+  welcomeCredit: {
+    marginTop: 22,
+  },
   settingRowPressed: {
     opacity: 0.7,
   },
