@@ -758,6 +758,7 @@ function LookStep({
                       onSelectAccent(option.id);
                     }
                   }}
+                  hitSlop={5}
                   style={[styles.prefSwatchButton, { borderColor: isOn ? option.swatch : 'transparent' }]}
                 >
                   <View style={[styles.prefSwatch, { backgroundColor: option.swatch }]} />

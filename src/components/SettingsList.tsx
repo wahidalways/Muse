@@ -328,7 +328,7 @@ export function Segmented<T extends string>({
           >
             <Text
               numberOfLines={1}
-              style={[styles.statsSegmentLabel, selected && styles.statsSegmentLabelActive]}
+              style={[styles.statsSegmentLabel, styles.segmentedLabel, selected && styles.statsSegmentLabelActive]}
             >
               {option.label}
             </Text>

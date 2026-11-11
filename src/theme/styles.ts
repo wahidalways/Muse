@@ -1578,6 +1578,10 @@ const styleDefinitions = {
   statsSegmentLabelActive: {
     color: colors.lime,
   },
+  segmentedLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   statsSegmentChart: {
     marginTop: 4,
   },
@@ -4149,8 +4153,9 @@ const styleDefinitions = {
     marginLeft: 16,
   },
   // Settings pages: bold headings and rounder cards, set 14 from the screen edge like the dock.
+  /** Settings cards, titles and buttons start 16 from the screen edge; text inside them at 32. */
   settingsEdge: {
-    marginHorizontal: -10,
+    marginHorizontal: -8,
   },
   settingsHeader: {
     flexDirection: 'row',
@@ -4158,7 +4163,6 @@ const styleDefinitions = {
     justifyContent: 'space-between',
     gap: 12,
     marginTop: 26,
-    paddingHorizontal: 6,
   },
   settingsLede: {
     color: colors.muted,
@@ -4172,9 +4176,9 @@ const styleDefinitions = {
     marginTop: 16,
   },
   settingsRoundButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
@@ -4184,7 +4188,6 @@ const styleDefinitions = {
     alignItems: 'center',
     gap: 12,
     marginTop: 26,
-    paddingHorizontal: 6,
   },
   settingsPageSubtitle: {
     color: colors.muted,
@@ -4193,18 +4196,18 @@ const styleDefinitions = {
     paddingHorizontal: 6,
   },
   prefSectionLarge: {
-    marginTop: 28,
+    marginTop: 24,
   },
   prefSectionLargeUntitled: {
     marginTop: 14,
   },
   prefSectionHeaderLarge: {
     color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.4,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
     marginBottom: 8,
-    marginLeft: 6,
+    marginLeft: 16,
   },
   prefCardLarge: {
     borderRadius: 20,
@@ -4340,23 +4343,23 @@ const styleDefinitions = {
   },
   prefSwatches: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
+    justifyContent: 'space-between',
     marginTop: 8,
-    marginLeft: -7,
+    // The first and last circles line up with the text.
+    marginHorizontal: -4,
   },
   prefSwatchButton: {
-    width: 44,
-    height: 44,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+    borderRadius: 17,
     borderWidth: 2,
   },
   prefSwatch: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
   },
   // About: the app, its promises, and who made it.
   // Settings › Updates: the installed version, when it was checked, a status, one button.
