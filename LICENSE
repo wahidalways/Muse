@@ -1,37 +1,168 @@
 Muse License
+Version 1.0, 11 November 2026
 
 Copyright (c) 2026 wahidalways. All rights reserved.
 
-Muse is free. This license says what you may do with it, and what needs
-permission first. "Muse" means the app and everything in this repository:
-its code, design, name and icons.
+Muse is free for everyone to use. This license explains what you may do with
+Muse, what needs permission first, and the rules that protect you and the
+author. It is written in plain English on purpose.
 
-You may, for free:
 
-1. Download, install and use Muse on any number of devices, for any purpose.
-2. Share the official Muse APK (from this repository's Releases page) with
-   others, unchanged and for free.
-3. Read the code to learn from it, and build Muse from it for your own use.
-   Changing only build settings, such as the Expo account, is fine.
+1. Words used in this license
 
-You need written permission from wahidalways before you:
+"Muse" means the Muse app and everything in this repository
+(https://github.com/wahidalways/Muse): its source code, design, text,
+graphics, sounds, name and icons.
 
-1. Change Muse, or share or publish a changed version of it.
-2. Copy Muse's code, design, name or icons into another app or project.
-3. Sell Muse, charge money for it, add ads to it, or include it in anything
-   you sell.
+"The author" means wahidalways, who owns Muse.
 
-To ask for permission, open an issue at
-https://github.com/wahidalways/Muse/issues.
+"You" means anyone who gets, uses or reads Muse, and any company or group
+you act for.
 
-Ideas, bug reports and pull requests are welcome. By sending one, you agree
-that wahidalways may use it in Muse under any license.
+"The official APK" means an APK published on this repository's Releases page
+(https://github.com/wahidalways/Muse/releases).
 
-Muse uses open-source libraries. Each keeps its own license, and nothing
-here changes those licenses.
+"A changed version" means anything made by changing, adding to, removing
+from, translating or repackaging Muse, other than the build settings allowed
+in section 2.4.
 
-If you break these terms, your permission to use Muse ends.
+"Written permission" means a message from the author that clearly gives
+permission, such as a reply from the wahidalways account on GitHub.
+Permission covers only what it says.
 
-Muse is provided "as is", without warranty of any kind. To the extent the
-law allows, wahidalways is not liable for any loss or damage that comes
-from using Muse.
+
+2. What you may do, for free
+
+2.1 Use. Install and use Muse on any number of devices, for any purpose.
+    This includes businesses, schools and other organizations, and their
+    work devices.
+
+2.2 Share person to person. Give the official APK, unchanged and for free,
+    directly to people you know, for example by sending them the file.
+
+2.3 Read and learn. Read the source code to learn how Muse works.
+
+2.4 Build and change it for yourself. Build Muse from this source code, and
+    change it, for your own private use. Changing only build settings, such
+    as the Expo account, is fine. Keep changed code private: on your own
+    devices or in a private repository.
+
+2.5 Talk about Muse. Use the Muse name and icon to refer to Muse, for
+    example in reviews, articles, videos, tutorials and links to the
+    official page, as long as you do not suggest that the author made,
+    approved or supports your work.
+
+
+3. What needs written permission first
+
+Unless the author gives you written permission, you may not:
+
+3.1 Share or publish a changed version of Muse in any form. This includes a
+    public fork with changes and an APK built from changed code.
+
+3.2 Upload or offer Muse, even unchanged, on any website, app store,
+    file-sharing service or other public place, other than this repository.
+
+3.3 Sell Muse, charge money for it or for access to it, add ads to it,
+    collect payments through it, or include it in anything you sell, such
+    as phones sold with Muse already installed.
+
+3.4 Copy any part of Muse's code, design, text or graphics into another
+    app, website or project.
+
+3.5 Use the Muse name or icon for another app or product, for a changed
+    version, or in any way that could make people think something is
+    official Muse.
+
+3.6 Use Muse's code, design or other content to train, fine-tune or test an
+    AI or machine-learning model, or to build a dataset for one.
+
+3.7 Remove or change this license, or the copyright notice above, in any
+    copy of Muse's source code.
+
+
+4. Asking for permission
+
+To ask, open an issue at https://github.com/wahidalways/Muse/issues and
+explain what you want to do. The author may say yes, say no, or set
+conditions such as credit or payment. No answer means no permission.
+
+
+5. Bug reports, ideas and outside code
+
+Bug reports and ideas are welcome as GitHub issues. If you share an idea or
+other feedback, the author may use it freely, without owing you anything.
+Muse does not take outside code, so pull requests may be closed without
+review.
+
+
+6. GitHub
+
+GitHub's terms let anyone view and fork this repository on GitHub, and this
+license does not take that away. A fork may be kept as it is or for your own
+use, but publishing changes in it, or releasing builds from it, is covered
+by section 3.
+
+
+7. Open-source parts
+
+Muse is built with open-source libraries, such as React Native and Expo.
+Each library keeps its own license, and that license, not this one, covers
+the library. This license gives you no rights in those libraries beyond what
+their own licenses give.
+
+
+8. Fair use
+
+Nothing in this license limits what the law already lets you do without
+permission, such as fair use or fair dealing. For example, you may quote a
+short part of the code in a review or a lesson.
+
+
+9. No warranty
+
+Muse is provided "as is" and "as available", without any warranty, express
+or implied. This includes any warranty that it is fit for a particular
+purpose, works without errors, or keeps your data safe. You use Muse at your
+own risk, so keep your own backups of your music and of Muse's data.
+
+
+10. Limit of liability
+
+As far as the law allows, the author is not liable for any loss or damage
+that comes from using Muse, or from not being able to use it. This includes
+lost data, lost music files, harm to devices and lost profits, whatever the
+legal reason for the claim. Some places do not allow these limits, so they
+apply only as far as the law where you live allows.
+
+
+11. When your rights end
+
+If you break this license, your rights under it end automatically. If it is
+the first time, and you fully stop within 30 days after the author tells you
+about it, your rights come back as if they had never ended. Sections 9, 10,
+12 and 14 still apply after your rights end.
+
+
+12. Law and courts
+
+This license is governed by the laws of Bangladesh, and the courts of
+Bangladesh decide any dispute about it, except where the law where you live
+gives you, as a consumer, the right to use your own courts.
+
+
+13. New versions of this license
+
+The author may publish new versions of this license for future releases of
+Muse. Each release is covered by the license in this repository when that
+release came out. A new version never takes away rights you already had for
+an older release.
+
+
+14. Other terms
+
+This license, together with any written permission from the author, is the
+whole agreement about Muse. If a court finds part of it unenforceable, the
+rest stays in force, and that part applies as far as it can. If the author
+does not act on a breach right away, the author can still act on it later.
+All rights not given in this license are kept by the author.

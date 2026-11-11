@@ -167,14 +167,16 @@ linked to Apple or Deezer. Icons are [Ionicons](https://ionic.io/ionicons).
 
 ## License
 
-Muse is free to use and to share, but it is not open source. You may:
+Muse is free for everyone to use, but it is not open source. In short:
 
-- install and use Muse for any purpose,
-- share the official APK, unchanged and for free,
-- read the code and build it for your own use.
+- **Free:** install and use Muse for any purpose, at home or at work, and
+  give the official APK to people you know.
+- **Free:** read the code, and build or change it for your own private use.
+- **Ask first:** sharing a changed version, uploading Muse anywhere else,
+  selling it, reusing its code, design, name or icon, or using it to train
+  AI.
 
-Changing Muse, reusing its code, design or name, or selling it needs written
-permission from wahidalways.
-[Open an issue](https://github.com/wahidalways/Muse/issues) to ask. Bug
-reports, ideas and pull requests are welcome too. The full terms are in
-[LICENSE](LICENSE).
+Bug reports and ideas are welcome as
+[issues](https://github.com/wahidalways/Muse/issues), and that is also where
+to ask for permission. Muse doesn't take outside code, so pull requests may
+be closed. The full terms are in [LICENSE](LICENSE).
