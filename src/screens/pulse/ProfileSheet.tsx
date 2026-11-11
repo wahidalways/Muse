@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getDocumentAsync } from 'expo-document-picker';
@@ -89,6 +89,8 @@ function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirt
   const [draft, setDraft] = useState<Profile>(saved);
   // A photo picked in this sheet still sits in the picker's cache until Save copies it in.
   const [pickedPhoto, setPickedPhoto] = useState(false);
+  // Surprise me picks a character only until you choose a picture: one saved before, or a tap here.
+  const pictureChosen = useRef(saved.photoUri !== null || saved.preset >= 0);
   const [isTyping, setIsTyping] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -113,6 +115,7 @@ function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirt
               result.canceled ? null : (result.assets[0]?.uri ?? null),
             );
       if (uri) {
+        pictureChosen.current = true;
         setDraft((current) => ({ ...current, photoUri: uri }));
         setPickedPhoto(true);
       }
@@ -122,17 +125,19 @@ function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirt
   };
   const pickPhoto = () => void pickPicture('photos');
 
-  // Each shuffle of the dice: a new funky name, and a new character unless a photo is chosen.
+  // Each shuffle of the dice: a new funky name, and a new character until you choose a picture.
   const surprise = () => {
+    const keepPicture = pictureChosen.current;
     setDraft((current) => ({
       ...current,
       name: funkyName(current.name),
-      preset: current.photoUri ? current.preset : Math.floor(Math.random() * PRESETS.length),
+      preset: keepPicture ? current.preset : Math.floor(Math.random() * PRESETS.length),
     }));
   };
 
   const choosePreset = (preset: number) => {
     hapticSelection();
+    pictureChosen.current = true;
     setDraft((current) => ({ ...current, preset, photoUri: null }));
     setPickedPhoto(false);
   };
@@ -183,7 +188,11 @@ function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirt
           </View>
         </View>
 
-        <Text style={styles.pulseSectionLabel}>Name</Text>
+        {/* Surprise me sits on the label row, clear of the field, so the name keeps the whole width. */}
+        <View style={styles.profileLabelRow}>
+          <Text style={[styles.pulseSectionLabel, styles.profileLabelInRow]}>Name</Text>
+          <SurpriseButton onRoll={surprise} color={accent} label="Surprise me" labelColor={ink} style={styles.profileSurprise} />
+        </View>
         <View style={[styles.profileField, isTyping && styles.profileFieldFocus]}>
           <TextInput
             accessibilityLabel="Your name"
@@ -199,7 +208,6 @@ function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirt
             returnKeyType="done"
             style={styles.profileInput}
           />
-          <SurpriseButton onRoll={surprise} color={accent} />
           {draft.name.length > 0 ? (
             <>
               <Text style={styles.profileCount}>

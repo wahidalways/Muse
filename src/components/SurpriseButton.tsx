@@ -77,7 +77,7 @@ export function SurpriseButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Surprise me"
-      accessibilityHint="Picks a random funky name and picture"
+      accessibilityHint="Picks a random funky name, and a picture if you have not chosen one"
       hitSlop={label ? 4 : 10}
       onPress={roll}
       style={({ pressed }) => [local.button, style, pressed && local.pressed]}

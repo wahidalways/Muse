@@ -2687,6 +2687,26 @@ const styleDefinitions = {
   profileFieldFocus: {
     borderColor: colors.lime,
   },
+  // Name's label with Surprise me on its right. The label text stays where it was; the field sits 9 lower.
+  profileLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  profileLabelInRow: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  profileSurprise: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   profileInput: {
     flex: 1,
     paddingVertical: 12,

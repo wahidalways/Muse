@@ -952,6 +952,8 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
   const profile = useProfile();
   const [name, setName] = useState(profile.name);
   const [photoError, setPhotoError] = useState('');
+  // Surprise me picks a character only until a picture is chosen: one set before this step opened, or a tap here.
+  const pictureChosen = useRef(profile.photoUri !== null || profile.preset >= 0);
   // Both are Android's own pickers: Muse gets only the one picture chosen, so no permission is asked.
   const pickPicture = async (from: 'photos' | 'files') => {
     setPhotoError('');
@@ -966,6 +968,7 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
             );
       if (uri) {
         await setProfilePhoto(uri);
+        pictureChosen.current = true;
       }
     } catch {
       setPhotoError('Could not use that picture. Please try another one.');
@@ -980,8 +983,8 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
     if (final) {
       setProfileName(next);
     }
-    // A matching random avatar too, unless they already chose their own picture.
-    if (!profile.photoUri) {
+    // A matching random avatar too, until they choose a picture themselves.
+    if (!pictureChosen.current) {
       setProfilePreset(Math.floor(Math.random() * PRESETS.length));
     }
   };
@@ -1021,6 +1024,7 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
           accessibilityState={{ checked: profile.preset < 0 && !isPhoto }}
           onPress={() => {
             hapticSelection();
+            pictureChosen.current = true;
             clearProfileImage();
           }}
           style={[local.avatarCell, { backgroundColor: tokens.card, borderColor: profile.preset < 0 && !isPhoto ? tokens.text : 'transparent' }]}
@@ -1037,6 +1041,7 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
               accessibilityState={{ checked: isOn }}
               onPress={() => {
                 hapticSelection();
+                pictureChosen.current = true;
                 setProfilePreset(index);
               }}
               style={[local.avatarCell, { borderColor: isOn ? tokens.text : 'transparent' }]}
