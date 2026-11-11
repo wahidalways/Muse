@@ -156,7 +156,8 @@ function Story({ recap, tracksById, goalSeconds, onPlayTrack, onClose, onShare }
   }, [index]);
 
   const fill = useAnimatedStyle(() => ({ transform: [{ scaleX: progress.get() }] }));
-  const slide = slides[index];
+  // Capped: a rescan or a new week can drop slides while the story is open.
+  const slide = slides[Math.min(index, slides.length - 1)];
 
   return (
     <View style={[story.screen, { backgroundColor: slide.color, paddingTop: insets.top + 10, paddingBottom: insets.bottom }]}>

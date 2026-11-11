@@ -116,7 +116,8 @@ export function TimeChart({
   const [selected, setSelected] = useState<number | null>(null);
   const count = data.length;
   const max = Math.max(1, goal ?? 0, ...data.map((point) => point.value));
-  const active = selected ?? defaultIndex ?? count - 1;
+  // Capped: a tap kept from a longer range (one chart switches ranges) must not point past the data.
+  const active = Math.min(selected ?? defaultIndex ?? count - 1, count - 1);
   const plotTop = 14;
   const plotHeight = height - plotTop;
   const yFor = (value: number) => plotTop + plotHeight - (value / max) * plotHeight;
