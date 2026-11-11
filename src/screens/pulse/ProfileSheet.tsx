@@ -188,41 +188,42 @@ function Editor({ onSaved, onDirty, onCustomize }: { onSaved: () => void; onDirt
           </View>
         </View>
 
-        {/* Surprise me sits on the label row, clear of the field, so the name keeps the whole width. */}
-        <View style={styles.profileLabelRow}>
-          <Text style={[styles.pulseSectionLabel, styles.profileLabelInRow]}>Name</Text>
+        <Text style={styles.pulseSectionLabel}>Name</Text>
+        {/* Surprise me beside the field, as in setup. */}
+        <View style={styles.profileNameRow}>
+          <View style={[styles.profileField, isTyping && styles.profileFieldFocus]}>
+            <TextInput
+              accessibilityLabel="Your name"
+              value={draft.name}
+              onChangeText={(text) => setDraft((current) => ({ ...current, name: text.slice(0, NAME_LIMIT) }))}
+              onFocus={() => setIsTyping(true)}
+              onBlur={() => setIsTyping(false)}
+              maxLength={NAME_LIMIT}
+              placeholder="Your name"
+              placeholderTextColor={muted}
+              autoComplete="nickname"
+              autoCapitalize="words"
+              returnKeyType="done"
+              style={styles.profileInput}
+            />
+            {/* Count and clear only while typing, so otherwise the name gets the whole field. */}
+            {isTyping && draft.name.length > 0 ? (
+              <>
+                <Text style={styles.profileCount}>
+                  {draft.name.length}/{NAME_LIMIT}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear name"
+                  hitSlop={10}
+                  onPress={() => setDraft((current) => ({ ...current, name: '' }))}
+                >
+                  <Ionicons accessible={false} name="close-circle" size={18} color={muted} />
+                </Pressable>
+              </>
+            ) : null}
+          </View>
           <SurpriseButton onRoll={surprise} color={accent} label="Surprise me" labelColor={ink} style={styles.profileSurprise} />
-        </View>
-        <View style={[styles.profileField, isTyping && styles.profileFieldFocus]}>
-          <TextInput
-            accessibilityLabel="Your name"
-            value={draft.name}
-            onChangeText={(text) => setDraft((current) => ({ ...current, name: text.slice(0, NAME_LIMIT) }))}
-            onFocus={() => setIsTyping(true)}
-            onBlur={() => setIsTyping(false)}
-            maxLength={NAME_LIMIT}
-            placeholder="What should Home call you?"
-            placeholderTextColor={muted}
-            autoComplete="nickname"
-            autoCapitalize="words"
-            returnKeyType="done"
-            style={styles.profileInput}
-          />
-          {draft.name.length > 0 ? (
-            <>
-              <Text style={styles.profileCount}>
-                {draft.name.length}/{NAME_LIMIT}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear name"
-                hitSlop={10}
-                onPress={() => setDraft((current) => ({ ...current, name: '' }))}
-              >
-                <Ionicons accessible={false} name="close-circle" size={18} color={muted} />
-              </Pressable>
-            </>
-          ) : null}
         </View>
 
         <Text style={styles.pulseSectionLabel}>Picture</Text>
