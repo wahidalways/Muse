@@ -53,6 +53,7 @@ import { coverColor } from '../library/covers';
 import { hapticSelection } from '../utils/haptics';
 import { ArtStyleSheet } from '../components/ArtStyleSheet';
 import { AppIconMark, AppIconSheet, appIconName } from '../components/AppIconSheet';
+import { PageBar } from '../components/PageBar';
 import { SKIN_SAMPLE, SkinPreview, skinLabel } from '../player/PlayerSkinSheet';
 import { MIN_TINT_COLORFULNESS } from '../player/FullPlayer';
 import { tintTones, type CoverColor } from '../theme/dynamicAccent';
@@ -302,7 +303,13 @@ export function SettingsTab(props: Props) {
           <SearchPage onBack={props.onBack} onPick={goTo} />
         ) : page ? (
           <>
-            <PageHeader title={PAGES[page].title} subtitle={PAGES[page].subtitle} onBack={props.onBack} />
+            <PageBar
+              title={PAGES[page].title}
+              subtitle={PAGES[page].subtitle}
+              onBack={props.onBack}
+              backLabel="Back to Settings"
+              style={styles.settingsPageHeader}
+            />
             <PageBody {...props} page={page} />
           </>
         ) : (
@@ -313,27 +320,12 @@ export function SettingsTab(props: Props) {
   );
 }
 
-function RoundButton({ icon, label, onPress }: { icon: 'search' | 'chevron-back'; label: string; onPress: () => void }) {
+function RoundButton({ icon, label, onPress }: { icon: 'search'; label: string; onPress: () => void }) {
   const styles = useAppStyles();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={4} onPress={onPress} style={styles.settingsRoundButton}>
       <Ionicons accessible={false} name={icon} size={opticalSize(icon, 22)} color={String(styles.title.color)} />
     </Pressable>
-  );
-}
-
-function PageHeader({ title, subtitle, onBack }: { title: string; subtitle: string; onBack: () => void }) {
-  const styles = useAppStyles();
-  return (
-    <>
-      <View style={styles.settingsPageHeader}>
-        <RoundButton icon="chevron-back" label="Back to Settings" onPress={onBack} />
-      </View>
-      <Text accessibilityRole="header" style={[styles.settingsTitle, { marginTop: 14, paddingHorizontal: 6 }]}>
-        {title}
-      </Text>
-      <Text style={styles.settingsPageSubtitle}>{subtitle}</Text>
-    </>
   );
 }
 
@@ -386,12 +378,7 @@ function SearchPage({ onBack, onPick }: { onBack: () => void; onPick: (id: strin
     : POPULAR.map((id) => SEARCH_INDEX.find(([key]) => key === id)).filter((entry) => entry !== undefined);
   return (
     <>
-      <View style={styles.settingsPageHeader}>
-        <RoundButton icon="chevron-back" label="Back to Settings" onPress={onBack} />
-      </View>
-      <Text accessibilityRole="header" style={[styles.settingsTitle, { marginTop: 14, paddingHorizontal: 6 }]}>
-        Search
-      </Text>
+      <PageBar title="Search" onBack={onBack} backLabel="Back to Settings" style={styles.settingsPageHeader} />
       {/* SearchInput is only the inside of a field; the pill (a row) is supplied here, as in Library. */}
       <View
         style={[

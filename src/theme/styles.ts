@@ -3202,8 +3202,30 @@ const styleDefinitions = {
     backgroundColor: colors.surface,
     borderRadius: 20,
   },
-  collPageTitle: {
-    marginTop: 18,
+  /** Settings pages and Collections lists: the back button and the title in one row (PageBar). */
+  pageBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pageBarText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pageBarTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.6,
+    lineHeight: 29,
+  },
+  pageBarSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  collPageBar: {
+    marginTop: 4,
   },
   collListMeta: {
     marginTop: 22,

@@ -74,6 +74,7 @@ import { SearchInput } from '../components/SearchInput';
 import { Sheet, SheetRow } from '../components/Sheet';
 import { SortSheet, type SortChoice } from '../components/SortSheet';
 import { ControlIcon, type ControlIconName } from '../components/icons';
+import { PageBar } from '../components/PageBar';
 import { starsLabel } from '../components/StarRating';
 import { UpNextList } from '../player/UpNextList';
 import { formatListeningTime, formatTimeAgo } from '../utils/format';
@@ -676,10 +677,7 @@ function CollectionsHome({
 
   const header = all ? (
     <View>
-      <PageTop onPop={onPop} />
-      <Text accessibilityRole="header" style={[styles.libraryHeading, styles.collPageTitle]}>
-        Playlists
-      </Text>
+      <PageBar title="Playlists" onBack={onPop} style={styles.collPageBar} />
       <View style={[styles.libraryListMeta, styles.collListMeta]}>
         <Text style={styles.libraryListMetaText}>{plural(playlists.length, 'playlist')}</Text>
         {playlists.length > 1 ? sort.control : null}
@@ -991,10 +989,7 @@ function GroupsPage({
         scrollEventThrottle={32}
         ListHeaderComponent={
           <View>
-            <PageTop onPop={onPop} />
-            <Text accessibilityRole="header" style={[styles.libraryHeading, styles.collPageTitle]}>
-              {title}
-            </Text>
+            <PageBar title={title} onBack={onPop} style={styles.collPageBar} />
             <View style={[styles.libraryListMeta, styles.collListMeta]}>
               <Text style={styles.libraryListMetaText}>{plural(groups.length, one)}</Text>
               {groups.length > 1 ? sort.control : null}
