@@ -1,5 +1,6 @@
 package expo.modules.musemetadata
 
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.ContentResolver
@@ -141,6 +142,13 @@ class MuseAudioMetadataModule : Module() {
       if (previous !is CrashRecorder) {
         Thread.setDefaultUncaughtExceptionHandler(CrashRecorder(crashFile(context), previous))
       }
+    }
+
+    // Many 90/120 Hz phones keep apps they do not know at 60 Hz, which halves
+    // the frames of every scroll and animation. Each time Muse comes to the
+    // front (Expo also sends this for the first launch), it asks again.
+    OnActivityEntersForeground {
+      appContext.currentActivity?.let(::preferFastestRefreshRate)
     }
 
     // The last crash's report, once (it is deleted as it is read); null when there was none.
@@ -1203,6 +1211,42 @@ class MuseAudioMetadataModule : Module() {
 }
 
 private fun crashFile(context: Context) = File(context.filesDir, "last-crash.txt")
+
+/**
+ * Asks for the screen's fastest refresh rate at its current resolution while
+ * this activity is on screen, but only when the switch is seamless. Android
+ * still caps it for battery saver, heat, or a 60 Hz choice in the phone's own
+ * display settings.
+ */
+private fun preferFastestRefreshRate(activity: Activity) {
+  // Window settings belong to the UI thread; an odd display just keeps Android's choice.
+  activity.runOnUiThread { runCatching { applyFastestRefreshRate(activity) } }
+}
+
+private fun applyFastestRefreshRate(activity: Activity) {
+  // Some mode switches blank the screen for a moment. Android 12 is the first
+  // to say which ones do not, so older phones keep Android's own choice.
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+    return
+  }
+  val window = activity.window ?: return
+  val display = activity.display ?: return
+  val current = display.mode
+  val fastest = display.supportedModes
+    .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+    .maxByOrNull { it.refreshRate } ?: return
+  // Already there, or a switch Android lists as seamless from here; otherwise leave it.
+  val isSeamless = fastest.modeId == current.modeId ||
+    current.alternativeRefreshRates.any { abs(it - fastest.refreshRate) < 0.1f }
+  if (!isSeamless) {
+    return
+  }
+  val attributes = window.attributes
+  if (attributes.preferredDisplayModeId != fastest.modeId) {
+    attributes.preferredDisplayModeId = fastest.modeId
+    window.attributes = attributes
+  }
+}
 
 /** Writes the crash's reason to a file, then lets Android close Muse as usual. */
 private class CrashRecorder(
