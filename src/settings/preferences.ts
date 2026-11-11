@@ -75,7 +75,7 @@ const DEFAULTS: Preferences = {
   skipShortAudio: false,
   pauseOnDisconnect: true,
   haptics: true,
-  showAudioDetails: false,
+  showAudioDetails: true,
   showPlayCount: false,
   crossfadeSeconds: 0,
   dynamicAccent: false,

@@ -27,7 +27,7 @@ import {
   searchWords,
 } from '../src/library/search.ts';
 import { formatAudioDetails, formatBytes, formatPlayCount, formatSleepTimer } from '../src/utils/format.ts';
-import { accentForCover } from '../src/theme/dynamicAccent.ts';
+import { accentForCover, tintTones } from '../src/theme/dynamicAccent.ts';
 import { withQueued } from '../src/playback/queueOrder.ts';
 import { minimalLabels, minimalTitleSize } from '../src/player/minimalType.ts';
 import { coverQuery, mergeCovers, parseApple, parseDeezer } from '../src/library/coverSearch.ts';
@@ -195,6 +195,18 @@ assert.equal(accentForCover({ hue: 352, colorfulness: 0.4 }, 'muse', ACCENTS), '
 assert.equal(accentForCover({ hue: 170, colorfulness: 0.4 }, 'muse', ACCENTS), 'teal');
 assert.equal(accentForCover({ hue: 205, colorfulness: 0.05 }, 'rose', ACCENTS), 'rose', 'grey cover');
 assert.equal(accentForCover(null, 'teal', ACCENTS), 'teal', 'no cover');
+
+// Cover color wash: a hue alone keeps the old look; measured covers follow their colors.
+assert.deepEqual(tintTones({ hue: 200 }, 'dark'), ['hsl(214, 36%, 27%)', 'hsl(200, 30%, 8%)'], 'hue only, dark');
+assert.deepEqual(tintTones({ hue: 200 }, 'light'), ['hsl(214, 52%, 88%)', 'hsl(200, 30%, 79%)'], 'hue only, light');
+assert.deepEqual(
+  tintTones({ hue: 10, saturation: 0.5, lightness: 0.5, secondHue: 220 }, 'dark'),
+  ['hsl(10, 42%, 27%)', 'hsl(220, 32%, 11%)'],
+  'main color on top, second color at the bottom',
+);
+assert.equal(tintTones({ hue: 10, saturation: 1, lightness: 1 }, 'dark')[0], 'hsl(24, 60%, 33%)', 'vivid and bright stays readable');
+assert.equal(tintTones({ hue: 10, saturation: 0, lightness: 0 }, 'dark')[0], 'hsl(24, 18%, 21%)', 'muted and dark');
+assert.equal(tintTones({ hue: 359.6, saturation: 0.5 }, 'light')[1], 'hsl(0, 33%, 79%)', 'hue wraps at 360');
 
 // A-Z index: accents fold, non-letters go under #, each letter's first row.
 assert.equal(indexLetter('Émilie'), 'E');

@@ -54,7 +54,8 @@ import { hapticSelection } from '../utils/haptics';
 import { ArtStyleSheet } from '../components/ArtStyleSheet';
 import { AppIconMark, AppIconSheet, appIconName } from '../components/AppIconSheet';
 import { SKIN_SAMPLE, SkinPreview, skinLabel } from '../player/PlayerSkinSheet';
-import { MIN_TINT_COLORFULNESS, tintTones } from '../player/FullPlayer';
+import { MIN_TINT_COLORFULNESS } from '../player/FullPlayer';
+import { tintTones, type CoverColor } from '../theme/dynamicAccent';
 import { generatedArtHue } from '../components/AlbumArtwork';
 import { getPlaybackController } from '../playback/PlaybackController';
 import type { MusicTrack } from '../types';
@@ -666,7 +667,7 @@ function usePreviewTint(track: MusicTrack, isSample: boolean): [string, string] 
   const { coverBackground, artworkStyle, artSet } = usePreferences();
   const { theme } = useContext(ThemeContext);
   const museArt = isSample || artworkStyle === 'generated';
-  const [cover, setCover] = useState<{ id: string; hue: number | null } | null>(null);
+  const [cover, setCover] = useState<{ id: string; color: CoverColor | null } | null>(null);
   useEffect(() => {
     if (!coverBackground || museArt) {
       return;
@@ -674,7 +675,7 @@ function usePreviewTint(track: MusicTrack, isSample: boolean): [string, string] 
     let isActive = true;
     void coverColor(track.id).then((color) => {
       if (isActive) {
-        setCover({ id: track.id, hue: color && color.colorfulness >= MIN_TINT_COLORFULNESS ? color.hue : null });
+        setCover({ id: track.id, color: color && color.colorfulness >= MIN_TINT_COLORFULNESS ? color : null });
       }
     });
     return () => {
@@ -684,8 +685,8 @@ function usePreviewTint(track: MusicTrack, isSample: boolean): [string, string] 
   if (!coverBackground) {
     return null;
   }
-  const hue = museArt ? generatedArtHue(track, artSet) : cover?.id === track.id ? cover.hue : null;
-  return hue === null ? null : tintTones(hue, theme);
+  const color = museArt ? { hue: generatedArtHue(track, artSet) } : cover?.id === track.id ? cover.color : null;
+  return color === null ? null : tintTones(color, theme);
 }
 
 function PlayerPage({ accent }: Props) {

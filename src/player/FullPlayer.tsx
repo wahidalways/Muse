@@ -44,6 +44,7 @@ import { useAppStyles } from '../theme/styles';
 import { formatPlayCount, formatSleepTimer, summarizeAudio } from '../utils/format';
 import { getAudioDetails, getLyrics } from '../../modules/muse-audio-metadata';
 import { coverColor, useSongCover } from '../library/covers';
+import { tintTones, type CoverColor } from '../theme/dynamicAccent';
 import { HoldToView } from '../components/HoldToView';
 import { openCoverViewer } from '../components/CoverSheets';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
@@ -98,14 +99,6 @@ const VINYL_SHARE = 0.92;
 const THUMB = 56;
 
 type PlayerMode = 'cover' | 'lyrics' | 'queue';
-
-/** The player's two background tones: lighter and a little shifted on top, deep at the bottom. */
-export function tintTones(hue: number, theme: 'light' | 'dark'): [string, string] {
-  const h = Math.round(hue);
-  return theme === 'dark'
-    ? [`hsl(${(h + 14) % 360}, 36%, 27%)`, `hsl(${h}, 30%, 8%)`]
-    : [`hsl(${(h + 14) % 360}, 52%, 88%)`, `hsl(${h}, 30%, 79%)`];
-}
 
 /**
  * The full player, as a sheet over the app. It stays mounted (invisible
@@ -453,13 +446,13 @@ export const FullPlayer = memo(function FullPlayer({
     [onSeek],
   );
 
-  // The cover's main hue, for the two-tone background behind the player. It
+  // The cover's colors, for the two-tone background behind the player. It
   // follows the cover the song shows: one chosen in Change cover, or the file's.
   const ownCover = useSongCover(shown.id);
   // Muse art (everywhere, or chosen for this song) has a known colour, so no cover is read for it.
   const showsMuseArt = preferences.artworkStyle === 'generated' || ownCover?.kind === 'muse';
   const coverKey = `${shown.id}|${ownCover?.kind === 'image' ? ownCover.uri : ''}|${preferences.bestFileCover}`;
-  const [coverHue, setCoverHue] = useState<{ key: string; hue: number | null } | null>(null);
+  const [coverTint, setCoverTint] = useState<{ key: string; color: CoverColor | null } | null>(null);
   useEffect(() => {
     if (!isOpen || !preferences.coverBackground || showsMuseArt) {
       return;
@@ -467,9 +460,9 @@ export const FullPlayer = memo(function FullPlayer({
     let isActive = true;
     void coverColor(shown.id).then((color) => {
       if (isActive) {
-        setCoverHue({
+        setCoverTint({
           key: coverKey,
-          hue: color && color.colorfulness >= MIN_TINT_COLORFULNESS ? color.hue : null,
+          color: color && color.colorfulness >= MIN_TINT_COLORFULNESS ? color : null,
         });
       }
     });
@@ -477,14 +470,14 @@ export const FullPlayer = memo(function FullPlayer({
       isActive = false;
     };
   }, [coverKey, isOpen, preferences.coverBackground, showsMuseArt, shown.id]);
-  const tintHue = !preferences.coverBackground
+  const tintColor = !preferences.coverBackground
     ? null
     : showsMuseArt
-      ? generatedArtHue(shown, preferences.artSet)
-      : coverHue?.key === coverKey
-        ? coverHue.hue
+      ? { hue: generatedArtHue(shown, preferences.artSet) }
+      : coverTint?.key === coverKey
+        ? coverTint.color
         : null;
-  const tint = tintHue === null ? null : tintTones(tintHue, theme);
+  const tint = tintColor === null ? null : tintTones(tintColor, theme);
   // See-through chips and lines that read on the tinted background.
   const chip = theme === 'light' ? 'rgba(25, 34, 24, 0.08)' : 'rgba(255, 255, 255, 0.12)';
 

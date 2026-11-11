@@ -44,7 +44,12 @@ export type AudioDetails = {
 };
 
 /** A cover's main hue (0-360) and how colorful it is (0 grey to 1 vivid). */
-export type CoverColor = { hue: number; colorfulness: number };
+/**
+ * A cover's main hue (0-360) and how colorful it is (0 grey to 1 vivid).
+ * Builds made after 2026-11-11 also measure the main color's saturation,
+ * the cover's brightness (both 0-1) and a clearly different second hue.
+ */
+export type CoverColor = { hue: number; colorfulness: number; saturation?: number; lightness?: number; secondHue?: number };
 
 /** A cover image saved as a file, with its size in pixels. */
 export type CoverFile = { uri: string; width: number; height: number };

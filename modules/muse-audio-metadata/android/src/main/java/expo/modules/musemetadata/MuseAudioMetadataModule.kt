@@ -34,6 +34,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.channels.FileChannel
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -49,6 +50,10 @@ private const val FULL_ARTWORK_SIZE = 4096
 private const val MAX_FULL_PIXELS = 16_000_000L
 /** Longest side of the lock screen's picture. Android shows it at about 1000 px at most. */
 private const val LOCK_SCREEN_SIZE = 1440
+/** Slices of the color wheel a cover's colors are tallied in (15 degrees each). */
+private const val HUE_SLICES = 24
+/** A second color counts when it covers at least this share of the main one's area. */
+private const val SECOND_COLOR_SHARE = 0.25
 private val ALBUM_ART_URI: Uri = Uri.parse("content://media/external/audio/albumart")
 /** Launcher aliases made by plugins/withAppIcons.js; keep in step with plugins/app-icons.json. */
 private val APP_ICON_IDS = listOf("muse", "light", "lime", "mono", "paper", "ocean")
@@ -925,11 +930,18 @@ class MuseAudioMetadataModule : Module() {
     return Uri.parse(uri).path?.let { colorOf(it) }
   }
 
-  /** The main hue of an image file, measured on a small copy (see readArtworkColor). */
+  /**
+   * The colors of an image file, measured on a small copy (see readArtworkColor):
+   * its main hue, a clearly different second hue when there is enough of one,
+   * how saturated the main color is, and how bright the image is overall.
+   * Hues are tallied in slices of the color wheel, each pixel by how colorful
+   * it is, so a red and blue cover keeps its red and its blue instead of
+   * averaging them into a purple it never had.
+   */
   private fun colorOf(path: String): Map<String, Double>? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(path, bounds)
-    // About 32 pixels a side is plenty for an average color, at any cover size.
+    // About 32 pixels a side is plenty for its colors, at any cover size.
     var sample = 1
     while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 32) {
       sample *= 2
@@ -938,25 +950,53 @@ class MuseAudioMetadataModule : Module() {
       ?: return null
     try {
       val hsv = FloatArray(3)
-      var x = 0.0
-      var y = 0.0
-      var weight = 0.0
+      // Per slice: colorful area, the direction of its hues (to average them
+      // around the wheel) and its saturation.
+      val amount = DoubleArray(HUE_SLICES)
+      val x = DoubleArray(HUE_SLICES)
+      val y = DoubleArray(HUE_SLICES)
+      val saturation = DoubleArray(HUE_SLICES)
+      var brightness = 0.0
       val pixels = bitmap.width * bitmap.height
       for (px in 0 until bitmap.width) {
         for (py in 0 until bitmap.height) {
           Color.colorToHSV(bitmap.getPixel(px, py), hsv)
           val colorfulness = (hsv[1] * hsv[2]).toDouble()
+          val slice = (hsv[0] / 360f * HUE_SLICES).toInt().coerceIn(0, HUE_SLICES - 1)
           val angle = Math.toRadians(hsv[0].toDouble())
-          x += cos(angle) * colorfulness
-          y += sin(angle) * colorfulness
-          weight += colorfulness
+          amount[slice] += colorfulness
+          x[slice] += cos(angle) * colorfulness
+          y[slice] += sin(angle) * colorfulness
+          saturation[slice] += hsv[1] * colorfulness
+          brightness += hsv[2]
         }
       }
-      if (pixels == 0 || weight == 0.0) {
+      val total = amount.sum()
+      if (pixels == 0 || total == 0.0) {
         return null
       }
-      val hue = (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
-      return mapOf("hue" to hue, "colorfulness" to weight / pixels)
+      // A slice with its two neighbours, so a color on a slice edge counts whole.
+      fun window(slice: Int) = (-1..1).map { (slice + it + HUE_SLICES) % HUE_SLICES }
+      fun area(slice: Int) = window(slice).sumOf { amount[it] }
+      fun hueAt(slice: Int): Double {
+        val parts = window(slice)
+        return (Math.toDegrees(atan2(parts.sumOf { y[it] }, parts.sumOf { x[it] })) + 360.0) % 360.0
+      }
+      val main = (0 until HUE_SLICES).maxByOrNull { area(it) } ?: return null
+      val colors = mutableMapOf(
+        "hue" to hueAt(main),
+        "colorfulness" to total / pixels,
+        "saturation" to window(main).sumOf { saturation[it] } / area(main),
+        "lightness" to brightness / pixels,
+      )
+      // Three slices (45 degrees) away at least: another color, not a shade of the first.
+      val second = (0 until HUE_SLICES)
+        .filter { minOf(abs(it - main), HUE_SLICES - abs(it - main)) >= 3 }
+        .maxByOrNull { area(it) }
+      if (second != null && area(second) >= area(main) * SECOND_COLOR_SHARE) {
+        colors["secondHue"] = hueAt(second)
+      }
+      return colors
     } finally {
       bitmap.recycle()
     }
