@@ -182,9 +182,9 @@ const TAP_SLIDE = 28;
 const TAB_WARM_GAP_MS = 400;
 /** How long a committed swipe waits for its page before sliding back anyway. */
 const SWIPE_FALLBACK_MS = 300;
-/** A restore still running after this swaps Android's still splash for the pulsing launch screen. */
+/** A restore still running after this makes the launch screen's bars pulse, and lets Android's splash go. */
 const SLOW_START_MS = 500;
-/** Once up, the launch screen stays at least this long so it never just blinks; with SLOW_START_MS a slow start still totals the old 1.2 s. */
+/** Once pulsing, the bars stay at least this long so they never just blink; with SLOW_START_MS a slow start still totals the old 1.2 s. */
 const LAUNCH_MIN_SHOWN_MS = 700;
 const NOTICE_ENTER = FadeInDown.duration(220).easing(EASE_OUT);
 const NOTICE_EXIT = FadeOutDown.duration(180).easing(EASE_OUT);
@@ -231,41 +231,45 @@ export function MuseApp({
   const [activeTab, setActiveTab] = useState<Tab>('home');
   /** Search covers the current page; the dock turns into its field. */
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  // Android's still splash stays up while the saved library restores, so a
-  // quick restore opens straight into the app. Only a slow one swaps it for
-  // the launch screen (the Muse bars pulsing) to show Muse is working. A
-  // first launch has nothing to restore, so Welcome shows straight away.
-  const [isLaunchShown, setIsLaunchShown] = useState(false);
-  const launchShownAt = useRef(0);
+  // While the saved library restores, the launch screen covers the app as a
+  // still copy of Android's splash. A quick restore opens straight into the
+  // app, and a screen Android rebuilds does not sit blank while it restores:
+  // after the first launch expo-splash-screen never holds its splash again in
+  // this process (icon switch, back from recents while music plays). Only a
+  // slow restore makes the bars pulse. A first launch shows Welcome at once.
+  const [isLaunchShown, setIsLaunchShown] = useState(screen === 'starting');
+  const [isLaunchPulsing, setIsLaunchPulsing] = useState(false);
+  const pulseStartedAt = useRef(0);
   useEffect(() => {
-    if (screen !== 'starting' || isLaunchShown) {
+    if (screen !== 'starting' || isLaunchPulsing) {
       return;
     }
     const timer = setTimeout(() => {
-      launchShownAt.current = Date.now();
-      setIsLaunchShown(true);
+      pulseStartedAt.current = Date.now();
+      setIsLaunchPulsing(true);
     }, SLOW_START_MS);
     return () => clearTimeout(timer);
-  }, [isLaunchShown, screen]);
+  }, [isLaunchPulsing, screen]);
   const [crashNotice, setCrashNotice] = useState(pendingCrashNotice);
   useEffect(() => {
     if (screen === 'starting' || !isLaunchShown) {
       return;
     }
-    const left = LAUNCH_MIN_SHOWN_MS - (Date.now() - launchShownAt.current);
+    // The still cover goes with the app's first frame; pulsing bars finish their moment.
+    const left = isLaunchPulsing ? LAUNCH_MIN_SHOWN_MS - (Date.now() - pulseStartedAt.current) : 0;
     const timer = setTimeout(() => setIsLaunchShown(false), Math.max(0, left));
     return () => clearTimeout(timer);
-  }, [isLaunchShown, screen]);
+  }, [isLaunchPulsing, isLaunchShown, screen]);
   /** The launch screen is gone, or never came: Home may play its entrance. */
   const isLaunchTimeUp = screen !== 'starting' && !isLaunchShown;
-  // The splash hands over to the app, Welcome, or the launch screen that looks
-  // like it. App's saved theme is read before this restore's reads (one
-  // storage queue), so the app never first shows in the wrong look.
+  // The splash hands over to the app, Welcome, or the pulsing launch screen.
+  // App's saved theme is read before this restore's reads (one storage
+  // queue), so the app never first shows in the wrong look.
   useEffect(() => {
-    if (screen !== 'starting' || isLaunchShown) {
+    if (screen !== 'starting' || isLaunchPulsing) {
       hideSplash().catch(() => undefined);
     }
-  }, [isLaunchShown, screen]);
+  }, [isLaunchPulsing, screen]);
   // After launch the other tabs mount hidden, one at a time, so even a first
   // visit swaps instantly. Leaving the app screens unmounts them, so restart.
   const [warmTabs, setWarmTabs] = useState(0);
@@ -867,7 +871,9 @@ export function MuseApp({
       setScreen('onboarding');
       return;
     }
-    launchShownAt.current = Date.now();
+    // Android's splash is long gone, so the bars pulse at once.
+    pulseStartedAt.current = Date.now();
+    setIsLaunchPulsing(true);
     setIsLaunchShown(true);
     setScreen('starting');
     void restoreSavedLibrary();
@@ -2046,11 +2052,11 @@ export function MuseApp({
         onSelectTrackEnd={sleepAtTrackEnd}
         onCancelTimer={clearSleepTimer}
       />
-      {/* On top of everything while a slow library restore is still running. */}
-      {isLaunchShown && <LaunchScreen />}
+      {/* On top of everything while the saved library restores. */}
+      {isLaunchShown && <LaunchScreen pulsing={isLaunchPulsing} />}
       <ConfirmSheet
-        // Not while starting: the sheet is a window of its own and would sit over Android's splash.
-        request={screen === 'starting' || isLaunchShown ? null : crashNotice}
+        // Not while starting (the launch screen is up then): the sheet is a window of its own and would sit over Android's splash.
+        request={isLaunchShown ? null : crashNotice}
         onClose={() => {
           // Muse can rebuild this screen (after an icon switch); the notice stays gone.
           pendingCrashNotice = null;
