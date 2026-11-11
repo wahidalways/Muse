@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ICONS from '../../plugins/app-icons.json';
-import { canSetAppIcon, setAppIcon } from '../../modules/muse-audio-metadata';
+import { canSetAppIcon } from '../../modules/muse-audio-metadata';
 import { setPreference, usePreferences, type AppIconId } from '../settings/preferences';
 import { useTokens } from '../onboarding/previews';
 import { useAppStyles } from '../theme/styles';
@@ -97,12 +97,10 @@ export function AppIconSheet({ visible, onClose }: { visible: boolean; onClose: 
       return;
     }
     hapticSelection();
-    if (!setAppIcon(id)) {
-      showToast('Could not change the icon', { icon: 'info' });
-      return;
-    }
+    // Switched once Muse is in the background (MuseApp): Android closes the
+    // screen opened from the launcher entry that gets switched off.
     setPreference('appIcon', id);
-    showToast('App icon changed', { detail: appIconName(id) });
+    showToast('App icon set', { detail: `${appIconName(id)}, shows once you leave Muse` });
   };
   return (
     <Sheet visible={visible} eyebrow="APP ICON" title="Pick your icon" onClose={onClose} closeLabel="Done">
@@ -144,7 +142,7 @@ export function AppIconSheet({ visible, onClose }: { visible: boolean; onClose: 
         </View>
         <Text style={[local.note, { color: tokens.muted }]}>
           {available
-            ? 'Your home screen shows the new icon in a moment. Some phones close Muse while it switches.'
+            ? 'The new icon shows once you leave Muse. If your home screen loses its Muse shortcut, add it again from the app list.'
             : 'Needs the Muse app. Not available in Expo Go.'}
         </Text>
       </View>

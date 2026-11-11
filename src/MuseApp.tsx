@@ -150,7 +150,7 @@ const demo: typeof import('./library/demoTracks') | null = __DEV__ ? require('./
 // Muse crashed last time: say so once, and offer the report to send.
 // Read at load, outside React, since reading deletes it.
 const lastCrash = takeLastCrash();
-const CRASH_NOTICE: ConfirmRequest | null = lastCrash
+let pendingCrashNotice: ConfirmRequest | null = lastCrash
   ? {
       eyebrow: 'SORRY',
       title: 'Muse closed by itself',
@@ -237,7 +237,7 @@ export function MuseApp({
   useEffect(() => {
     launchShownAt.current = Date.now();
   }, []);
-  const [crashNotice, setCrashNotice] = useState(CRASH_NOTICE);
+  const [crashNotice, setCrashNotice] = useState(pendingCrashNotice);
   useEffect(() => {
     if (screen === 'starting' || !isLaunchShown) {
       return;
@@ -620,9 +620,6 @@ export function MuseApp({
    * favorites, ratings, history and the equalizer stay.
    */
   const resetSettings = useCallback(() => {
-    if (getPreferences().appIcon !== 'muse') {
-      setAppIcon('muse');
-    }
     resetPreferences();
     setGlassChoice('blur');
     setWeekStart(6);
@@ -651,6 +648,26 @@ export function MuseApp({
       saveCurrentListen();
     }
   }, [isPlaying, saveCurrentListen]);
+
+  // The chosen app icon is switched here, once Muse is in the background:
+  // Android closes every screen opened from the launcher entry that gets
+  // switched off, so doing it on the tap closed Muse in your hand.
+  // shortcut: a share sheet or picker also sends Muse to the background, so a
+  // pending icon then closes Muse behind it; check the leave reason natively if that bites.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        // After the saved choice loads (the defaults would switch it back to
+        // Muse), and only if Muse is still out of sight by then.
+        void preferencesReady.then(() => {
+          if (AppState.currentState === 'background') {
+            setAppIcon(getPreferences().appIcon);
+          }
+        });
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -2019,7 +2036,14 @@ export function MuseApp({
       />
       {/* On top of everything while a slow library restore is still running. */}
       {isLaunchShown && <LaunchScreen />}
-      <ConfirmSheet request={isLaunchShown ? null : crashNotice} onClose={() => setCrashNotice(null)} />
+      <ConfirmSheet
+        request={isLaunchShown ? null : crashNotice}
+        onClose={() => {
+          // Muse can rebuild this screen (after an icon switch); the notice stays gone.
+          pendingCrashNotice = null;
+          setCrashNotice(null);
+        }}
+      />
     </View>
   );
 }
