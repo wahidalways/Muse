@@ -1,21 +1,37 @@
-The MIT License (MIT)
+Muse License
 
-Copyright (c) 2026 wahidalways
+Copyright (c) 2026 wahidalways. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Muse is free. This license says what you may do with it, and what needs
+permission first. "Muse" means the app and everything in this repository:
+its code, design, name and icons.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You may, for free:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. Download, install and use Muse on any number of devices, for any purpose.
+2. Share the official Muse APK (from this repository's Releases page) with
+   others, unchanged and for free.
+3. Read the code to learn from it, and build Muse from it for your own use.
+   Changing only build settings, such as the Expo account, is fine.
+
+You need written permission from wahidalways before you:
+
+1. Change Muse, or share or publish a changed version of it.
+2. Copy Muse's code, design, name or icons into another app or project.
+3. Sell Muse, charge money for it, add ads to it, or include it in anything
+   you sell.
+
+To ask for permission, open an issue at
+https://github.com/wahidalways/Muse/issues.
+
+Ideas, bug reports and pull requests are welcome. By sending one, you agree
+that wahidalways may use it in Muse under any license.
+
+Muse uses open-source libraries. Each keeps its own license, and nothing
+here changes those licenses.
+
+If you break these terms, your permission to use Muse ends.
+
+Muse is provided "as is", without warranty of any kind. To the extent the
+law allows, wahidalways is not liable for any loss or damage that comes
+from using Muse.

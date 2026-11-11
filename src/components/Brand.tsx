@@ -16,6 +16,7 @@ import appConfig from '../../app.json';
 
 export const CREDIT_NAME = 'wahidalways';
 export const CREDIT_URL = 'https://github.com/wahidalways';
+export const LICENSE_URL = 'https://github.com/wahidalways/Muse/blob/main/LICENSE';
 export const MUSE_MOTTO = 'All your music. Right on your phone.';
 /** Shown in Settings and compared with GitHub releases: app.json's version, the one the APK is built with. */
 export const APP_VERSION: string = appConfig.expo.version;

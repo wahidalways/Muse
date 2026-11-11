@@ -63,7 +63,7 @@ import type { MusicTrack } from '../types';
 import { ART_SETS } from '../components/MuseArt';
 import { canShowVolumeSlider } from '../player/VolumeSlider';
 import { POP_IN, PUSH_IN, useNavDirection } from '../motion/motion';
-import { APP_VERSION, BrandMark, MakerCredit, MUSE_MOTTO } from '../components/Brand';
+import { APP_VERSION, BrandMark, CREDIT_NAME, LICENSE_URL, MakerCredit, MUSE_MOTTO } from '../components/Brand';
 import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 import { HomePreview } from '../onboarding/previews';
 import { pickBackup, previewBackup, restoreBackup, saveBackup, savedDataSizes } from '../settings/backup';
@@ -1356,6 +1356,22 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
                 </View>
               ))}
             </View>
+            {/* The license in one line; the full text is on GitHub. */}
+            <Text style={styles.aboutTagline}>
+              Muse is free to use and to share. To change it or sell it, ask {CREDIT_NAME} first.
+            </Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityHint="Opens in your browser"
+              hitSlop={10}
+              onPress={() => {
+                // No browser is rare; there is nothing useful to show if so.
+                Linking.openURL(LICENSE_URL).catch(() => undefined);
+              }}
+              style={({ pressed }) => [styles.creditLinkRow, pressed && styles.creditLinkPressed]}
+            >
+              <Text style={styles.creditLink}>Read the license</Text>
+            </Pressable>
             <View style={styles.aboutDivider} />
             {/* The same credit as Welcome: name, divider, X and GitHub chips. */}
             <MakerCredit
