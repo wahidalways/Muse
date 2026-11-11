@@ -128,6 +128,27 @@ class MuseAudioMetadataModule : Module() {
       }
     }
 
+    // Muse has no crash reporting and testers have no cable for the phone's
+    // log, so a crash's reason is kept for the next launch to show.
+    OnCreate {
+      val context = appContext.reactContext ?: return@OnCreate
+      val previous = Thread.getDefaultUncaughtExceptionHandler()
+      if (previous !is CrashRecorder) {
+        Thread.setDefaultUncaughtExceptionHandler(CrashRecorder(crashFile(context), previous))
+      }
+    }
+
+    // The last crash's report, once (it is deleted as it is read); null when there was none.
+    Function("takeLastCrash") {
+      val file = appContext.reactContext?.let(::crashFile) ?: return@Function null
+      if (!file.isFile) {
+        return@Function null
+      }
+      val report = runCatching { file.readText() }.getOrNull()
+      file.delete()
+      report
+    }
+
     // Ends Muse's process after a backup restore. Closing the screen is not
     // enough: media playback keeps the process (and its old saved values in
     // memory) alive, and they would be written back over the restored ones.
@@ -1138,5 +1159,21 @@ class MuseAudioMetadataModule : Module() {
   private fun Cursor.longOrNull(column: String): Long? {
     val index = getColumnIndex(column)
     return if (index < 0 || isNull(index)) null else getLong(index)
+  }
+}
+
+private fun crashFile(context: Context) = File(context.filesDir, "last-crash.txt")
+
+/** Writes the crash's reason to a file, then lets Android close Muse as usual. */
+private class CrashRecorder(
+  private val file: File,
+  private val previous: Thread.UncaughtExceptionHandler?,
+) : Thread.UncaughtExceptionHandler {
+  override fun uncaughtException(thread: Thread, error: Throwable) {
+    runCatching {
+      val phone = "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}"
+      file.writeText("$phone, thread ${thread.name}\n${error.stackTraceToString()}".take(20_000))
+    }
+    previous?.uncaughtException(thread, error)
   }
 }

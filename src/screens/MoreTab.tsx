@@ -717,7 +717,8 @@ function CollectionsHome({
           onPress={() => onPush({ kind: 'playlists' })}
           style={({ pressed }) => [styles.collRow, styles.collSeeAll, pressed && styles.librarySortChipPressed]}
         >
-          <CoverCollage tracks={sorted.slice(HOME_PLAYLISTS).map((item) => item.songs[0])} size={52} radius={10} />
+          {/* First songs only: an empty playlist has none, and undefined crashed the collage. */}
+          <CoverCollage tracks={sorted.slice(HOME_PLAYLISTS).flatMap((item) => item.songs.slice(0, 1))} size={52} radius={10} />
           <View style={styles.collRowCopy}>
             <Text numberOfLines={1} style={styles.collRowTitle}>
               See all {playlists.length} playlists

@@ -21,6 +21,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   Text,
   View,
   useWindowDimensions,
@@ -49,7 +50,13 @@ import { getPermissionsAsync, requestPermissionsAsync } from 'expo-media-library
 import type { LibrarySort, SortDirection } from './library/sortTracks';
 import { getPlaybackController, shuffleTracks } from './playback/PlaybackController';
 import { settlePlayer, usePlayerTransition } from './player/playerTransition';
-import { addAudioBecomingNoisyListener, addHeadphonesConnectedListener, getLibraryVersion, setAppIcon } from '../modules/muse-audio-metadata';
+import {
+  addAudioBecomingNoisyListener,
+  addHeadphonesConnectedListener,
+  getLibraryVersion,
+  setAppIcon,
+  takeLastCrash,
+} from '../modules/muse-audio-metadata';
 import { usePlayback, usePlaybackValue } from './playback/usePlayback';
 import type {
   MusicTrack,
@@ -71,6 +78,7 @@ import { setWeekStart } from './settings/pulse';
 import { hapticImpact, hapticSelection } from './utils/haptics';
 import { BottomTabs, HideForSelection, HideWhenBarFolded } from './components/BottomTabs';
 import { ToastHost, showToast } from './components/Toast';
+import { ConfirmSheet, type ConfirmRequest } from './components/ConfirmSheet';
 import { PageVisible, TabLayer } from './components/TabLayer';
 import { setGlassChoice, useGlassStyle } from './theme/glassStyle';
 import { SearchScreen } from './screens/SearchScreen';
@@ -138,6 +146,21 @@ import { withListenedSeconds } from './history/stats';
 // carries none of assets/demo.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const demo: typeof import('./library/demoTracks') | null = __DEV__ ? require('./library/demoTracks') : null;
+
+// Muse crashed last time: say so once, and offer the report to send.
+// Read at load, outside React, since reading deletes it.
+const lastCrash = takeLastCrash();
+const CRASH_NOTICE: ConfirmRequest | null = lastCrash
+  ? {
+      eyebrow: 'SORRY',
+      title: 'Muse closed by itself',
+      message: 'Something went wrong last time and Muse had to close. Sharing the report shows what broke.',
+      icon: 'bug-outline',
+      confirmLabel: 'Share report',
+      cancelLabel: 'Not now',
+      onConfirm: () => void Share.share({ message: lastCrash }).catch(() => undefined),
+    }
+  : null;
 
 /** History is written at most this often while songs change quickly. */
 const HISTORY_SAVE_GAP_MS = 3000;
@@ -214,6 +237,7 @@ export function MuseApp({
   useEffect(() => {
     launchShownAt.current = Date.now();
   }, []);
+  const [crashNotice, setCrashNotice] = useState(CRASH_NOTICE);
   useEffect(() => {
     if (screen === 'starting' || !isLaunchShown) {
       return;
@@ -1995,6 +2019,7 @@ export function MuseApp({
       />
       {/* On top of everything while a slow library restore is still running. */}
       {isLaunchShown && <LaunchScreen />}
+      <ConfirmSheet request={isLaunchShown ? null : crashNotice} onClose={() => setCrashNotice(null)} />
     </View>
   );
 }

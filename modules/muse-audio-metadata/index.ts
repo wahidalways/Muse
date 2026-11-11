@@ -69,6 +69,8 @@ type MuseAudioMetadataModule = {
   setAppIcon?(id: string): void;
   canSetAppIcon?(): boolean;
   closeApp?(): void;
+  // Missing from builds made before crash reports.
+  takeLastCrash?(): string | null;
   addListener(
     event: 'onVolumeChange',
     listener: (event: { volume: number }) => void,
@@ -220,6 +222,15 @@ export function closeApp(): boolean {
   }
   nativeModule.closeApp();
   return true;
+}
+
+/** Why Muse crashed last time, once: reading deletes it. Null when it did not crash. */
+export function takeLastCrash(): string | null {
+  try {
+    return nativeModule?.takeLastCrash?.() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** True when this build can switch its launcher icon (not Expo Go). */
