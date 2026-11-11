@@ -1358,7 +1358,7 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
             </View>
             {/* The license in one line; the full text is on GitHub. */}
             <Text style={styles.aboutTagline}>
-              Muse is free to use and to share. To change it or sell it, ask {CREDIT_NAME} first.
+              Muse is free for everyone. To share a changed copy, upload it somewhere else or sell it, ask {CREDIT_NAME} first.
             </Text>
             <Pressable
               accessibilityRole="link"

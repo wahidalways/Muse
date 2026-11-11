@@ -2,7 +2,7 @@
   "expo": {
     "name": "Muse",
     "slug": "muse-offline-player",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -86,6 +86,7 @@
     },
     "android": {
       "package": "com.muse.offlineplayer",
+      "versionCode": 2,
       "blockedPermissions": [
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
