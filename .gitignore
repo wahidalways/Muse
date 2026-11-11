@@ -14,10 +14,15 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key
 *.mobileprovision
+
+# Signing secrets from `eas credentials` (the keystore and its passwords)
+credentials.json
+/credentials/
 
 # Metro
 .metro-health-check*
@@ -31,6 +36,10 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+
+# Windows
+Thumbs.db
+desktop.ini
 
 # local env files
 .env
@@ -50,6 +59,9 @@ coverage/
 # generated native folders
 /ios
 /android
+
+# Personal Claude Code permissions (the shared .claude/settings.json stays)
+.claude/settings.local.json
 
 # Local design reviews, never committed
 artifacts/
