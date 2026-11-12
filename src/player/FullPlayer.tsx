@@ -73,7 +73,7 @@ const VOLUME_ROW_HEIGHT = 40;
 /** Below this a cover is close to grey, so the background stays plain. */
 export const MIN_TINT_COLORFULNESS = 0.12;
 /** Height the player needs for everything except the artwork. */
-const PLAYER_CONTROLS_HEIGHT = 450;
+const PLAYER_CONTROLS_HEIGHT = 462;
 const MAX_ARTWORK_SIZE = 520;
 // shortcut: one sheet closing and the next opening can clash on Android, so the next waits this long; switch to a single sheet with pages if it ever flickers.
 const SHEET_HANDOFF_MS = 260;

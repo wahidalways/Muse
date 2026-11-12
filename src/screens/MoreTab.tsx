@@ -51,6 +51,8 @@ import {
   removeFromPlaylist,
   renamePlaylist,
   usePlaylists,
+  setPlaylistShown,
+  shownPlaylists,
   type Playlist,
 } from '../library/playlists';
 import { setListSort, useListSorts, type ListSort } from '../library/listSorts';
@@ -67,6 +69,7 @@ import {
 import { LIBRARY_SORT_OPTIONS } from '../constants';
 import { libraryTabViews, usePreferences, type LibraryGroupView } from '../settings/preferences';
 import { LibraryTrackRow } from './LibraryTab';
+import { showToast } from '../components/Toast';
 import { shuffleTracks } from '../playback/PlaybackController';
 import { CoverCollage, PlaylistCover } from '../components/CoverCollage';
 import { AddSongsSheet } from '../components/AddSongsSheet';
@@ -99,8 +102,6 @@ export type MoreRoute =
   /** Every playlist, from "See all" when Collections shows only the first few. */
   | { kind: 'playlists' };
 
-/** Collections shows New playlist and this many playlists; the rest are a tap on "See all" away. */
-const HOME_PLAYLISTS = 5;
 
 const GROUP_INFO: Record<GroupKind, { title: string; one: string; label: string }> = {
   album: { title: 'Albums', one: 'album', label: 'Album' },
@@ -637,14 +638,17 @@ function CollectionsHome({
   );
   const [query, setQuery] = useState('');
   const sorted = useMemo(() => sortPlaylists(items, sort.choice.id, sort.direction), [items, sort.choice.id, sort.direction]);
+  // Collections shows New playlist and up to three big: the ones picked first, then by the sort.
+  const shown = useMemo(() => shownPlaylists(sorted), [sorted]);
+  const behind = useMemo(() => sorted.filter((item) => !shown.includes(item)), [shown, sorted]);
   const data = useMemo<(PlaylistItem | 'new')[]>(() => {
     if (!all) {
-      return ['new', ...sorted.slice(0, HOME_PLAYLISTS)];
+      return ['new', ...shown];
     }
     const needle = query.trim().toLowerCase();
     return ['new', ...(needle ? sorted.filter((item) => item.playlist.name.toLowerCase().includes(needle)) : sorted)];
-  }, [all, query, sorted]);
-  const hidden = all ? 0 : Math.max(0, sorted.length - HOME_PLAYLISTS);
+  }, [all, query, shown, sorted]);
+  const hidden = all ? 0 : behind.length;
   // Recomputed when songs, plays, ratings or favorites change; not on play/pause.
   const smart = useMemo(
     () => SMART.map((info) => ({ info, tracks: smartList(info.id, tracks, history, ratings, favorites).tracks })),
@@ -709,14 +713,14 @@ function CollectionsHome({
           style={({ pressed }) => [styles.collRow, styles.collSeeAll, pressed && styles.librarySortChipPressed]}
         >
           {/* First songs only: an empty playlist has none, and undefined crashed the collage. */}
-          <CoverCollage tracks={sorted.slice(HOME_PLAYLISTS).flatMap((item) => item.songs.slice(0, 1))} size={52} radius={10} />
+          <CoverCollage tracks={behind.flatMap((item) => item.songs.slice(0, 1))} size={52} radius={10} />
           <View style={styles.collRowCopy}>
             <Text numberOfLines={1} style={styles.collRowTitle}>
               See all {playlists.length} playlists
             </Text>
             <Text numberOfLines={1} style={styles.collRowHint}>
-              {sorted
-                .slice(HOME_PLAYLISTS, HOME_PLAYLISTS + 3)
+              {behind
+                .slice(0, 3)
                 .map((item) => item.playlist.name)
                 .join(', ')}
               {hidden > 3 ? ` and ${hidden - 3} more` : ''}
@@ -864,7 +868,7 @@ const PlaylistTile = memo(function PlaylistTile({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${playlist.name}, ${line}`}
+      accessibilityLabel={`${playlist.name}, ${line}${playlist.pinnedAt != null ? ', shows on Collections' : ''}`}
       accessibilityHint="Hold for options"
       onPress={() =>
         onOpen({ kind: 'playlist', id: playlist.id }, cover.current, (size) => (
@@ -879,6 +883,12 @@ const PlaylistTile = memo(function PlaylistTile({
     >
       <View ref={cover} collapsable={false}>
         <PlaylistCover playlist={playlist} tracks={songs} size={width} radius={14} />
+        {/* Picked with "Show on Collections". */}
+        {playlist.pinnedAt != null ? (
+          <View style={styles.collPinBadge}>
+            <ControlIcon name="pin" size={14} color="#FFFFFF" />
+          </View>
+        ) : null}
       </View>
       <Text numberOfLines={1} style={styles.collTileTitle}>
         {playlist.name}
@@ -1287,6 +1297,18 @@ function PlaylistActions({
         <SheetRow icon={<ControlIcon name="plus" size={18} tone="muted" />} label="Add songs" onPress={() => onSheet('add')} />
         <SheetRow icon={<ControlIcon name="edit" size={18} tone="muted" />} label="Rename" onPress={() => onSheet('rename')} />
         <SheetRow icon={<ControlIcon name="image" size={18} tone="muted" />} label="Change cover" onPress={() => onSheet('cover')} />
+        <SheetRow
+          icon={<ControlIcon name="pin" size={18} tone="muted" />}
+          label={playlist.pinnedAt != null ? 'Move to See all' : 'Show on Collections'}
+          onPress={run(() => {
+            const show = playlist.pinnedAt == null;
+            const bumped = setPlaylistShown(playlist.id, show);
+            showToast(show ? `${playlist.name} shows on Collections` : `${playlist.name} moved to See all`, {
+              detail: bumped ? `${bumped} moved to See all` : undefined,
+              icon: 'pin',
+            });
+          })}
+        />
         <SheetRow icon={<ControlIcon name="delete" size={18} tone="muted" />} label="Delete playlist" danger onPress={confirmDelete} />
       </Sheet>
       <AddSongsSheet playlist={playlist} tracks={allTracks} visible={sheet === 'add'} onClose={close} />

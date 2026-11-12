@@ -12,7 +12,7 @@ your phone. If Android asks, allow installs from your browser or file manager.
 
 - Needs Android 7.0 or newer on a 64-bit phone (most phones from recent years).
 - The download is about 16 MB.
-- For new versions, tap **Settings › App & data › Check for updates**. Muse
+- For new versions, tap **Settings › About & updates › Check for updates**. Muse
   looks at the Releases page and shows you what changed.
 
 ## Features

@@ -84,7 +84,8 @@ export type ControlIconName =
   | 'queue'
   | 'moon'
   | 'skin'
-  | 'hide';
+  | 'hide'
+  | 'pin';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -190,6 +191,7 @@ const CONTROL_GLYPHS: Record<
   drag: 'reorder-three-outline',
   info: 'information-circle-outline',
   hide: 'eye-off-outline',
+  pin: 'pin-outline',
   lyrics: 'document-text-outline',
   'play-next': 'return-down-forward-outline',
   'queue-add': 'add-outline',

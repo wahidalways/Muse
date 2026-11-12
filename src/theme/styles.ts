@@ -827,7 +827,8 @@ const styleDefinitions = {
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 52,
-    marginTop: 12,
+    // Room under the 72pt play button, so the controls read as their own group.
+    marginTop: 24,
     marginHorizontal: -8,
   },
   playerBarButton: {
@@ -3336,6 +3337,18 @@ const styleDefinitions = {
     marginBottom: 8,
     lineHeight: 44,
   },
+  /** A pin on a playlist cover picked to show on Collections; dark glass reads on any cover. */
+  collPinBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
   collTile: {
     marginBottom: 20,
   },
@@ -4148,6 +4161,30 @@ const styleDefinitions = {
     marginHorizontal: -10,
     paddingLeft: 10,
     paddingRight: 4,
+  },
+  /** The glow's shape; its accent color is set inline. */
+  libraryRowGlow: {
+    borderRadius: 14,
+  },
+  /** The "Playing song" chip floats above the dock, centered. */
+  libraryLocateWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  libraryLocateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 4,
   },
   libraryTrackFavorite: {
     color: colors.muted,
@@ -5470,6 +5507,10 @@ function createLightStyleDefinitions<T extends Record<string, object>>(
 
 function toLightColor(property: string, value: string): string {
   const color = value.toUpperCase();
+  // See-through stays see-through (Up Next's rows turned into a white block).
+  if (color === 'TRANSPARENT') {
+    return value;
+  }
   if (property === 'backgroundColor') {
     const backgrounds: Record<string, string> = {
       '#11130F': '#F5F6F0',

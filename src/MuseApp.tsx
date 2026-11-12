@@ -334,10 +334,13 @@ export function MuseApp({
   const preferences = usePreferences();
   const { skipShortAudio, shortAudioSeconds, historyPaused } = preferences;
   // Unknown lengths (0) stay: only clearly short files are voice notes or tones.
+  // Expo Go's demo songs (15-38 s) always stay, so testing never shows an empty library.
   const tracks = useMemo(
     () =>
       skipShortAudio
-        ? deviceTracks.filter((track) => track.duration <= 0 || track.duration >= shortAudioSeconds)
+        ? deviceTracks.filter(
+            (track) => track.duration <= 0 || track.duration >= shortAudioSeconds || track.folderId === demo?.DEMO_FOLDER.id,
+          )
         : deviceTracks,
     [deviceTracks, shortAudioSeconds, skipShortAudio],
   );

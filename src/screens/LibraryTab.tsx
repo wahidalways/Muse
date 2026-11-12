@@ -93,6 +93,7 @@ import { LIBRARY_SORT_OPTIONS } from '../constants';
 import { useAppStyles } from '../theme/styles';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { setDockHidden, useBarScroll } from '../motion/barScroll';
+import { PageVisible } from '../components/TabLayer';
 import { sidewaysDragLock } from '../motion/gestureLock';
 import { addToQueue, playNext } from '../playback/queueActions';
 import { formatListeningTime, formatTrackDuration } from '../utils/format';
@@ -234,6 +235,9 @@ function trackSubtitle(track: MusicTrack): string {
  * right is Play next and left is Add to queue. While `selected` is set the
  * row is in a selection: tap toggles it, and a check replaces the ⋯.
  */
+/** A row counts as seen when half of it shows. */
+const HALF_VISIBLE = { itemVisiblePercentThreshold: 50 };
+
 export const LibraryTrackRow = memo(function LibraryTrackRow({
   track,
   isCurrent,
@@ -245,12 +249,15 @@ export const LibraryTrackRow = memo(function LibraryTrackRow({
   isFavorite = false,
   swipeable = false,
   selected,
+  glow = false,
   onPlayTrack,
   onLongPress,
   onMenu,
 }: {
   track: MusicTrack;
   isCurrent: boolean;
+  /** A short accent glow that points the row out (Library landing on the playing song). */
+  glow?: boolean;
   isPlaying: boolean;
   /** A small grey heart before the length. */
   isFavorite?: boolean;
@@ -316,6 +323,14 @@ export const LibraryTrackRow = memo(function LibraryTrackRow({
           pressed && ROW_PRESSED,
         ]}
       >
+        {glow && (
+          <Animated.View
+            pointerEvents="none"
+            entering={FadeIn.duration(220)}
+            exiting={FadeOut.duration(900)}
+            style={[StyleSheet.absoluteFill, styles.libraryRowGlow, { backgroundColor: `${String(styles.libraryTrackTitleCurrent.color)}40` }]}
+          />
+        )}
         <View style={styles.libraryArtWrap}>
           <AlbumArtwork track={track} size={ROW_ART} />
           {isCurrent && (
@@ -775,6 +790,64 @@ export function LibraryTab({
     },
     [paddingTop, view],
   );
+  // ---------------------------------------------------------------------------
+  // The last played song: the first visit to Library lands on it (Songs only),
+  // and a chip brings it back whenever it has scrolled out of view.
+
+  const pageVisible = useContext(PageVisible);
+  const currentIndex = useMemo(
+    () => (currentTrackId ? filteredTracks.findIndex((track) => track.id === currentTrackId) : -1),
+    [currentTrackId, filteredTracks],
+  );
+  const [glowId, setGlowId] = useState<string | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const goToCurrent = useCallback(
+    (animated: boolean) => {
+      if (view !== 'songs' || currentIndex < 0) {
+        return;
+      }
+      void listRef.current?.scrollToIndex({ index: currentIndex, animated, viewPosition: 0.5 });
+      setGlowId(filteredTracks[currentIndex].id);
+      timers.current.push(setTimeout(() => setGlowId(null), 920));
+    },
+    [currentIndex, filteredTracks, view],
+  );
+  const hasLanded = useRef(false);
+  useEffect(() => {
+    if (hasLanded.current || !pageVisible) {
+      return;
+    }
+    // Once per launch: later visits keep wherever you scrolled.
+    hasLanded.current = true;
+    if (view === 'songs' && !searching && currentIndex >= 0) {
+      // After the list's first layout.
+      timers.current.push(setTimeout(() => goToCurrent(false), 120));
+    }
+  }, [currentIndex, goToCurrent, pageVisible, searching, view]);
+
+  /** Which way the playing song is when it is off screen; null when it shows (or there is none). */
+  const [offScreen, setOffScreen] = useState<'up' | 'down' | null>(null);
+  const visibleRange = useRef<[number, number] | null>(null);
+  const currentIndexRef = useRef(currentIndex);
+  const judgeOffScreen = useCallback(() => {
+    const range = visibleRange.current;
+    const index = currentIndexRef.current;
+    setOffScreen(!range || index < 0 ? null : index < range[0] ? 'up' : index > range[1] ? 'down' : null);
+  }, []);
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+    judgeOffScreen();
+  }, [currentIndex, judgeOffScreen]);
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+      const indexes = viewableItems.map((token) => token.index).filter((index): index is number => index !== null);
+      visibleRange.current = indexes.length > 0 ? [Math.min(...indexes), Math.max(...indexes)] : null;
+      judgeOffScreen();
+    },
+    [judgeOffScreen],
+  );
+
   const listKey =
     view === 'songs' ? `songs:${listSortBy}:${listSortDirection}` : `${view}:${groupSort.by}:${groupSort.direction}`;
   // A rebuilt list starts at the top; the fold must not stay folded from the old one.
@@ -799,6 +872,7 @@ export function LibraryTab({
             note={hidden ? `${hidden.label}: ${hidden.value}` : undefined}
             swipeable
             selected={selection ? selection.has(item.id) : undefined}
+            glow={item.id === glowId}
             onPlayTrack={selection ? toggleSelected : playFromShown}
             onLongPress={selection ? toggleSelected : startSelection}
             onMenu={onOpenTrackMenu}
@@ -806,7 +880,7 @@ export function LibraryTab({
         </Animated.View>
       );
     },
-    [currentTrackId, favoriteIds, intro, isPlaying, onOpenTrackMenu, playFromShown, searching, selection, startSelection, toggleSelected, words],
+    [currentTrackId, favoriteIds, glowId, intro, isPlaying, onOpenTrackMenu, playFromShown, searching, selection, startSelection, toggleSelected, words],
   );
   const albumArt = Math.floor((windowWidth - Number(paddingHorizontal) * 2 - 14) / 2);
   const renderGroup = useCallback<ListRenderItem<TrackGroup>>(
@@ -904,8 +978,8 @@ export function LibraryTab({
     [albumArt, intro, onOpenGroup, styles, view],
   );
   const rowState = useMemo(
-    () => ({ currentTrackId, isPlaying, view, favoriteIds, intro, selection }),
-    [currentTrackId, favoriteIds, intro, isPlaying, selection, view],
+    () => ({ currentTrackId, isPlaying, view, favoriteIds, intro, selection, glowId }),
+    [currentTrackId, favoriteIds, glowId, intro, isPlaying, selection, view],
   );
   /** What Shuffle plays: the songs shown, or the songs of the albums or artists shown. */
   const shuffleList = useMemo(
@@ -1131,6 +1205,8 @@ export function LibraryTab({
             onScroll={barScroll}
             scrollEventThrottle={32}
             showsVerticalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={HALF_VISIBLE}
           />
         ) : (
           <FlashList
@@ -1154,6 +1230,29 @@ export function LibraryTab({
           />
         )}
       </FoldScrollContext.Provider>
+
+      {/* Back to the playing song, only while it is out of view. */}
+      {view === 'songs' && offScreen && !selection ? (
+        <Animated.View
+          entering={FadeIn.duration(160)}
+          exiting={FadeOut.duration(140)}
+          pointerEvents="box-none"
+          style={[styles.libraryLocateWrap, { bottom: Number(paddingBottom) - 8 }]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Go to the playing song${currentIndex >= 0 ? `, ${filteredTracks[currentIndex].title}` : ''}`}
+            onPress={() => {
+              hapticSelection();
+              goToCurrent(true);
+            }}
+            style={({ pressed }) => [styles.homeChip, styles.homeChipAction, styles.libraryLocateChip, pressed && styles.librarySortChipPressed]}
+          >
+            <ControlIcon name={offScreen === 'up' ? 'chevron-up' : 'chevron-down'} size={14} tone="accent" />
+            <Text style={styles.homeChipActionText}>Playing song</Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
 
       {/*
         The slim bar: the page color fades in as the big title folds away,

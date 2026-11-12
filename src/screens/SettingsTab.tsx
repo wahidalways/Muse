@@ -88,7 +88,7 @@ import {
 } from '../../modules/muse-audio-metadata/files';
 
 /** The pages under the main Settings list. `search` finds a setting on any of them. */
-export type SettingsPage = 'look' | 'player' | 'sound' | 'library' | 'listening' | 'app' | 'search';
+export type SettingsPage = 'look' | 'player' | 'sound' | 'library' | 'listening' | 'app' | 'about' | 'search';
 
 const PAGES: Record<Exclude<SettingsPage, 'search'>, { title: string; subtitle: string }> = {
   look: { title: 'Look & feel', subtitle: 'How Muse looks, everywhere' },
@@ -97,6 +97,7 @@ const PAGES: Record<Exclude<SettingsPage, 'search'>, { title: string; subtitle: 
   library: { title: 'Library', subtitle: 'Where your songs come from' },
   listening: { title: 'Listening', subtitle: 'Your goal, your week, your history' },
   app: { title: 'App & data', subtitle: 'Backup, storage and help' },
+  about: { title: 'About & updates', subtitle: 'Your version, new versions and credits' },
 };
 
 const APPEARANCES: { id: Appearance; label: string; accessibilityLabel: string }[] = [
@@ -170,7 +171,7 @@ const SEARCH_INDEX: [string, string, Exclude<SettingsPage, 'search'>, string][] 
   ['crossfade', 'Crossfade', 'sound', 'fade gap between songs gapless'],
   ['pauseOnDisconnect', 'Pause on disconnect', 'sound', 'bluetooth unplug headphones'],
   ['resumeOnConnect', 'Resume on reconnect', 'sound', 'bluetooth headphones connect'],
-  ['previous', 'Previous button', 'sound', 'back restart rewind'],
+  ['previous', 'Previous button', 'player', 'back restart rewind'],
   ['sleepFade', 'Fade out before sleep', 'sound', 'sleep timer fade bedtime night'],
   ['hiRes', 'Hi-Res audio', 'sound', '24-bit lossless quality flac wav high resolution'],
   ['bitPerfect', 'Bit-perfect USB', 'sound', 'dac usb bit perfect audiophile exclusive output'],
@@ -181,7 +182,7 @@ const SEARCH_INDEX: [string, string, Exclude<SettingsPage, 'search'>, string][] 
   ['pickedFolders', 'APE, WavPack and DSD folders', 'library', 'ape wv wavpack dsd dsf dff formats lossless folder'],
   ['skipShort', 'Skip short audio', 'library', 'voice notes ringtones short recordings'],
   ['shortLimit', 'Short audio limit', 'library', 'seconds voice notes'],
-  ['startTab', 'Open on launch', 'library', 'start tab home'],
+  ['startTab', 'Open on launch', 'app', 'start tab home'],
   ['permission', 'Audio permission', 'library', 'access allow'],
   ['goal', 'Daily goal', 'listening', 'minutes target streak'],
   ['weekStart', 'Week starts on', 'listening', 'saturday sunday monday recap'],
@@ -193,9 +194,9 @@ const SEARCH_INDEX: [string, string, Exclude<SettingsPage, 'search'>, string][] 
   ['haptics', 'Haptic feedback', 'app', 'vibration vibrate'],
   ['setup', 'Set up Muse again', 'app', 'tour onboarding guide help'],
   ['reset', 'Reset settings', 'app', 'defaults'],
-  ['update', 'Check for updates', 'app', 'new version upgrade latest'],
-  ['updateReminders', 'Tell me about updates', 'app', 'automatic update reminder popup changelog whats new'],
-  ['about', 'About Muse', 'app', 'version credits'],
+  ['update', 'Check for updates', 'about', 'new version upgrade latest'],
+  ['updateReminders', 'Tell me about updates', 'about', 'automatic update reminder popup changelog whats new'],
+  ['about', 'About Muse', 'about', 'version credits license'],
 ];
 /** Shown before you type. */
 const POPULAR = ['equalizer', 'crossfade', 'sleepFade', 'backup', 'historyPaused', 'theme'];
@@ -337,7 +338,7 @@ export function SettingsTab(props: Props) {
             <PageBody {...props} page={page} />
           </>
         ) : (
-          <MainList onOpenPage={onOpenPage} onGoTo={goTo} />
+          <MainList onOpenPage={onOpenPage} />
         )}
       </Animated.View>
     </FindContext.Provider>
@@ -356,7 +357,7 @@ function RoundButton({ icon, label, onPress }: { icon: 'search'; label: string; 
 // ---------------------------------------------------------------------------
 // The main list: one row per page, saying what it holds.
 
-function MainList({ onOpenPage, onGoTo }: { onOpenPage: (page: SettingsPage) => void; onGoTo: (id: string) => void }) {
+function MainList({ onOpenPage }: { onOpenPage: (page: SettingsPage) => void }) {
   const styles = useAppStyles();
   const waiting = useUpdatePrompt().waitingVersion;
   const [isDemoOpen, setIsDemoOpen] = useState(false);
@@ -375,7 +376,7 @@ function MainList({ onOpenPage, onGoTo }: { onOpenPage: (page: SettingsPage) => 
       <View style={{ height: 8 }} />
       <SettingsSection large>
         <SettingsRow icon="color-palette" tint={TILE.blue} title="Look & feel" subtitle="Theme, accent, app icon, covers" onPress={() => onOpenPage('look')} />
-        <SettingsRow icon="play-circle" tint={TILE.purple} title="Player" subtitle="Skin, cover, song details" onPress={() => onOpenPage('player')} />
+        <SettingsRow icon="play-circle" tint={TILE.purple} title="Player" subtitle="Skin, cover, song details, controls" onPress={() => onOpenPage('player')} />
         <SettingsRow icon="volume-high" tint={TILE.pink} title="Sound" subtitle="Equalizer, crossfade, sleep timer" onPress={() => onOpenPage('sound')} />
       </SettingsSection>
       <SettingsSection large>
@@ -383,13 +384,13 @@ function MainList({ onOpenPage, onGoTo }: { onOpenPage: (page: SettingsPage) => 
         <SettingsRow icon="headset" tint={TILE.green} title="Listening" subtitle="Daily goal, week, history" onPress={() => onOpenPage('listening')} />
       </SettingsSection>
       <SettingsSection large>
-        <SettingsRow icon="phone-portrait" tint={TILE.slate} title="App & data" subtitle="Backup, storage, haptics, help" onPress={() => onOpenPage('app')} />
+        <SettingsRow icon="phone-portrait" tint={TILE.slate} title="App & data" subtitle="Backup, storage, start page, help" onPress={() => onOpenPage('app')} />
         <SettingsRow
           icon="information-circle"
           tint={TILE.gray}
           title="About & updates"
           subtitle={waiting && isNewer(waiting, APP_VERSION) ? `Version ${shortVersion(APP_VERSION)} · Muse ${shortVersion(waiting)} is ready` : `Version ${shortVersion(APP_VERSION)}`}
-          onPress={() => onGoTo('update')}
+          onPress={() => onOpenPage('about')}
         />
         {isRunningInExpoGo() && (
           <SettingsRow
@@ -471,6 +472,8 @@ function PageBody(props: Props & { page: Exclude<SettingsPage, 'search'> }): Rea
       return <ListeningPage {...props} />;
     case 'app':
       return <AppPage {...props} />;
+    case 'about':
+      return <AboutPage {...props} />;
   }
 }
 
@@ -813,6 +816,23 @@ function PlayerPage({ accent }: Props) {
             disabled={!canShowVolumeSlider()}
           />
         </Find>
+        <Find id="previous">
+          <SettingsBlock
+            title="Previous button"
+            subtitle={
+              preferences.previousButton === 'restart'
+                ? 'Past 3 seconds it starts the song again. Tap again to go back'
+                : 'Always goes to the song before'
+            }
+          >
+            <Segmented
+              label="Previous button"
+              options={PREVIOUS}
+              value={preferences.previousButton}
+              onChange={(value) => setPreference('previousButton', value)}
+            />
+          </SettingsBlock>
+        </Find>
       </SettingsSection>
     </>
   );
@@ -878,26 +898,6 @@ function SoundPage({ accent, equalizerPreset, onOpenEqualizer }: Props) {
             accent={switchColor}
             disabled={!canResume || !preferences.pauseOnDisconnect}
           />
-        </Find>
-      </SettingsSection>
-
-      <SettingsSection large inset={16}>
-        <Find id="previous">
-          <SettingsBlock
-            title="Previous button"
-            subtitle={
-              preferences.previousButton === 'restart'
-                ? 'Past 3 seconds it starts the song again. Tap again to go back'
-                : 'Always goes to the song before'
-            }
-          >
-            <Segmented
-              label="Previous button"
-              options={PREVIOUS}
-              value={preferences.previousButton}
-              onChange={(value) => setPreference('previousButton', value)}
-            />
-          </SettingsBlock>
         </Find>
       </SettingsSection>
 
@@ -1115,19 +1115,6 @@ function LibraryPage({ accent, isLoading, onManageFolders, onRefresh, onOpenPerm
         )}
       </SettingsSection>
 
-      <SettingsSection large inset={16}>
-        <Find id="startTab">
-          <SettingsBlock title="Open on launch">
-            <Segmented
-              label="Open on launch"
-              options={START_TABS}
-              value={preferences.startTab}
-              onChange={(value) => setPreference('startTab', value)}
-            />
-          </SettingsBlock>
-        </Find>
-      </SettingsSection>
-
       <SettingsSection large title="Access" inset={16} footer="Opens Android settings for Muse.">
         <Find id="permission">
           <SettingsRow
@@ -1235,22 +1222,13 @@ const checkedAgo = (time: number) => {
 };
 
 function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
-  const styles = useAppStyles();
   const preferences = usePreferences();
   const switchColor = useSwitchColor(accent);
   const [cacheBytes, setCacheBytes] = useState(artworkCacheBytes);
   const [sizes, setSizes] = useState<{ photos: number; history: number } | null>(null);
   const [backupMade, setBackupMade] = useState<number | null>(null);
   const [busy, setBusy] = useState<'backup' | 'restore' | null>(null);
-  const [update, setUpdate] = useState<UpdateCheck | 'checking' | null>(null);
-  const [updateSheet, setUpdateSheet] = useState<AvailableUpdate | null>(null);
-  /** Expo Go only: the update sheet with made-up notes and a pretend download. */
-  const [updateChecked, setUpdateChecked] = useState<number | null>(null);
   useEffect(() => {
-    void AsyncStorage.getItem(UPDATE_CHECKED_KEY).then(
-      (value) => setUpdateChecked(value ? Number(value) || null : null),
-      () => undefined,
-    );
     void savedDataSizes().then(setSizes, () => undefined);
     void AsyncStorage.getItem(BACKUP_MADE_KEY).then(
       (value) => setBackupMade(value ? Number(value) || null : null),
@@ -1362,6 +1340,92 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
       },
     });
 
+  return (
+    <>
+      <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
+      <SettingsSection
+        large
+        title="Backup"
+        inset={16}
+        footer="One file with your playlists, favorites, ratings, history, photos and settings. Your music files are not included."
+      >
+        <Find id="backup">
+          <SettingsRow
+            title="Back up now"
+            subtitle={backupMade ? `Last backup ${sinceLabel(backupMade)}` : 'Not backed up yet'}
+            busy={busy === 'backup'}
+            onPress={() => void backUp()}
+          />
+        </Find>
+        <Find id="restore">
+          <SettingsRow title="Restore from a backup" busy={busy === 'restore'} onPress={() => void restore()} />
+        </Find>
+      </SettingsSection>
+
+      <SettingsSection large title="Storage" inset={16} footer="Your music files are never touched.">
+        <Find id="cache">
+          <SettingsRow
+            title="Cover cache"
+            subtitle={cacheBytes > 0 ? 'Tap to clear. Covers come back as songs show up' : 'Empty'}
+            detail={formatBytes(cacheBytes)}
+            chevron={false}
+            disabled={cacheBytes === 0}
+            onPress={confirmClearCache}
+          />
+        </Find>
+        <SettingsInfoRow title="Photos you picked" detail={sizes ? formatBytes(sizes.photos) : '…'} />
+        <SettingsInfoRow title="Listening history" detail={sizes ? formatBytes(sizes.history) : '…'} />
+      </SettingsSection>
+
+      <SettingsSection large title="General" inset={16}>
+        <Find id="startTab">
+          <SettingsBlock title="Open on launch">
+            <Segmented
+              label="Open on launch"
+              options={START_TABS}
+              value={preferences.startTab}
+              onChange={(value) => setPreference('startTab', value)}
+            />
+          </SettingsBlock>
+        </Find>
+        <Find id="haptics">
+          <SettingsSwitchRow
+            title="Haptic feedback"
+            subtitle="A light tap on buttons and switches"
+            value={preferences.haptics}
+            onValueChange={(value) => setPreference('haptics', value)}
+            accent={switchColor}
+          />
+        </Find>
+      </SettingsSection>
+
+      <SettingsSection large title="Help" inset={16} footer="Your folders and music stay as they are.">
+        <Find id="setup">
+          <SettingsRow title="Set up Muse again" subtitle="Look, player, battery and a quick tour" onPress={onSetUpAgain} />
+        </Find>
+        <Find id="reset">
+          <SettingsRow title="Reset settings" chevron={false} destructive onPress={confirmReset} />
+        </Find>
+      </SettingsSection>
+    </>
+  );
+}
+
+function AboutPage({ accent }: Props) {
+  const styles = useAppStyles();
+  const preferences = usePreferences();
+  const switchColor = useSwitchColor(accent);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  const [update, setUpdate] = useState<UpdateCheck | 'checking' | null>(null);
+  const [updateSheet, setUpdateSheet] = useState<AvailableUpdate | null>(null);
+  const [updateChecked, setUpdateChecked] = useState<number | null>(null);
+  useEffect(() => {
+    void AsyncStorage.getItem(UPDATE_CHECKED_KEY).then(
+      (value) => setUpdateChecked(value ? Number(value) || null : null),
+      () => undefined,
+    );
+  }, []);
+
   // Every check ends in a Muse sheet, so there is always a clear answer.
   const showUpdate = (result: UpdateCheck) => {
     if (result.status === 'available') {
@@ -1422,61 +1486,6 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
     <>
       <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
       <UpdatePopup update={updateSheet} onClose={() => setUpdateSheet(null)} />
-      <SettingsSection
-        large
-        title="Backup"
-        inset={16}
-        footer="One file with your playlists, favorites, ratings, history, photos and settings. Your music files are not included."
-      >
-        <Find id="backup">
-          <SettingsRow
-            title="Back up now"
-            subtitle={backupMade ? `Last backup ${sinceLabel(backupMade)}` : 'Not backed up yet'}
-            busy={busy === 'backup'}
-            onPress={() => void backUp()}
-          />
-        </Find>
-        <Find id="restore">
-          <SettingsRow title="Restore from a backup" busy={busy === 'restore'} onPress={() => void restore()} />
-        </Find>
-      </SettingsSection>
-
-      <SettingsSection large title="Storage" inset={16} footer="Your music files are never touched.">
-        <Find id="cache">
-          <SettingsRow
-            title="Cover cache"
-            subtitle={cacheBytes > 0 ? 'Tap to clear. Covers come back as songs show up' : 'Empty'}
-            detail={formatBytes(cacheBytes)}
-            chevron={false}
-            disabled={cacheBytes === 0}
-            onPress={confirmClearCache}
-          />
-        </Find>
-        <SettingsInfoRow title="Photos you picked" detail={sizes ? formatBytes(sizes.photos) : '…'} />
-        <SettingsInfoRow title="Listening history" detail={sizes ? formatBytes(sizes.history) : '…'} />
-      </SettingsSection>
-
-      <SettingsSection large title="Feel" inset={16}>
-        <Find id="haptics">
-          <SettingsSwitchRow
-            title="Haptic feedback"
-            subtitle="A light tap on buttons and switches"
-            value={preferences.haptics}
-            onValueChange={(value) => setPreference('haptics', value)}
-            accent={switchColor}
-          />
-        </Find>
-      </SettingsSection>
-
-      <SettingsSection large title="Help" inset={16} footer="Your folders and music stay as they are.">
-        <Find id="setup">
-          <SettingsRow title="Set up Muse again" subtitle="Look, player, battery and a quick tour" onPress={onSetUpAgain} />
-        </Find>
-        <Find id="reset">
-          <SettingsRow title="Reset settings" chevron={false} destructive onPress={confirmReset} />
-        </Find>
-      </SettingsSection>
-
       <SettingsSection
         large
         title="Updates"

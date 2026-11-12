@@ -13,7 +13,12 @@ export type Playlist = {
   /** Or a song in the playlist whose album art is the cover. */
   coverTrackId: string | null;
   createdAt: number;
+  /** When it was picked to show big on Collections; missing or null when not picked. */
+  pinnedAt?: number | null;
 };
+
+/** Collections shows this many playlists big; the rest are behind "See all". */
+export const SHOWN_PLAYLISTS = 3;
 
 const store = createSavedStore<Playlist[]>(AsyncStorage, '@muse/playlists/v1', [], (value) =>
   Array.isArray(value) ? value.filter(isPlaylist) : null,
@@ -28,7 +33,8 @@ function isPlaylist(value: unknown): value is Playlist {
     item.trackIds.every((id) => typeof id === 'string') &&
     (item.coverUri === null || typeof item.coverUri === 'string') &&
     (item.coverTrackId === null || typeof item.coverTrackId === 'string') &&
-    typeof item.createdAt === 'number'
+    typeof item.createdAt === 'number' &&
+    (item.pinnedAt === undefined || item.pinnedAt === null || typeof item.pinnedAt === 'number')
   );
 }
 
@@ -50,6 +56,38 @@ export function createPlaylist(name: string): string {
     ...playlists,
   ]);
   return id;
+}
+
+/**
+ * Picks a playlist to show big on Collections, or puts it back behind "See all".
+ * Only SHOWN_PLAYLISTS fit: picking one more moves the oldest pick back, and
+ * its name is returned so the person can be told.
+ */
+export function setPlaylistShown(playlistId: string, shown: boolean): string | null {
+  let bumped: string | null = null;
+  store.update((playlists) => {
+    let next = playlists.map((playlist) =>
+      playlist.id === playlistId ? { ...playlist, pinnedAt: shown ? Date.now() : null } : playlist,
+    );
+    const picked = next.filter((playlist) => playlist.pinnedAt != null).sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0));
+    if (shown && picked.length > SHOWN_PLAYLISTS) {
+      const oldest = picked[0];
+      bumped = oldest.name;
+      next = next.map((playlist) => (playlist.id === oldest.id ? { ...playlist, pinnedAt: null } : playlist));
+    }
+    return next;
+  });
+  return bumped;
+}
+
+/** The playlists shown big on Collections: picks first (oldest pick first), then the rest of `sorted` in order. */
+export function shownPlaylists<T extends { playlist: Playlist }>(sorted: T[]): T[] {
+  const picked = sorted
+    .filter((item) => item.playlist.pinnedAt != null)
+    .sort((a, b) => (a.playlist.pinnedAt ?? 0) - (b.playlist.pinnedAt ?? 0))
+    .slice(0, SHOWN_PLAYLISTS);
+  const rest = sorted.filter((item) => !picked.includes(item));
+  return [...picked, ...rest].slice(0, SHOWN_PLAYLISTS);
 }
 
 export function renamePlaylist(playlistId: string, name: string) {
