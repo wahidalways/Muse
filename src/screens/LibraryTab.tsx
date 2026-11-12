@@ -66,6 +66,7 @@ import {
   type SortDirection,
 } from '../library/sortTracks';
 import {
+  folderGroups,
   groupTracks,
   sortGroups,
   type GroupSort,
@@ -81,6 +82,8 @@ import { ControlIcon } from '../components/icons';
 import { EqualizerBars } from '../components/EqualizerBars';
 import { SearchInput } from '../components/SearchInput';
 import { SortSheet, type SortChoice } from '../components/SortSheet';
+import { LibraryTabsSheet } from '../components/LibraryTabsSheet';
+import { libraryTabViews, usePreferences } from '../settings/preferences';
 import { Sheet, SheetRow } from '../components/Sheet';
 import { SwipeQueue } from '../components/SwipeQueue';
 import { PlaylistPickerSheet } from '../components/PlaylistPickerSheet';
@@ -128,12 +131,8 @@ const TOOLS_TIMING = { duration: 180, easing: EASE_OUT };
 const getTrackKey = (track: MusicTrack) => track.id;
 const getGroupKey = (group: TrackGroup) => group.key;
 
-type LibraryView = 'songs' | 'albums' | 'artists';
-const VIEWS: { id: LibraryView; label: string }[] = [
-  { id: 'songs', label: 'Songs' },
-  { id: 'albums', label: 'Albums' },
-  { id: 'artists', label: 'Artists' },
-];
+type LibraryView = 'songs' | 'albums' | 'artists' | 'folders';
+const VIEW_LABELS: Record<LibraryView, string> = { songs: 'Songs', albums: 'Albums', artists: 'Artists', folders: 'Folders' };
 
 /** Sorts whose order is alphabetical, so the A-Z strip makes sense. */
 const LETTER_KEYS: Partial<Record<LibrarySort, (track: MusicTrack) => string | null>> = {
@@ -156,6 +155,11 @@ const ALBUM_SORTS: SortChoice[] = [
 const ARTIST_SORTS: SortChoice[] = [
   { id: 'name', label: 'Name', kind: 'text' },
   { id: 'songCount', label: 'Number of songs', kind: 'count' },
+];
+const FOLDER_SORTS: SortChoice[] = [
+  { id: 'name', label: 'Name', kind: 'text' },
+  { id: 'songCount', label: 'Number of songs', kind: 'count' },
+  { id: 'dateAdded', label: 'Date added', kind: 'date', hint: 'Of its newest song' },
 ];
 type GroupSortState = { by: GroupSort; direction: SortDirection };
 const DEFAULT_GROUP_SORT: GroupSortState = { by: 'name', direction: 'ascending' };
@@ -394,6 +398,7 @@ export function LibraryTab({
   onOpenGroup,
   onOpenTrackMenu,
   onDeleteTracks,
+  onExcludeFolder,
   onSearchEverywhere,
   searchText,
   onChangeSearchText: setSearchText,
@@ -417,6 +422,8 @@ export function LibraryTab({
   onOpenTrackMenu: (track: MusicTrack) => void;
   /** Deletes the files of the songs picked in a selection (one Android dialog). */
   onDeleteTracks: (tracks: MusicTrack[]) => void;
+  /** Hides a folder from Muse (Settings › Library › Included folders turns it back on). */
+  onExcludeFolder: (folderId: string, title: string) => void;
   /** Opens the Search tab with this text, which also finds playlists and folders. */
   onSearchEverywhere: (query: string) => void;
   searchText: string;
@@ -432,6 +439,17 @@ export function LibraryTab({
   // The tab row follows the tap at once; the heavy list swap renders behind it,
   // so the line keeps sliding instead of freezing while albums/artists build.
   const [tabView, setView] = useState<LibraryView>('songs');
+  // Songs, then the two views picked in Settings › Library (or by holding a tab).
+  const { libraryTabs } = usePreferences();
+  const views = useMemo(
+    () => (['songs', ...libraryTabViews(libraryTabs)] as LibraryView[]).map((id) => ({ id, label: VIEW_LABELS[id] })),
+    [libraryTabs],
+  );
+  // A tab that was just taken away falls back to Songs.
+  if (!views.some((option) => option.id === tabView)) {
+    setView('songs');
+  }
+  const [isTabsSheetOpen, setIsTabsSheetOpen] = useState(false);
   const view = useDeferredValue(tabView);
   // Typing stays responsive; filtering catches up a moment later.
   const deferredSearchText = useDeferredValue(searchText);
@@ -470,7 +488,11 @@ export function LibraryTab({
   // library change, not on every keystroke. Each keeps its search text.
   const allGroups = useMemo(
     () =>
-      view === 'songs' ? [] : groupTracks(includedTracks, view === 'albums' ? 'album' : 'artist'),
+      view === 'songs'
+        ? []
+        : view === 'folders'
+          ? folderGroups(includedTracks)
+          : groupTracks(includedTracks, view === 'albums' ? 'album' : 'artist'),
     [includedTracks, view],
   );
   const groupText = useMemo(
@@ -483,7 +505,8 @@ export function LibraryTab({
   const listSorts = useListSorts();
   const albumSort = savedGroupSort(listSorts['library:albums'], ALBUM_SORTS);
   const artistSort = savedGroupSort(listSorts['library:artists'], ARTIST_SORTS);
-  const groupSort = view === 'albums' ? albumSort : artistSort;
+  const folderSort = savedGroupSort(listSorts['library:folders'], FOLDER_SORTS);
+  const groupSort = view === 'albums' ? albumSort : view === 'folders' ? folderSort : artistSort;
   const sortedGroups = useMemo(
     () => (view === 'songs' ? [] : sortGroups(allGroups, groupSort.by, groupSort.direction)),
     [allGroups, groupSort.by, groupSort.direction, view],
@@ -496,7 +519,8 @@ export function LibraryTab({
     [groupText, sortedGroups, words],
   );
   // The sort for whichever tab is open: songs, albums or artists.
-  const sortChoices = view === 'songs' ? SONG_SORTS : view === 'albums' ? ALBUM_SORTS : ARTIST_SORTS;
+  const sortChoices =
+    view === 'songs' ? SONG_SORTS : view === 'albums' ? ALBUM_SORTS : view === 'folders' ? FOLDER_SORTS : ARTIST_SORTS;
   const shownSortBy: string = view === 'songs' ? sortBy : groupSort.by;
   const shownDirection = view === 'songs' ? sortDirection : groupSort.direction;
   const shownChoice = sortChoices.find((choice) => choice.id === shownSortBy) ?? sortChoices[0];
@@ -583,7 +607,7 @@ export function LibraryTab({
   // so it keeps sliding while the list (and its header) is rebuilt for the
   // new view. Moved and sized with transforms only (a fixed-width bar,
   // scaled), so it never waits on React drawing the new list.
-  const viewIndex = VIEWS.findIndex((option) => option.id === tabView);
+  const viewIndex = views.findIndex((option) => option.id === tabView);
   // A ref, not state: the three tabs measure in the same frame, and state
   // updates from one stale copy kept only the last tab, so the line had
   // nowhere to go on the first switch.
@@ -640,7 +664,7 @@ export function LibraryTab({
     }
     hapticSelection();
     setSelection(null);
-    const nextIndex = VIEWS.findIndex((option) => option.id === next);
+    const nextIndex = views.findIndex((option) => option.id === next);
     placeLine(nextIndex, true);
     clearTimeout(introTimer.current);
     setIntro(nextIndex > viewIndex ? 'right' : 'left');
@@ -654,7 +678,7 @@ export function LibraryTab({
         setSortBy(nextSortBy as LibrarySort);
         setSortDirection(nextDirection);
       } else {
-        setListSort(view === 'albums' ? 'library:albums' : 'library:artists', { by: nextSortBy, direction: nextDirection });
+        setListSort(`library:${view}`, { by: nextSortBy, direction: nextDirection });
       }
     },
     [setSortBy, setSortDirection, startIntro, view],
@@ -791,7 +815,11 @@ export function LibraryTab({
       const entering = intro && index < INTRO_ROWS ? rowIntro(index, intro) : undefined;
       const open = () => {
         hapticSelection();
-        onOpenGroup({ kind: 'group', group: view === 'albums' ? 'album' : 'artist', key: item.key });
+        onOpenGroup(
+          view === 'folders'
+            ? { kind: 'folder', id: item.key }
+            : { kind: 'group', group: view === 'albums' ? 'album' : 'artist', key: item.key },
+        );
       };
       const openMenu = () => {
         hapticImpact();
@@ -839,7 +867,10 @@ export function LibraryTab({
         );
       }
       const albumCount = new Set(item.tracks.map((track) => track.album ?? '')).size;
-      const detail = `${count} · ${albumCount} ${albumCount === 1 ? 'album' : 'albums'}`;
+      const detail =
+        view === 'folders'
+          ? [count, item.subtitle].filter(Boolean).join(' · ')
+          : `${count} · ${albumCount} ${albumCount === 1 ? 'album' : 'albums'}`;
       return (
         <Animated.View entering={entering}>
           <Pressable
@@ -855,8 +886,8 @@ export function LibraryTab({
               pressed && ROW_PRESSED,
             ]}
           >
-            {/* Up to four of the artist's album covers, in a circle. */}
-            <CoverCollage tracks={item.tracks} size={56} radius={28} />
+            {/* Up to four of the album covers inside: a circle for an artist, a rounded square for a folder. */}
+            <CoverCollage tracks={item.tracks} size={56} radius={view === 'folders' ? 12 : 28} />
             <View style={styles.libraryTrackCopy}>
               <Text numberOfLines={1} style={styles.libraryTrackTitle}>
                 {item.title}
@@ -913,10 +944,10 @@ export function LibraryTab({
         </Text>
       </Animated.View>
 
-      {/* Songs, Albums, Artists as text tabs, the sort at the right of the same row. */}
+      {/* Songs and two more views as text tabs (hold one to change them), the sort at the right of the same row. */}
       <View style={styles.libraryViewRow}>
         <View accessibilityRole="tablist" style={styles.libraryViewTabs}>
-          {VIEWS.map((option, index) => {
+          {views.map((option, index) => {
             const selected = option.id === tabView;
             return (
               <Pressable
@@ -924,7 +955,12 @@ export function LibraryTab({
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
                 hitSlop={{ left: 10, right: 10 }}
+                accessibilityHint="Hold to change the tabs"
                 onPress={() => chooseView(option.id)}
+                onLongPress={() => {
+                  hapticImpact();
+                  setIsTabsSheetOpen(true);
+                }}
                 onLayout={(event) => measureTab(index, event.nativeEvent.layout.x, event.nativeEvent.layout.width)}
                 style={styles.libraryViewTab}
               >
@@ -1057,7 +1093,7 @@ export function LibraryTab({
     );
 
   const selectedCount = selection?.size ?? 0;
-  const groupKind = view === 'albums' ? 'ALBUM' : 'ARTIST';
+  const groupKind = view === 'albums' ? 'ALBUM' : view === 'folders' ? 'FOLDER' : 'ARTIST';
   const closeGroupMenu = (then?: () => void) => {
     setGroupMenu(null);
     then?.();
@@ -1226,6 +1262,7 @@ export function LibraryTab({
         </Animated.View>
       )}
 
+      <LibraryTabsSheet visible={isTabsSheetOpen} onClose={() => setIsTabsSheetOpen(false)} />
       <SortSheet
         visible={isSortSheetOpen}
         title={`Sort ${view}`}
@@ -1274,6 +1311,28 @@ export function LibraryTab({
                 setTimeout(() => setPickerTracks(list), 260);
               }}
             />
+            {view === 'folders' && (
+              <>
+                <SheetRow
+                  icon={<ControlIcon name="hide" size={18} tone="muted" />}
+                  label="Exclude from Muse"
+                  detail="Turn it on again in Settings › Library"
+                  onPress={() => closeGroupMenu(() => onExcludeFolder(groupMenu.key, groupMenu.title))}
+                />
+                <SheetRow
+                  icon={<ControlIcon name="delete" size={18} tone="muted" />}
+                  label="Delete from phone"
+                  detail={`${groupMenu.tracks.length} ${groupMenu.tracks.length === 1 ? 'song' : 'songs'}. Other files stay`}
+                  danger
+                  onPress={() => {
+                    const list = groupMenu.tracks;
+                    setGroupMenu(null);
+                    // After the menu has gone: Android's own confirm comes up next.
+                    setTimeout(() => onDeleteTracks(list), 260);
+                  }}
+                />
+              </>
+            )}
           </View>
         )}
       </Sheet>

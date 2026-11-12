@@ -22,22 +22,45 @@ export type WidgetId =
 export type WidgetSize = 'square' | 'wide';
 export type BoardItem = { id: WidgetId; on: boolean; size: WidgetSize };
 
-/** Default order. The first size is the default; one size means it can't change. */
-export const WIDGETS: { id: WidgetId; name: string; note?: string; sizes: WidgetSize[] }[] = [
-  { id: 'recap', name: 'Weekly recap', note: "On your week's start day", sizes: ['wide'] },
-  { id: 'mixes', name: 'Mixes', sizes: ['wide'] },
-  { id: 'jump', name: 'Jump back in', sizes: ['wide'] },
-  { id: 'week', name: 'This week', sizes: ['wide'] },
-  { id: 'goal', name: 'Daily goal', sizes: ['square'] },
-  { id: 'streak', name: 'Streak', sizes: ['square'] },
-  { id: 'artist', name: 'Top artist', note: 'Last 30 days', sizes: ['square', 'wide'] },
-  { id: 'hour', name: 'Peak hour', note: 'Last 30 days', sizes: ['square', 'wide'] },
-  { id: 'repeat', name: 'On repeat', note: 'Last 30 days', sizes: ['wide', 'square'] },
-  { id: 'album', name: 'Top album', note: 'Last 30 days', sizes: ['square'] },
-  { id: 'session', name: 'Longest session', note: 'Last 30 days', sizes: ['square'] },
-  { id: 'genre', name: 'Genre mix', note: 'Last 30 days', sizes: ['square', 'wide'] },
-  { id: 'explore', name: 'Explorer', note: 'Your whole library', sizes: ['square', 'wide'] },
+/**
+ * Home's sections, always in this order. Music to play sits open at the top;
+ * the numbers are grouped by the time they cover, named once on the heading
+ * instead of on every card. Customize moves widgets only within their group.
+ */
+export type WidgetGroup = 'music' | 'today' | 'month' | 'library';
+export const GROUPS: { id: WidgetGroup; title: string | null }[] = [
+  // Mixes and Jump back in carry their own shelf titles.
+  { id: 'music', title: null },
+  { id: 'today', title: 'Today & this week' },
+  { id: 'month', title: 'Last 30 days' },
+  { id: 'library', title: 'Your library' },
 ];
+
+/** Default order. The first size is the default; one size means it can't change. */
+export const WIDGETS: { id: WidgetId; name: string; group: WidgetGroup; note?: string; sizes: WidgetSize[] }[] = [
+  { id: 'recap', name: 'Weekly recap', group: 'music', note: "On your week's start day", sizes: ['wide'] },
+  { id: 'mixes', name: 'Mixes', group: 'music', sizes: ['wide'] },
+  { id: 'jump', name: 'Jump back in', group: 'music', sizes: ['wide'] },
+  { id: 'week', name: 'This week', group: 'today', sizes: ['wide'] },
+  { id: 'goal', name: 'Daily goal', group: 'today', sizes: ['square'] },
+  { id: 'streak', name: 'Streak', group: 'today', sizes: ['square'] },
+  { id: 'artist', name: 'Top artist', group: 'month', sizes: ['square', 'wide'] },
+  { id: 'hour', name: 'Peak hour', group: 'month', sizes: ['square', 'wide'] },
+  { id: 'repeat', name: 'On repeat', group: 'month', sizes: ['wide', 'square'] },
+  { id: 'album', name: 'Top album', group: 'month', sizes: ['square'] },
+  { id: 'session', name: 'Longest session', group: 'month', sizes: ['square'] },
+  { id: 'genre', name: 'Genre mix', group: 'month', sizes: ['square', 'wide'] },
+  { id: 'explore', name: 'Explorer', group: 'library', sizes: ['square', 'wide'] },
+];
+
+export function groupOf(id: WidgetId): WidgetGroup {
+  return WIDGETS.find((widget) => widget.id === id)?.group ?? 'month';
+}
+
+/** The board split into Home's sections, in section order, each keeping the saved order. */
+export function groupBoard(board: BoardItem[]): { group: (typeof GROUPS)[number]; items: BoardItem[] }[] {
+  return GROUPS.map((group) => ({ group, items: board.filter((item) => groupOf(item.id) === group.id) }));
+}
 
 export type PulseSettings = {
   board: BoardItem[];

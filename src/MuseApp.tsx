@@ -67,7 +67,7 @@ import type {
   Screen,
   Tab,
 } from './types';
-import type { Accent, Appearance, Theme } from './theme/theme';
+import { ACCENT_OPTIONS, type Accent, type Appearance, type Theme } from './theme/theme';
 import {
   getPreferences,
   preferencesReady,
@@ -83,8 +83,9 @@ import { PageVisible, TabLayer } from './components/TabLayer';
 import { setGlassChoice, useGlassStyle } from './theme/glassStyle';
 import { SearchScreen } from './screens/SearchScreen';
 import { LaunchScreen } from './components/LaunchScreen';
-import { WelcomeNote } from './components/WelcomeNote';
-import { markWelcomeSeen, useWelcomeDue } from './settings/welcome';
+import { UpdatePrompt } from './components/UpdatePrompt';
+import type { WidgetSync as WidgetSyncType } from './widgets/WidgetSync';
+
 import { CloseIcon } from './components/icons';
 import {
   DEFAULT_LIBRARY_VIEW,
@@ -142,6 +143,11 @@ import {
 } from './motion/motion';
 import { loadListeningHistory, saveListeningHistory } from './history/history';
 import { withListenedSeconds } from './history/stats';
+
+// The widget library needs Muse's own build; Expo Go never loads it.
+const WidgetSync: typeof WidgetSyncType | null =
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Platform.OS === 'android' && !isRunningInExpoGo() ? require('./widgets/WidgetSync').WidgetSync : null;
 
 // Expo Go test songs. Dev bundles only: a release build folds `__DEV__` to
 // false and drops this require (an import could not be dropped), so the APK
@@ -265,7 +271,6 @@ export function MuseApp({
   /** The launch screen is gone, or never came: Home may play its entrance. */
   const isLaunchTimeUp = screen !== 'starting' && !isLaunchShown;
   /** Muse's one-time hello covers the app: after setup, or on the first open of an earlier setup. */
-  const isWelcomeShown = useWelcomeDue() && screen === 'app';
   // The splash hands over to the app, Welcome, or the pulsing launch screen.
   // App's saved theme is read before this restore's reads (one storage
   // queue), so the app never first shows in the wrong look.
@@ -337,6 +342,8 @@ export function MuseApp({
     [deviceTracks, shortAudioSeconds, skipShortAudio],
   );
   const [blockedFolderIds, setBlockedFolderIds] = useState<string[]>([]);
+  /** Asking before deleting files that cannot go to the trash; Delete runs deleteSongs again, confirmed. */
+  const [deleteConfirm, setDeleteConfirm] = useState<(ConfirmRequest & { picked: MusicTrack[] }) | null>(null);
   const [hasSavedFolderRules, setHasSavedFolderRules] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   /** A non-blocking problem, shown above the tabs. The library stays usable. */
@@ -941,8 +948,26 @@ export function MuseApp({
    * stay in history, so stats do not change.
    */
   const deleteSongs = useCallback(
-    async (picked: MusicTrack[]) => {
+    async (picked: MusicTrack[], confirmed = false) => {
       const list = picked.filter(canDeleteTrack);
+      // Files Android cannot trash (picked folders, All files access) get no
+      // Android prompt and are gone for good, so Muse asks first.
+      const permanent = list.filter((track) => track.id.startsWith('doc-')).length;
+      if (permanent > 0 && !confirmed) {
+        setDeleteConfirm({
+          picked,
+          eyebrow: 'DELETE FROM PHONE',
+          title: list.length === 1 ? `Delete "${list[0].title}"?` : `Delete ${list.length} songs?`,
+          message:
+            permanent === list.length
+              ? 'These files cannot go to the trash, so they are deleted for good.'
+              : `${permanent} of them cannot go to the trash and are deleted for good. The rest go to the trash.`,
+          confirmLabel: 'Delete',
+          cancelLabel: 'Keep',
+          destructive: true,
+        });
+        return;
+      }
       if (list.length === 0) {
         setLibraryNotice(
           isRunningInExpoGo()
@@ -973,7 +998,7 @@ export function MuseApp({
         perFolder.set(track.folderId, (perFolder.get(track.folderId) ?? 0) + 1);
       });
       if (list.length > 1) {
-        showToast(`Deleted ${list.length} songs`, { icon: 'delete' });
+        showToast(`Moved ${list.length} songs to the trash`, { icon: 'delete' });
       }
       // Closing Android's confirm dialog can start a rescan, so this works
       // from the latest state and cache, not the lists from before the dialog.
@@ -1119,6 +1144,30 @@ export function MuseApp({
         return null;
       });
     return 'granted';
+  }, []);
+
+  /**
+   * Setup's "Find them automatically" was turned on: scan again, so APE,
+   * WavPack and DSD folders show on the Folders step. Only after music access
+   * (the first scan) has started.
+   */
+  const rescanForSetup = useCallback(() => {
+    if (!scanJob.current) {
+      return;
+    }
+    scanJob.current = scanJob.current.then((previous) =>
+      loadMusicLibrary().then(
+        async (library) => {
+          await saveLibraryCache(library).catch(() => undefined);
+          setFolders(library.folders);
+          setTracks(library.tracks);
+          setScannedLibrary(library);
+          return library;
+        },
+        // A failed rescan keeps what the first scan found.
+        () => previous,
+      ),
+    );
   }, []);
 
   /** Setup is done: save the folder choices (all on unless changed) and open Home. */
@@ -1607,6 +1656,23 @@ export function MuseApp({
   }, []);
   const deleteFromPlayer = useCallback((track: MusicTrack) => void deleteSongs([track]), [deleteSongs]);
   const deleteFromLibrary = useCallback((list: MusicTrack[]) => void deleteSongs(list), [deleteSongs]);
+  // One object per question: ConfirmSheet copies a new request into its state.
+  const deleteRequest = useMemo(
+    () => deleteConfirm && { ...deleteConfirm, onConfirm: () => void deleteSongs(deleteConfirm.picked, true) },
+    [deleteConfirm, deleteSongs],
+  );
+  /** Folder menu › Exclude from Muse: saved at once, like a switch in Included folders. */
+  const excludeFolder = useCallback((folderId: string, title: string) => {
+    setBlockedFolderIds((current) => {
+      if (current.includes(folderId)) {
+        return current;
+      }
+      const next = [...current, folderId];
+      void AsyncStorage.setItem(FOLDER_RULES_KEY, JSON.stringify(next)).catch(() => undefined);
+      return next;
+    });
+    showToast(`${title} is hidden`, { detail: 'Turn it on again in Settings › Library', icon: 'hide' });
+  }, []);
   const openCurrentTrackMenu = useCallback(() => {
     if (currentTrack) {
       openTrackMenu(currentTrack);
@@ -1657,8 +1723,8 @@ export function MuseApp({
 
       <Animated.View
         style={[styles.mainScroll, recedeStyle]}
-        // Hidden from screen readers while the player sheet or the hello covers it.
-        importantForAccessibility={fullPlayerTrack || isWelcomeShown ? 'no-hide-descendants' : 'auto'}
+        // Hidden from screen readers while the player sheet covers it.
+        importantForAccessibility={fullPlayerTrack ? 'no-hide-descendants' : 'auto'}
       >
         <BlurTargetView ref={blurTarget} style={styles.mainScroll}>
         <GestureDetector gesture={tabSwipe}>
@@ -1708,10 +1774,10 @@ export function MuseApp({
                         currentTrack={currentTrack}
                         isPlaying={isPlaying}
                         queueSource={queueSource}
-                        // On screen: the launch screen and the hello are gone, and Home is the page showing.
-                        revealed={isLaunchTimeUp && !isWelcomeShown && screen === 'app' && activeTab === 'home' && !isSearchOpen}
+                        // On screen: the launch screen is gone, and Home is the page showing.
+                        revealed={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen}
                         // Can be seen right now: loops and live numbers only run then.
-                        active={isLaunchTimeUp && !isWelcomeShown && screen === 'app' && activeTab === 'home' && !isSearchOpen && !isFullPlayerOpen && isAppActive}
+                        active={isLaunchTimeUp && screen === 'app' && activeTab === 'home' && !isSearchOpen && !isFullPlayerOpen && isAppActive}
                         contentContainerStyle={appPageContent}
                         onBarScroll={homeBarScrollAt}
                         onPlayTrack={playTrack}
@@ -1744,6 +1810,7 @@ export function MuseApp({
                 onOpenGroup={openSearchResult}
                 onOpenTrackMenu={openTrackMenu}
                 onDeleteTracks={deleteFromLibrary}
+                onExcludeFolder={excludeFolder}
                 searchText={librarySearch}
                 onChangeSearchText={setLibrarySearch}
                 sortBy={librarySort}
@@ -1865,6 +1932,7 @@ export function MuseApp({
             goalMinutes={goalMinutes}
             onChangeGoal={changeGoal}
             onRequestAccess={requestAccess}
+            onRescan={rescanForSetup}
             library={scannedLibrary}
             blockedFolderIds={blockedFolderIds}
             onToggleFolder={toggleFolder}
@@ -1889,6 +1957,8 @@ export function MuseApp({
             {screen === 'folders' && (
               <FoldersScreen
                 folders={folders}
+                tracks={deviceTracks}
+                accent={accent}
                 blockedFolderIds={blockedFolderIds}
                 hasSavedFolderRules={hasSavedFolderRules}
                 isLoading={isLoading}
@@ -2056,13 +2126,25 @@ export function MuseApp({
         onSelectTrackEnd={sleepAtTrackEnd}
         onCancelTimer={clearSleepTimer}
       />
-      {isWelcomeShown && <WelcomeNote songCount={tracks.length} onDone={markWelcomeSeen} />}
+      {/* What's new after an update, or the daily update check: only once Muse is on screen. */}
+      <UpdatePrompt enabled={screen === 'app' && !isLaunchShown && crashNotice === null} />
+      {WidgetSync && hasSavedFolderRules && (
+        <WidgetSync
+          track={currentTrack ?? null}
+          isPlaying={isPlaying}
+          history={visibleHistory}
+          tracksById={tracksById}
+          goalMinutes={goalMinutes}
+          accent={(ACCENT_OPTIONS.find((option) => option.id === accent) ?? ACCENT_OPTIONS[0]).swatch}
+          dark={theme === 'dark'}
+        />
+      )}
       {/* On top of everything while the saved library restores. */}
       {isLaunchShown && <LaunchScreen pulsing={isLaunchPulsing} />}
+      <ConfirmSheet request={deleteRequest} onClose={() => setDeleteConfirm(null)} />
       <ConfirmSheet
         // Not while starting (the launch screen is up then): the sheet is a window of its own and would sit over Android's splash.
-        // Nor over the hello: a crash report can wait until it is closed.
-        request={isLaunchShown || isWelcomeShown ? null : crashNotice}
+        request={isLaunchShown ? null : crashNotice}
         onClose={() => {
           // Muse can rebuild this screen (after an icon switch); the notice stays gone.
           pendingCrashNotice = null;

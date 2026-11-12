@@ -7,7 +7,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Sheet } from '../../components/Sheet';
 import { Segmented } from '../../components/SettingsList';
 import type { WeekStart } from '../../history/stats';
-import { WIDGETS, type BoardItem, type WidgetSize } from '../../settings/pulseBoard';
+import { groupBoard, WIDGETS, type BoardItem, type WidgetSize } from '../../settings/pulseBoard';
 import { resetBoard, setBoard, setWeekStart, usePulse } from '../../settings/pulse';
 import { hapticSelection } from '../../utils/haptics';
 import { useAppStyles } from '../../theme/styles';
@@ -15,6 +15,8 @@ import { EASE_OUT } from '../../motion/motion';
 
 /** Every row is this tall, so a drag can work out the target row from distance alone. */
 const ROW_HEIGHT = 58;
+/** Drags are in one section: a row's key is section * SECTION + its place there. */
+const SECTION = 100;
 const SLIDE = { duration: 180, easing: EASE_OUT };
 
 export const WEEK_STARTS: { id: string; label: string }[] = [
@@ -26,18 +28,21 @@ export const WEEK_STARTS: { id: string; label: string }[] = [
 export function CustomizeSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const styles = useAppStyles();
   const { board, weekStart } = usePulse();
-  // The row being dragged (-1 for none), where it started and where it would land.
+  const sections = groupBoard(board);
+  // The row being dragged (-1 for none), where it started and where it would land, as section keys.
   const dragging = useSharedValue(-1);
   const target = useSharedValue(-1);
   const offset = useSharedValue(0);
 
-  const update = (index: number, change: Partial<BoardItem>) =>
-    setBoard(board.map((item, at) => (at === index ? { ...item, ...change } : item)));
+  const update = (id: BoardItem['id'], change: Partial<BoardItem>) =>
+    setBoard(board.map((item) => (item.id === id ? { ...item, ...change } : item)));
   const move = (from: number, to: number) => {
-    if (from !== to) {
-      const next = [...board];
-      next.splice(to, 0, ...next.splice(from, 1));
-      setBoard(next);
+    const section = Math.floor(from / SECTION);
+    if (from !== to && from >= 0 && Math.floor(to / SECTION) === section) {
+      const lists = sections.map(({ items }) => [...items]);
+      const list = lists[section];
+      list.splice(to % SECTION, 0, ...list.splice(from % SECTION, 1));
+      setBoard(lists.flat());
     }
     dragging.set(-1);
     target.set(-1);
@@ -47,23 +52,29 @@ export function CustomizeSheet({ visible, onClose }: { visible: boolean; onClose
   return (
     <Sheet visible={visible} eyebrow="Home" title="Customize" onClose={onClose} tall>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={[styles.pulseSub, { marginBottom: 12 }]}>Drag to reorder. Turn off what you don&apos;t need.</Text>
-        <View style={styles.pulseEditList}>
-          {board.map((item, index) => (
-            <EditRow
-              key={item.id}
-              item={item}
-              index={index}
-              count={board.length}
-              dragging={dragging}
-              target={target}
-              offset={offset}
-              onMove={move}
-              onToggle={() => update(index, { on: !item.on })}
-              onSize={(size) => update(index, { size })}
-            />
-          ))}
-        </View>
+        <Text style={[styles.pulseSub, { marginBottom: 12 }]}>Drag to reorder within a section. Turn off what you don&apos;t need.</Text>
+        {sections.map(({ group, items }, section) => (
+          <View key={group.id}>
+            <Text style={styles.pulseSectionLabel}>{group.title ?? 'Music'}</Text>
+            <View style={styles.pulseEditList}>
+              {items.map((item, index) => (
+                <EditRow
+                  key={item.id}
+                  item={item}
+                  index={section * SECTION + index}
+                  first={section * SECTION}
+                  count={items.length}
+                  dragging={dragging}
+                  target={target}
+                  offset={offset}
+                  onMove={move}
+                  onToggle={() => update(item.id, { on: !item.on })}
+                  onSize={(size) => update(item.id, { size })}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
         <Text style={styles.pulseSectionLabel}>Week starts on</Text>
         <Segmented
           label="Week starts on"
@@ -83,6 +94,7 @@ export function CustomizeSheet({ visible, onClose }: { visible: boolean; onClose
 function EditRow({
   item,
   index,
+  first,
   count,
   dragging,
   target,
@@ -92,7 +104,10 @@ function EditRow({
   onSize,
 }: {
   item: BoardItem;
+  /** The row's key: its section * SECTION + its place in the section. */
   index: number;
+  /** The section's first key; drags stay between first and first + count - 1. */
+  first: number;
   count: number;
   dragging: SharedValue<number>;
   target: SharedValue<number>;
@@ -114,7 +129,7 @@ function EditRow({
     onUpdate: (event) => {
       'worklet';
       offset.set(event.translationY);
-      const next = Math.max(0, Math.min(count - 1, Math.round(index + event.translationY / ROW_HEIGHT)));
+      const next = Math.max(first, Math.min(first + count - 1, Math.round(index + event.translationY / ROW_HEIGHT)));
       if (next !== target.get()) {
         target.set(next);
         scheduleOnRN(hapticSelection);
@@ -135,6 +150,10 @@ function EditRow({
       return { transform: [{ translateY: offset.get() }, { scale: 1.02 }], zIndex: 2, elevation: 6 };
     }
     let shift = 0;
+    // Rows of another section never step aside.
+    if (from < first || from >= first + count) {
+      return { transform: [{ translateY: 0 }, { scale: 1 }], zIndex: 0, elevation: 0 };
+    }
     if (from >= 0 && from < to && index > from && index <= to) {
       shift = -ROW_HEIGHT;
     } else if (from >= 0 && from > to && index >= to && index < from) {

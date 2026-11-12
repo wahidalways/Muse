@@ -1,5 +1,6 @@
 // Generates Muse's Expo Go test songs (WAV tones) and album covers (PNG).
 // Usage: node scripts/make-demo-audio.js assets/demo
+/* global Buffer */
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');

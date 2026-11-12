@@ -2,6 +2,7 @@ package expo.modules.musemetadata
 
 import android.graphics.BitmapFactory
 import android.util.Base64
+import expo.modules.musemetadata.formats.Tags
 import java.io.ByteArrayOutputStream
 import java.nio.channels.FileChannel
 
@@ -53,15 +54,19 @@ internal fun readFilePictures(channel: FileChannel): List<FilePicture> {
     magic.startsWith("ID3") -> {
       // Some FLAC files carry an ID3 tag in front of "fLaC".
       val tagEnd = 10L + syncsafe(head, 6) + if ((u8(head, 5) and 0x10) != 0) 10 else 0
-      id3Pictures(channel, head) + flacPictures(channel, tagEnd)
+      (id3Pictures(channel, head) + flacPictures(channel, tagEnd)).ifEmpty { ownPictures(channel) }
     }
     magic == "fLaC" -> flacPictures(channel, 0)
     magic == "OggS" -> oggPictures(channel)
     String(head, 4, 4, Charsets.ISO_8859_1) == "ftyp" -> mp4Pictures(channel)
-    else -> emptyList()
+    // WAV, AIFF, APE, WavPack and DSD: formats/Tags.kt.
+    else -> ownPictures(channel)
   }
   return pictures.filter { it.width > 0 && it.height > 0 }
 }
+
+private fun ownPictures(channel: FileChannel): List<FilePicture> =
+  Tags.pictures(channelReader(channel), channel.size()).map { FilePicture(it.type, it.bytes) }
 
 // ---------------------------------------------------------------------------
 // MP3: APIC (v2.3, v2.4) and PIC (v2.2) frames of an ID3v2 tag.

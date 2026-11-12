@@ -224,134 +224,6 @@ const styleDefinitions = {
     borderRadius: 5,
     backgroundColor: colors.lime,
   },
-  folderList: {
-    gap: 10,
-    marginTop: 18,
-  },
-  folderSummary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginTop: 20,
-  },
-  folderSummaryMetric: {
-    minWidth: 58,
-  },
-  folderSummaryValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  folderSummaryLabel: {
-    color: colors.muted,
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-  folderSummaryDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: colors.border,
-    marginHorizontal: 12,
-  },
-  folderSummaryHint: {
-    flex: 1,
-    color: colors.muted,
-    fontSize: 9,
-    lineHeight: 13,
-    textAlign: 'right',
-  },
-  folderRow: {
-    minHeight: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 17,
-  },
-  folderIcon: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#252C20',
-    borderRadius: 12,
-  },
-  folderIconText: {
-    color: colors.lime,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  folderCopy: {
-    flex: 1,
-  },
-  folderTitle: {
-    color: '#E4E6DB',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  folderTrackCount: {
-    color: '#929987',
-    fontSize: 10,
-    marginTop: 4,
-  },
-  folderRuleButton: {
-    minWidth: 77,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 14,
-  },
-  folderAllowedButton: {
-    backgroundColor: '#2B3821',
-  },
-  folderBlockedButton: {
-    backgroundColor: '#382724',
-  },
-  folderRuleLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  folderAllowedLabel: {
-    color: colors.lime,
-  },
-  folderBlockedLabel: {
-    color: '#EAA38E',
-  },
-  noFoldersCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 26,
-  },
-  noFoldersTitle: {
-    color: '#E4E6DB',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 12,
-  },
-  noFoldersDescription: {
-    color: '#959B8D',
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-    marginTop: 6,
-  },
   homeRecentIcon: {
     width: 32,
     height: 32,
@@ -2944,7 +2816,340 @@ const styleDefinitions = {
     fontSize: 14,
     fontWeight: '700',
   },
-  /** Release notes in the update sheet: a quiet box that scrolls when long. */
+  // The update sheet: an accent hero, the changes in groups, then the action that fills as it downloads.
+  updateHero: {
+    backgroundColor: '#2B3821',
+    borderRadius: 24,
+    padding: 20,
+    gap: 4,
+  },
+  updateHeroTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  updateHeroEyebrow: {
+    color: colors.lime,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    marginTop: 4,
+  },
+  updateHeroTitle: {
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  updateHeroLead: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    opacity: 0.85,
+  },
+  updateFacts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 14,
+    rowGap: 6,
+    marginTop: 10,
+  },
+  updateFact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  updateFactText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  updateFactGlyph: {
+    color: colors.text,
+    opacity: 0.7,
+  },
+  updateBody: {
+    flexShrink: 1,
+  },
+  updateList: {
+    flexShrink: 1,
+    marginTop: 18,
+  },
+  updateListContent: {
+    gap: 16,
+    paddingBottom: 2,
+  },
+  updateGroupHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginBottom: 2,
+  },
+  updateGroupTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  updateGroupCount: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  updateChange: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  updateChangeLine: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  updateChangeGlyph: {
+    width: 18,
+    marginTop: 1,
+    textAlign: 'center',
+    color: colors.lime,
+  },
+  updateChangeDot: {
+    width: 18,
+    marginTop: 7,
+    textAlign: 'center',
+    color: colors.lime,
+  },
+  updateChangeText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14.5,
+    lineHeight: 21,
+  },
+  updateMore: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  updateMoreText: {
+    color: colors.lime,
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  updateFoot: {
+    marginTop: 12,
+    paddingTop: 14,
+    gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  updateGo: {
+    gap: 8,
+  },
+  updateSplit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateSplitWord: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  updateSplitLine: {
+    width: 1,
+    height: 22,
+    backgroundColor: '#30362A',
+  },
+  updateSplitArrow: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateGoSize: {
+    opacity: 0.72,
+    fontWeight: '600',
+  },
+  updateMoreGlyph: {
+    color: colors.lime,
+  },
+  updateGoGlyph: {
+    color: '#202719',
+  },
+  updateMutedGlyph: {
+    color: colors.muted,
+  },
+  updateTextGlyph: {
+    color: colors.text,
+  },
+  updateGhost: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  updateGhostText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  updateNote: {
+    minHeight: 44,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 44,
+    textAlign: 'center',
+  },
+  updateBar: {
+    minHeight: 56,
+    borderRadius: 17,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    backgroundColor: '#30372A',
+  },
+  /** Filled with the accent once Android's prompt is up. */
+  updateBarDone: {
+    backgroundColor: '#C4F078',
+  },
+  updateBarFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    backgroundColor: '#C4F078',
+  },
+  updateBarLabel: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 18,
+  },
+  updateBarStart: {
+    justifyContent: 'flex-start',
+  },
+  updateBarText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  updateBarFillText: {
+    color: '#202719',
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  updateSteps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  updateStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  updateStepDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#818A72',
+  },
+  updateStepDotOn: {
+    backgroundColor: '#C4F078',
+  },
+  updateStepText: {
+    color: colors.muted,
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  updateStepTextOn: {
+    color: colors.text,
+  },
+  updateStepTextDone: {
+    color: colors.lime,
+  },
+  updateStepLine: {
+    width: 14,
+    height: 1,
+    marginLeft: 1,
+    backgroundColor: '#30362A',
+  },
+  updateError: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#382724',
+  },
+  updateErrorGlyph: {
+    marginTop: 1,
+    color: '#EAA38E',
+  },
+  updateErrorTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  updateErrorText: {
+    color: colors.text,
+    fontSize: 13.5,
+    lineHeight: 19,
+    opacity: 0.85,
+  },
+  updateLaterHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: -10,
+    marginTop: -6,
+  },
+  updateBack: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateLaterTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  updateChoices: {
+    marginTop: 8,
+  },
+  updateChoice: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+  },
+  updateChoiceLine: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  updateChoiceLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  updateChoiceDetail: {
+    color: colors.muted,
+    fontSize: 12.5,
+    marginTop: 1,
+  },
   confirmNotes: {
     maxHeight: 220,
     backgroundColor: colors.surface,
@@ -4508,13 +4713,6 @@ const styleDefinitions = {
     justifyContent: 'center',
     gap: 18,
   },
-  // Muse's one-time hello (WelcomeNote): facts under the greeting, the credit under the button.
-  welcomeFacts: {
-    marginTop: 22,
-  },
-  welcomeCredit: {
-    marginTop: 22,
-  },
   settingRowPressed: {
     opacity: 0.7,
   },
@@ -4823,6 +5021,11 @@ const styleDefinitions = {
   coverTileNameOn: {
     color: colors.lime,
   },
+  coverTileCaption: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 2,
+  },
   coverTilePressed: {
     opacity: 0.7,
   },
@@ -4877,6 +5080,13 @@ const styleDefinitions = {
     fontSize: 16,
     paddingVertical: 0,
   },
+  coverSearchClear: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   coverSearchButton: {
     minHeight: 36,
     paddingHorizontal: 14,
@@ -4899,8 +5109,8 @@ const styleDefinitions = {
 } as const;
 
 /** Accent-filled buttons and the text on them: the accent's action color and its readable label color. */
-const ACTION_FILLS = new Set(['primaryButton', 'sheetDone', 'coverSearchButton']);
-const ACTION_LABELS = new Set(['primaryButtonLabel', 'buttonArrow', 'sheetDoneText', 'coverSearchButtonText']);
+const ACTION_FILLS = new Set(['primaryButton', 'sheetDone', 'coverSearchButton', 'updateBarFill', 'updateBarDone', 'updateStepDotOn']);
+const ACTION_LABELS = new Set(['primaryButtonLabel', 'buttonArrow', 'sheetDoneText', 'coverSearchButtonText', 'updateBarFillText', 'updateGoGlyph']);
 
 function buildStyles(theme: Theme, accent: Accent, isAmoled: boolean) {
   return StyleSheet.create(

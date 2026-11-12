@@ -5,6 +5,8 @@ import { getAudioDetails, type AudioDetails } from '../../modules/muse-audio-met
 import { formatShortDate } from '../library/sortTracks';
 import { formatAudioDetails, formatBytes, formatPlayCount, formatTrackDuration } from '../utils/format';
 import { useAppStyles } from '../theme/styles';
+import { useCurrentTrackId } from '../playback/usePlayback';
+import { describeOutput, useOutput } from '../playback/output';
 
 type Row = { label: string; value: string };
 
@@ -31,6 +33,8 @@ export function SongInfo({ track, playCount }: { track: MusicTrack; playCount: n
     };
   }, [track.id]);
   const loaded = details?.trackId === track.id ? details : null;
+  const isPlaying = useCurrentTrackId() === track.id;
+  const output = useOutput().state;
 
   const folder = track.path.slice(0, Math.max(0, track.path.length - track.filename.length - 1));
   const sections: { title: string; rows: (Row | null)[] }[] = [
@@ -57,6 +61,8 @@ export function SongInfo({ track, playCount }: { track: MusicTrack; playCount: n
           value: loaded ? formatAudioDetails(loaded.value, track.filename) || 'Unknown' : 'Reading...',
         },
         loaded?.value?.size ? { label: 'Size', value: formatBytes(loaded.value.size) } : null,
+        // Where this song's sound goes right now (Hi-Res, bit-perfect...).
+        isPlaying && output.mode !== 'idle' ? { label: 'Output', value: describeOutput(output) } : null,
         { label: 'File name', value: track.filename },
         { label: 'Folder', value: folder || track.folderTitle },
         track.dateAdded != null ? { label: 'Added', value: formatShortDate(track.dateAdded) } : null,

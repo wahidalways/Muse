@@ -22,7 +22,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ListeningEvent, MusicTrack } from '../../types';
 import { peakIndex, type ListeningStats, type getWeek } from '../../history/stats';
 import type { Mix } from '../../history/mixes';
-import { packRows, WIDGETS, type BoardItem, type WidgetId } from '../../settings/pulseBoard';
+import { groupBoard, packRows, WIDGETS, type BoardItem, type WidgetId } from '../../settings/pulseBoard';
 import { AlbumArtwork } from '../../components/AlbumArtwork';
 import { MixCover } from '../../components/CoverCollage';
 import { EqualizerBars } from '../../components/EqualizerBars';
@@ -45,7 +45,7 @@ const PRESS_DELAY = 100;
 const WEEK_PLOT = 96;
 /** The Muse bars, for the goal moment. */
 const MUSE_BARS = [16, 26, 36, 22];
-/** Widgets that are music to play rather than numbers: they sit open, above "Your listening". */
+/** Widgets that are music to play rather than numbers: they sit open, at the top of the board. */
 const MUSIC_WIDGETS: WidgetId[] = ['recap', 'mixes', 'jump'];
 /** A change in a live number glides over this long. */
 const GLIDE = { duration: 600, easing: EASE_OUT };
@@ -127,7 +127,10 @@ export const PulseBoard = memo(function PulseBoard(props: BoardProps) {
     genre: data.month.topGenres.length > 0,
     explore: data.coverage.total > 0,
   };
-  const rows = packRows(props.board.filter((item) => ready[item.id]));
+  // Section by section (music, today & this week, last 30 days, library); each heading rides on its first row.
+  const rows = groupBoard(props.board.filter((item) => ready[item.id])).flatMap(({ group, items }) =>
+    packRows(items).map((row, index) => ({ row, heading: index === 0 ? group.title : null })),
+  );
   const [rowsShown, setRowsShown] = useState(FIRST_ROWS);
   useEffect(() => {
     if (rowsShown >= rows.length) {
@@ -140,18 +143,16 @@ export const PulseBoard = memo(function PulseBoard(props: BoardProps) {
   // (large text, narrow phones) instead of clipping its content.
   const { width } = useWindowDimensions();
   const side = (width - 2 * Number(styles.content.paddingHorizontal) - Number(styles.pulseRow.gap)) / 2;
-  // "Your listening" heads the first row of numbers.
-  const firstStatRow = rows.findIndex((row) => row.every((item) => !MUSIC_WIDGETS.includes(item.id)));
   let order = 1;
 
   return (
     <View style={styles.pulseBoard}>
-      {rows.slice(0, rowsShown).map((row, index) => (
+      {rows.slice(0, rowsShown).map(({ row, heading }) => (
         <Animated.View key={row.map((item) => item.id).join('+')} layout={LinearTransition.duration(320).easing(EASE_OUT)}>
-          {index === firstStatRow && (
+          {heading && (
             <RevealView order={order++} style={[styles.pulseSectionGap, { marginBottom: 12 }]}>
               <Text accessibilityRole="header" style={styles.pulseSectionTitle}>
-                Your listening
+                {heading}
               </Text>
             </RevealView>
           )}

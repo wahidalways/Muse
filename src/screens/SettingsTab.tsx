@@ -35,6 +35,7 @@ import { useAppStyles } from '../theme/styles';
 import { GLASS_CHOICES, setGlassChoice, useGlassChoice } from '../theme/glassStyle';
 import {
   CROSSFADE_OPTIONS,
+  LIBRARY_TAB_CHOICES,
   MUSE_LOOK,
   SAVER_LOOK,
   SHORT_AUDIO_OPTIONS,
@@ -67,9 +68,24 @@ import { APP_VERSION, BrandMark, CREDIT_NAME, LICENSE_URL, MakerCredit, MUSE_MOT
 import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 import { HomePreview } from '../onboarding/previews';
 import { pickBackup, previewBackup, restoreBackup, saveBackup, savedDataSizes } from '../settings/backup';
-import { checkForUpdate, type UpdateCheck } from '../settings/updates';
+import { checkForUpdate, isNewer, shortVersion, type UpdateCheck } from '../settings/updates';
+import { changeUpdatePrompt, isSnoozed, useUpdatePrompt } from '../settings/updatePrompt';
+import { DEMO_UPDATE, UpdatePopup, type AvailableUpdate } from '../components/UpdatePrompt';
+import { LibraryTabsSheet } from '../components/LibraryTabsSheet';
+import { THIRD_PARTY_NOTICES } from '../settings/notices';
 import { closeApp } from '../../modules/muse-audio-metadata';
 import { showToast } from '../components/Toast';
+import { bitPerfectSupported, describeOutput, setOutput, useOutput } from '../playback/output';
+import {
+  filesSupported,
+  getMusicFolders,
+  getOutputOptions,
+  getUsbDacName,
+  openAllFilesAccess,
+  pickMusicFolder,
+  removeMusicFolder,
+  useAllFilesAccess,
+} from '../../modules/muse-audio-metadata/files';
 
 /** The pages under the main Settings list. `search` finds a setting on any of them. */
 export type SettingsPage = 'look' | 'player' | 'sound' | 'library' | 'listening' | 'app' | 'search';
@@ -156,8 +172,13 @@ const SEARCH_INDEX: [string, string, Exclude<SettingsPage, 'search'>, string][] 
   ['resumeOnConnect', 'Resume on reconnect', 'sound', 'bluetooth headphones connect'],
   ['previous', 'Previous button', 'sound', 'back restart rewind'],
   ['sleepFade', 'Fade out before sleep', 'sound', 'sleep timer fade bedtime night'],
+  ['hiRes', 'Hi-Res audio', 'sound', '24-bit lossless quality flac wav high resolution'],
+  ['bitPerfect', 'Bit-perfect USB', 'sound', 'dac usb bit perfect audiophile exclusive output'],
+  ['dop', 'DSD over PCM (DoP)', 'sound', 'dsd dsf dff dop dac'],
   ['rescan', 'Rescan now', 'library', 'scan refresh new songs'],
+  ['libraryTabs', 'Library tabs', 'library', 'tabs albums artists folders songs sections'],
   ['folders', 'Included folders', 'library', 'folder whatsapp telegram block exclude include'],
+  ['pickedFolders', 'APE, WavPack and DSD folders', 'library', 'ape wv wavpack dsd dsf dff formats lossless folder'],
   ['skipShort', 'Skip short audio', 'library', 'voice notes ringtones short recordings'],
   ['shortLimit', 'Short audio limit', 'library', 'seconds voice notes'],
   ['startTab', 'Open on launch', 'library', 'start tab home'],
@@ -173,12 +194,13 @@ const SEARCH_INDEX: [string, string, Exclude<SettingsPage, 'search'>, string][] 
   ['setup', 'Set up Muse again', 'app', 'tour onboarding guide help'],
   ['reset', 'Reset settings', 'app', 'defaults'],
   ['update', 'Check for updates', 'app', 'new version upgrade latest'],
+  ['updateReminders', 'Tell me about updates', 'app', 'automatic update reminder popup changelog whats new'],
   ['about', 'About Muse', 'app', 'version credits'],
 ];
 /** Shown before you type. */
 const POPULAR = ['equalizer', 'crossfade', 'sleepFade', 'backup', 'historyPaused', 'theme'];
 /** Rows that only show in some states point at the setting that reveals them. */
-const REVEALED_BY: Record<string, string> = { shortLimit: 'skipShort', miniDock: 'glass' };
+const REVEALED_BY: Record<string, string> = { shortLimit: 'skipShort', miniDock: 'glass', dop: 'bitPerfect' };
 const BACKUP_MADE_KEY = '@muse/backup-made/v1';
 /** When Check for updates last got an answer from GitHub. */
 const UPDATE_CHECKED_KEY = '@muse/update-checked/v1';
@@ -288,7 +310,9 @@ export function SettingsTab(props: Props) {
     }
     // A row hidden right now glows its parent, the setting that reveals it.
     const hidden =
-      (id === 'shortLimit' && !preferences.skipShortAudio) || (id === 'miniDock' && glassChoice === 'solid');
+      (id === 'shortLimit' && !preferences.skipShortAudio) ||
+      (id === 'miniDock' && glassChoice === 'solid') ||
+      (id === 'dop' && !getOutputOptions()?.bitPerfect);
     setTarget(hidden ? REVEALED_BY[id] : id);
     onOpenPage(entry[2]);
   };
@@ -334,8 +358,11 @@ function RoundButton({ icon, label, onPress }: { icon: 'search'; label: string; 
 
 function MainList({ onOpenPage, onGoTo }: { onOpenPage: (page: SettingsPage) => void; onGoTo: (id: string) => void }) {
   const styles = useAppStyles();
+  const waiting = useUpdatePrompt().waitingVersion;
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
   return (
     <>
+      <UpdatePopup update={isDemoOpen ? DEMO_UPDATE : null} onClose={() => setIsDemoOpen(false)} canSnooze demo />
       <View style={styles.settingsHeader}>
         <View style={styles.flexSpacer}>
           <Text accessibilityRole="header" style={styles.settingsTitle}>
@@ -357,7 +384,22 @@ function MainList({ onOpenPage, onGoTo }: { onOpenPage: (page: SettingsPage) => 
       </SettingsSection>
       <SettingsSection large>
         <SettingsRow icon="phone-portrait" tint={TILE.slate} title="App & data" subtitle="Backup, storage, haptics, help" onPress={() => onOpenPage('app')} />
-        <SettingsRow icon="information-circle" tint={TILE.gray} title="About & updates" subtitle={`Version ${APP_VERSION}`} onPress={() => onGoTo('update')} />
+        <SettingsRow
+          icon="information-circle"
+          tint={TILE.gray}
+          title="About & updates"
+          subtitle={waiting && isNewer(waiting, APP_VERSION) ? `Version ${shortVersion(APP_VERSION)} · Muse ${shortVersion(waiting)} is ready` : `Version ${shortVersion(APP_VERSION)}`}
+          onPress={() => onGoTo('update')}
+        />
+        {isRunningInExpoGo() && (
+          <SettingsRow
+            icon="sparkles"
+            tint={TILE.teal}
+            title="Preview update popup"
+            subtitle="Expo Go only: the popup people see, with a pretend download"
+            onPress={() => setIsDemoOpen(true)}
+          />
+        )}
       </SettingsSection>
     </>
   );
@@ -809,6 +851,8 @@ function SoundPage({ accent, equalizerPreset, onOpenEqualizer }: Props) {
         </Find>
       </SettingsSection>
 
+      <OutputSection accent={accent} />
+
       <SettingsSection large title="Headphones" inset={16}>
         <Find id="pauseOnDisconnect">
           <SettingsSwitchRow
@@ -872,8 +916,141 @@ function SoundPage({ accent, equalizerPreset, onOpenEqualizer }: Props) {
   );
 }
 
+/** Settings › Sound › Audio output: Hi-Res, bit-perfect USB and DoP, plus what plays right now. */
+function OutputSection({ accent }: { accent: Accent }) {
+  const switchColor = useSwitchColor(accent);
+  const { options, state } = useOutput();
+  // Read on every render (a quick native call): output changes re-render this, and a DAC can come and go.
+  const dac = options.bitPerfect ? getUsbDacName() : null;
+  const bitPerfectLine = !bitPerfectSupported
+    ? 'Needs Android 14 or newer'
+    : dac
+      ? `${dac} connected`
+      : 'Plug in a USB DAC to use it';
+  return (
+    <SettingsSection
+      large
+      title="Audio output"
+      inset={16}
+      footer={
+        options.bitPerfect
+          ? 'While a song plays bit-perfect, the equalizer, crossfade, speed and fades are off, and the DAC sets the volume. The first moment after play or a seek fades in.'
+          : 'Bluetooth always re-encodes sound, so bit-perfect works over USB only.'
+      }
+    >
+      <Find id="hiRes">
+        <SettingsSwitchRow
+          title="Hi-Res audio"
+          subtitle={options.hiRes ? '24-bit songs keep every bit. Changes apply when Muse starts again' : 'Every song plays as 16-bit'}
+          value={options.hiRes}
+          onValueChange={(value) => setOutput({ hiRes: value })}
+          accent={switchColor}
+        />
+      </Find>
+      <Find id="bitPerfect">
+        <SettingsSwitchRow
+          title="Bit-perfect USB"
+          subtitle={bitPerfectLine}
+          value={bitPerfectSupported && options.bitPerfect}
+          onValueChange={(value) => setOutput({ bitPerfect: value })}
+          accent={switchColor}
+          disabled={!bitPerfectSupported}
+        />
+      </Find>
+      {options.bitPerfect && (
+        <Find id="dop">
+          <SettingsSwitchRow
+            title="DSD over PCM (DoP)"
+            subtitle={options.dop ? 'DSD reaches the DAC as it is' : 'DSD plays as PCM. Turn on if your DAC plays DSD'}
+            value={options.dop}
+            onValueChange={(value) => setOutput({ dop: value })}
+            accent={switchColor}
+          />
+        </Find>
+      )}
+      <SettingsRow title="Playing through" subtitle={describeOutput(state)} chevron={false} onPress={() => undefined} />
+    </SettingsSection>
+  );
+}
+
+/**
+ * Settings › Library: APE, WavPack and DSD, which Android does not list. With
+ * All files access (opt-in) Muse finds them anywhere; without it, people pick
+ * the folders that hold them.
+ */
+function PickedFolders({ accent, onRefresh }: { accent: Accent; onRefresh: () => void }) {
+  const switchColor = useSwitchColor(accent);
+  const automatic = useAllFilesAccess();
+  const [folders, setFolders] = useState(getMusicFolders);
+  const toggleAutomatic = () => {
+    if (!filesSupported) {
+      showToast('Needs the Muse app', { detail: 'Not available in Expo Go', icon: 'info' });
+      return;
+    }
+    // Only Android can turn it on or off; Muse rescans by itself when you come back.
+    if (!openAllFilesAccess()) {
+      showToast('Already on', { detail: 'Android 10 and older let Muse find these files', icon: 'info' });
+    }
+  };
+  const add = async () => {
+    if (!filesSupported) {
+      showToast('Needs the Muse app', { detail: 'Expo Go cannot open folders', icon: 'info' });
+      return;
+    }
+    const picked = await pickMusicFolder().catch(() => null);
+    if (picked) {
+      setFolders(getMusicFolders());
+      showToast(`Added ${picked.name}`, { detail: 'Looking for songs in it' });
+      onRefresh();
+    }
+  };
+  const remove = (uri: string, name: string) => {
+    removeMusicFolder(uri);
+    setFolders(getMusicFolders());
+    showToast(`Removed ${name}`, { detail: 'Its songs leave Muse. The files stay on your phone' });
+    onRefresh();
+  };
+  return (
+    <Find id="pickedFolders">
+      <SettingsSection
+        large
+        title="APE, WavPack and DSD"
+        inset={16}
+        footer={
+          automatic
+            ? 'Muse only reads these files. Folders you turned off stay off.'
+            : 'Android does not list these files. Let Muse find them, or pick the folders that hold them.'
+        }
+      >
+        <SettingsSwitchRow
+          title="Find them automatically"
+          subtitle={automatic ? 'Muse looks for them all over your phone' : "Uses Android's All files access"}
+          value={automatic}
+          onValueChange={toggleAutomatic}
+          accent={switchColor}
+        />
+        {!automatic &&
+          folders.map((folder) => (
+            <SettingsRow
+              key={folder.uri}
+              icon="folder"
+              tint={TILE.teal}
+              title={folder.name}
+              detail="Remove"
+              chevron={false}
+              onPress={() => remove(folder.uri, folder.name)}
+              accessibilityHint="Stops Muse reading this folder"
+            />
+          ))}
+        {!automatic && <SettingsRow icon="add" tint={TILE.blue} title="Pick a folder" chevron={false} onPress={() => void add()} />}
+      </SettingsSection>
+    </Find>
+  );
+}
+
 function LibraryPage({ accent, isLoading, onManageFolders, onRefresh, onOpenPermissionSettings, tracks }: Props) {
   const preferences = usePreferences();
+  const [isTabsOpen, setIsTabsOpen] = useState(false);
   const switchColor = useSwitchColor(accent);
   return (
     <>
@@ -891,6 +1068,19 @@ function LibraryPage({ accent, isLoading, onManageFolders, onRefresh, onOpenPerm
           <SettingsRow title="Included folders" onPress={onManageFolders} />
         </Find>
       </SettingsSection>
+
+      <LibraryTabsSheet visible={isTabsOpen} onClose={() => setIsTabsOpen(false)} />
+      <SettingsSection large inset={16} footer="Songs comes first. The view you leave out is in Collections › Browse. Or hold a tab in Library.">
+        <Find id="libraryTabs">
+          <SettingsRow
+            title="Library tabs"
+            subtitle={`Songs, ${(LIBRARY_TAB_CHOICES.find((choice) => choice.id === preferences.libraryTabs) ?? LIBRARY_TAB_CHOICES[0]).label}`}
+            onPress={() => setIsTabsOpen(true)}
+          />
+        </Find>
+      </SettingsSection>
+
+      <PickedFolders accent={accent} onRefresh={onRefresh} />
 
       <SettingsSection
         large
@@ -1053,6 +1243,8 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
   const [backupMade, setBackupMade] = useState<number | null>(null);
   const [busy, setBusy] = useState<'backup' | 'restore' | null>(null);
   const [update, setUpdate] = useState<UpdateCheck | 'checking' | null>(null);
+  const [updateSheet, setUpdateSheet] = useState<AvailableUpdate | null>(null);
+  /** Expo Go only: the update sheet with made-up notes and a pretend download. */
   const [updateChecked, setUpdateChecked] = useState<number | null>(null);
   useEffect(() => {
     void AsyncStorage.getItem(UPDATE_CHECKED_KEY).then(
@@ -1173,28 +1365,14 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
   // Every check ends in a Muse sheet, so there is always a clear answer.
   const showUpdate = (result: UpdateCheck) => {
     if (result.status === 'available') {
-      const released = result.publishedAt ? ` It came out on ${sinceLabel(Date.parse(result.publishedAt))}.` : '';
-      setConfirm({
-        eyebrow: 'UPDATE',
-        title: `Muse ${result.version} is out`,
-        icon: 'arrow-down-circle-outline',
-        message: `You have Muse ${APP_VERSION}.${released}`,
-        confirmLabel: 'Download',
-        cancelLabel: 'Later',
-        onConfirm: () => void Linking.openURL(result.url).catch(() => undefined),
-        children: result.notes ? (
-          <ScrollView style={styles.confirmNotes} contentContainerStyle={styles.confirmNotesContent}>
-            <Text style={styles.confirmNotesHeading}>What&apos;s new</Text>
-            <Text style={styles.confirmNotesText}>{result.notes}</Text>
-          </ScrollView>
-        ) : undefined,
-      });
+      // The same sheet the daily check shows, without "Don't remind me" (you asked).
+      setUpdateSheet(result);
     } else if (result.status === 'latest') {
       setConfirm({
         eyebrow: 'UPDATES',
         title: "You're up to date",
         icon: 'checkmark-circle-outline',
-        message: `Muse ${APP_VERSION} is the newest version.`,
+        message: `Muse ${shortVersion(APP_VERSION)} is the newest version.`,
         confirmLabel: 'Done',
         cancelLabel: null,
       });
@@ -1225,17 +1403,25 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
     setUpdate(result);
     if (result.status !== 'error') {
       const now = Date.now();
+      changeUpdatePrompt({ lastCheck: now, waitingVersion: result.status === 'available' ? result.version : null });
       setUpdateChecked(now);
       void AsyncStorage.setItem(UPDATE_CHECKED_KEY, String(now)).catch(() => undefined);
     }
     showUpdate(result);
   };
-  const status = update === 'checking' || update === null ? null : update.status;
-  const checkedLine = update === 'checking' ? 'Checking GitHub…' : updateChecked ? `Checked ${checkedAgo(updateChecked)}` : 'Not checked yet';
+  const prompt = useUpdatePrompt();
+  // When this page opened: a pause is judged against it (render stays pure).
+  const [openedAt] = useState(() => Date.now());
+  // Before a check in this visit, the daily check's answer stands in.
+  const status = update === 'checking' ? null : update === null ? (prompt.waitingVersion ? 'available' : null) : update.status;
+  const lastChecked = Math.max(updateChecked ?? 0, prompt.lastCheck) || null;
+  const paused = isSnoozed(prompt, openedAt) ? prompt.snoozeUntil : null;
+  const checkedLine = update === 'checking' ? 'Checking GitHub…' : lastChecked ? `Checked ${checkedAgo(lastChecked)}` : 'Not checked yet';
 
   return (
     <>
       <ConfirmSheet request={confirm} onClose={() => setConfirm(null)} />
+      <UpdatePopup update={updateSheet} onClose={() => setUpdateSheet(null)} />
       <SettingsSection
         large
         title="Backup"
@@ -1295,14 +1481,18 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
         large
         title="Updates"
         inset={16}
-        footer="Muse asks GitHub for the latest version number only when you tap. Nothing about you or your music is sent."
+        footer={
+          prompt.autoCheck
+            ? 'Muse asks GitHub for the newest version once a day. Nothing about you or your music is sent.'
+            : 'Muse asks GitHub for the newest version only when you tap. Nothing about you or your music is sent.'
+        }
       >
         <Find id="update">
           <View style={styles.updateCard}>
             <View style={styles.updateHead}>
               <AppIconMark id={preferences.appIcon} size={44} />
               <View style={styles.settingCopy}>
-                <Text style={styles.updateTitle}>Muse {APP_VERSION}</Text>
+                <Text style={styles.updateTitle}>Muse {shortVersion(APP_VERSION)}</Text>
                 <Text style={styles.updateSubtitle}>{checkedLine}</Text>
               </View>
               {status ? (
@@ -1342,6 +1532,22 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
             </Pressable>
           </View>
         </Find>
+        <Find id="updateReminders">
+          <SettingsSwitchRow
+            title="Tell me about updates"
+            subtitle={
+              !prompt.autoCheck
+                ? 'Off. Check here when you like'
+                : paused
+                  ? `Reminders paused until ${new Date(paused).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                  : "Shows what's new when a version comes out"
+            }
+            value={prompt.autoCheck}
+            // Either way, a pause ends: the choice is fresh.
+            onValueChange={(value) => changeUpdatePrompt({ autoCheck: value, snoozeUntil: null })}
+            accent={switchColor}
+          />
+        </Find>
       </SettingsSection>
 
       <Find id="about">
@@ -1350,7 +1556,7 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
             <BrandMark size={30} />
             <Text style={styles.aboutTagline}>{MUSE_MOTTO}</Text>
             <View style={styles.aboutMetaRow}>
-              {[`Version ${APP_VERSION}`, 'Works offline', 'No account'].map((fact) => (
+              {[`Version ${shortVersion(APP_VERSION)}`, 'Works offline', 'No account'].map((fact) => (
                 <View key={fact} style={styles.aboutPill}>
                   <Text style={styles.aboutPillText}>{fact}</Text>
                 </View>
@@ -1371,6 +1577,28 @@ function AppPage({ accent, onSetUpAgain, onResetSettings, tracks }: Props) {
               style={({ pressed }) => [styles.creditLinkRow, pressed && styles.creditLinkPressed]}
             >
               <Text style={styles.creditLink}>Read the license</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                setConfirm({
+                  eyebrow: 'ABOUT',
+                  title: 'Open-source notices',
+                  message: 'Muse plays APE, WavPack and Apple Lossless with decoders from these projects.',
+                  confirmLabel: 'Done',
+                  cancelLabel: null,
+                  children: (
+                    <ScrollView style={styles.confirmNotes} contentContainerStyle={styles.confirmNotesContent}>
+                      <Text selectable style={styles.confirmNotesText}>
+                        {THIRD_PARTY_NOTICES}
+                      </Text>
+                    </ScrollView>
+                  ),
+                })
+              }
+              style={({ pressed }) => [styles.creditLinkRow, pressed && styles.creditLinkPressed]}
+            >
+              <Text style={styles.creditLink}>Open-source notices</Text>
             </Pressable>
             <View style={styles.aboutDivider} />
             {/* The same credit as Welcome: name, divider, X and GitHub chips. */}

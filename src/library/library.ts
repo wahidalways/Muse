@@ -4,6 +4,7 @@ import { File, Paths } from 'expo-file-system';
 import { Asset } from 'expo-media-library';
 import { Platform } from 'react-native';
 import { getAudioLibrary } from '../../modules/muse-audio-metadata';
+import { filesSupported, trashTracks } from '../../modules/muse-audio-metadata/files';
 import { sortMusicTracks } from './sortTracks';
 import type { MusicTrack, CachedLibrary, LibraryView, MusicFolder } from '../types';
 import {
@@ -68,14 +69,15 @@ export async function loadMusicLibrary(): Promise<CachedLibrary> {
   };
 }
 
-/** Only real files from the phone (all-digit media ids) can be deleted. */
+/** Only real files from the phone (media ids, or picked-folder "doc-" ids) can be deleted. */
 export function canDeleteTrack(track: MusicTrack): boolean {
-  return /^\d+$/.test(track.id);
+  return /^\d+$/.test(track.id) || track.id.startsWith('doc-');
 }
 
 /**
- * Deletes songs' files from the phone, behind one Android confirm dialog.
- * Resolves false when the person says no there.
+ * Moves songs' files to Android's trash (restorable from the Files app for
+ * 30 days), behind one Android confirm dialog. Files from picked folders have
+ * no trash and are deleted. Resolves false when the person says no there.
  *
  * Android 10 and older would need the storage write permission, which Muse
  * blocks on purpose, so deleting is offered from Android 11 on.
@@ -83,6 +85,9 @@ export function canDeleteTrack(track: MusicTrack): boolean {
 export async function deleteTrackFiles(tracks: MusicTrack[]): Promise<boolean> {
   if (Platform.OS !== 'android' || Number(Platform.Version) < 30) {
     throw new Error('Deleting songs needs Android 11 or newer.');
+  }
+  if (filesSupported) {
+    return trashTracks(tracks.map((track) => track.id));
   }
   try {
     // Same id as Muse's own scan: the media store row for the file.

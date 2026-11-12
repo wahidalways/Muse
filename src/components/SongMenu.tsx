@@ -219,7 +219,7 @@ function SongMenuBody({
       <SheetRow
         icon={<ControlIcon name="delete" size={18} tone="muted" />}
         label="Delete from phone"
-        detail={canDeleteTrack(track) ? 'Removes the file' : 'Sample song'}
+        detail={canDeleteTrack(track) ? (track.id.startsWith('doc-') ? 'Removes the file' : 'Moves the file to the trash') : 'Sample song'}
         danger
         onPress={onDelete}
       />

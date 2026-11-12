@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -155,8 +155,10 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
   // Covers online, looked up as the sheet opens; "Search" looks again with other words.
   const [query, setQuery] = useState(() => coverQuery(track));
   const [online, setOnline] = useState<OnlineState>({ status: 'loading' });
-  const [isEditing, setIsEditing] = useState(false);
   const latestSearch = useRef(0);
+  const searchField = useRef<ComponentRef<typeof TextInput>>(null);
+  // Tags and length rank the results, also when other words are typed.
+  const song = { title: track.title, artist: track.artist, album: track.album, duration: track.duration };
   useEffect(() => {
     let isActive = true;
     const settle = (result: OnlineState) => {
@@ -165,7 +167,7 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
         setOnline(result);
       }
     };
-    void searchCovers(coverQuery(track)).then(
+    void searchCovers(coverQuery(track), { title: track.title, artist: track.artist, album: track.album, duration: track.duration }).then(
       (result) => settle({ status: 'done', ...result }),
       () => settle({ status: 'done', covers: [], offline: true }),
     );
@@ -176,7 +178,7 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
   const searchAgain = () => {
     const id = (latestSearch.current += 1);
     setOnline({ status: 'loading' });
-    void searchCovers(query).then(
+    void searchCovers(query, song).then(
       (result) => id === latestSearch.current && setOnline({ status: 'done', ...result }),
       () => id === latestSearch.current && setOnline({ status: 'done', covers: [], offline: true }),
     );
@@ -282,6 +284,38 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
       </View>
 
       <Text style={styles.coverSheetLabel}>Found online</Text>
+      <View style={styles.coverSearchRow}>
+        <ControlIcon name="search" size={18} tone="muted" />
+        <TextInput
+          ref={searchField}
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={searchAgain}
+          returnKeyType="search"
+          autoCorrect={false}
+          accessibilityLabel="Search for a cover"
+          placeholder="Artist and album"
+          placeholderTextColor={String(styles.coverMessageText.color)}
+          style={styles.coverSearchInput}
+        />
+        {query.length > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear search words"
+            hitSlop={8}
+            onPress={() => {
+              setQuery('');
+              searchField.current?.focus();
+            }}
+            style={styles.coverSearchClear}
+          >
+            <ControlIcon name="close" size={16} tone="muted" />
+          </Pressable>
+        )}
+        <Pressable accessibilityRole="button" onPress={searchAgain} style={styles.coverSearchButton}>
+          <Text style={styles.coverSearchButtonText}>Search</Text>
+        </Pressable>
+      </View>
       {online.status === 'loading' ? (
         <View accessible accessibilityLabel="Looking for covers online" style={styles.coverPickGrid}>
           {Array.from({ length: 6 }, (_, index) => (
@@ -307,6 +341,7 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
                   key={item.id}
                   size={tile}
                   label={item.name || item.source}
+                  caption={item.artist}
                   hint={`From ${item.source}`}
                   selected={chosen === item.id}
                   busy={busy === item.id}
@@ -319,32 +354,8 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
           ) : (
             <View style={styles.coverMessage}>
               <Text style={styles.coverMessageTitle}>No covers found</Text>
-              <Text style={styles.coverMessageText}>Try searching with fewer words.</Text>
+              <Text style={styles.coverMessageText}>Try fewer words, such as just the artist and album.</Text>
             </View>
-          )}
-          {isEditing || online.covers.length === 0 ? (
-            <View style={styles.coverSearchRow}>
-              <ControlIcon name="search" size={18} tone="muted" />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                onSubmitEditing={searchAgain}
-                returnKeyType="search"
-                autoCorrect={false}
-                accessibilityLabel="Search for a cover"
-                placeholder="Artist and album"
-                placeholderTextColor={String(styles.coverMessageText.color)}
-                style={styles.coverSearchInput}
-              />
-              <Pressable accessibilityRole="button" onPress={searchAgain} style={styles.coverSearchButton}>
-                <Text style={styles.coverSearchButtonText}>Search</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable accessibilityRole="button" onPress={() => setIsEditing(true)} style={styles.coverLink}>
-              <Text style={styles.coverLinkText}>Not the right one? Search</Text>
-              <ControlIcon name="chevron-right" size={16} tone="accent" />
-            </Pressable>
           )}
         </>
       )}
@@ -361,6 +372,7 @@ function ChangeCoverBody({ track }: { track: MusicTrack }) {
 function Tile({
   size,
   label,
+  caption,
   hint,
   selected,
   busy = false,
@@ -369,6 +381,8 @@ function Tile({
 }: {
   size: number;
   label: string;
+  /** A quieter second line, such as the album's artist. */
+  caption?: string;
   hint?: string;
   selected: boolean;
   busy?: boolean;
@@ -379,7 +393,7 @@ function Tile({
   return (
     <Pressable
       accessibilityRole="radio"
-      accessibilityLabel={label}
+      accessibilityLabel={caption ? `${label}, ${caption}` : label}
       accessibilityHint={hint}
       accessibilityState={{ checked: selected, busy }}
       disabled={busy}
@@ -403,6 +417,11 @@ function Tile({
       <Text numberOfLines={1} style={[styles.coverTileName, selected && styles.coverTileNameOn]}>
         {label}
       </Text>
+      {caption ? (
+        <Text numberOfLines={1} style={styles.coverTileCaption}>
+          {caption}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }

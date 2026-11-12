@@ -12,7 +12,7 @@ import {
   withListenedSeconds,
 } from '../src/history/stats.ts';
 import { getMixes } from '../src/history/mixes.ts';
-import { DEFAULT_PULSE, packRows, parsePulse } from '../src/settings/pulseBoard.ts';
+import { DEFAULT_PULSE, groupBoard, packRows, parsePulse } from '../src/settings/pulseBoard.ts';
 import { groupTracks, smartList, sortGroups } from '../src/library/browse.ts';
 import { sortMusicTracks } from '../src/library/sortTracks.ts';
 import { createSavedStore } from '../src/library/savedStore.ts';
@@ -30,7 +30,7 @@ import { formatAudioDetails, formatBytes, formatPlayCount, formatSleepTimer } fr
 import { accentForCover, tintTones } from '../src/theme/dynamicAccent.ts';
 import { withQueued } from '../src/playback/queueOrder.ts';
 import { minimalLabels, minimalTitleSize } from '../src/player/minimalType.ts';
-import { coverQuery, mergeCovers, parseApple, parseDeezer } from '../src/library/coverSearch.ts';
+import { cleanWords, coverQuery, mergeCovers, parseApple, parseDeezer, rankCovers, scoreCover, splitArtistTitle } from '../src/library/coverSearch.ts';
 import { ringPath } from '../src/components/ringPath.ts';
 import { indexLetter, letterPositions } from '../src/library/alphabet.ts';
 import { activeLyricsLine, parseLyrics } from '../src/library/lyrics.ts';
@@ -406,6 +406,17 @@ assert.equal(titles(sortGroups(artists, 'songCount', 'descending')), 'Bo,Amy,Unk
   assert.deepEqual([parsed.recapSeen, parsed.recapOpen, parsed.goalCelebrated], [null, null, null]);
 }
 
+// Home sections: a shelf moved among the numbers still shows with the music; each group keeps its own order.
+{
+  const mixed = parsePulse({ board: [{ id: 'goal' }, { id: 'mixes' }, { id: 'artist' }, { id: 'week' }, { id: 'explore' }] });
+  const sections = groupBoard(mixed.board);
+  assert.deepEqual(sections.map((section) => section.group.id), ['music', 'today', 'month', 'library']);
+  assert.ok(sections[0].items.some((item) => item.id === 'mixes'), 'Mixes stays a music shelf');
+  const today = sections[1].items.map((item) => item.id);
+  assert.ok(today.indexOf('goal') < today.indexOf('week'), 'saved order inside a group');
+  assert.equal(sections.flatMap((section) => section.items).length, DEFAULT_PULSE.board.length, 'nothing lost');
+}
+
 // Change cover: search words, both services' answers, one list without repeats.
 assert.equal(coverQuery({ title: 'Song', artist: 'Nora Vale', album: 'Glass Harbor' }), 'Nora Vale Glass Harbor');
 assert.equal(coverQuery({ title: 'Song', artist: null, album: null }), 'Song', 'no album: the title');
@@ -435,6 +446,29 @@ assert.equal(coverQuery({ title: 'Song', artist: null, album: null }), 'Song', '
   const merged = mergeCovers([apple[0], { ...apple[0], id: 'same picture' }], deezer);
   assert.deepEqual(merged.map((cover) => cover.source), ['Apple Music', 'Deezer'], 'takes turns, repeats dropped');
 }
+// Cover search: file-name noise goes, "Artist - Title" splits, the real album outranks remakes and compilations.
+assert.equal(cleanWords('01 - Coldplay - Yellow (Official Video) [320kbps]'), 'Coldplay - Yellow');
+assert.equal(cleanWords('03_Tum_Hi_Ho_www.songs.pk.mp3'), 'Tum Hi Ho');
+assert.deepEqual(splitArtistTitle('01 - Coldplay - Yellow (Official Video)'), { artist: 'Coldplay', title: 'Yellow' });
+assert.equal(splitArtistTitle('Yellow'), null);
+assert.equal(cleanWords('99 Problems'), '99 Problems', 'a number that is the title stays');
+assert.equal(coverQuery({ title: '01 - Coldplay - Yellow (Lyrics)', artist: null, album: null }), 'Coldplay Yellow', 'untagged: words from the file name');
+{
+  const art = (n) => `https://is1.mzstatic.com/image/thumb/${n}/100x100bb.jpg`;
+  const song = { title: 'Bohemian Rhapsody', artist: 'Queen', album: 'A Night at the Opera', duration: 355 };
+  const real = { id: 'a', name: 'A Night At The Opera', artist: 'Queen', title: 'Bohemian Rhapsody', seconds: 354, preview: art(1), full: art(1), source: 'Deezer' };
+  const best = { ...real, id: 'b', name: 'Greatest Hits', preview: art(2), full: art(2) };
+  const piano = { ...real, id: 'c', name: 'Queen Piano Tribute', artist: 'Piano Dreamers', preview: art(3), full: art(3) };
+  const live = { ...real, id: 'd', name: 'Live Killers', title: 'Bohemian Rhapsody (Live)', seconds: 420, preview: art(4), full: art(4) };
+  const twin = { ...real, id: 'e', source: 'Apple Music', preview: art(5), full: art(5) };
+  const ranked = rankCovers([piano, live, best, real, twin], song);
+  assert.equal(ranked[0].name, 'A Night At The Opera', 'the tagged album first');
+  assert.ok(scoreCover(best, song) > scoreCover(piano, song), 'a compilation by the artist beats a piano tribute');
+  assert.ok(scoreCover(best, song) > scoreCover(live, song), 'the same length beats a live take');
+  assert.equal(ranked.filter((cover) => cover.name === 'A Night At The Opera').length, 1, 'one tile per album');
+  assert.ok(scoreCover({ ...piano, artist: 'Queen' }, { ...song, title: 'Bohemian Rhapsody (Piano Version)' }) > 0, 'a remake you own is not pushed down');
+}
+
 // The hold ring: its length is the dash, so it must match the shape it draws.
 assert.equal(ringPath(100, 0, 0, 3).length, 400, 'square: four sides');
 assert.ok(Math.abs(ringPath(100, 50, 0, 3).length - Math.PI * 100) < 1e-9, 'round (vinyl): a circle');
@@ -486,9 +520,22 @@ console.log('queue order checks passed');
   const { releaseNotes } = await import('../src/settings/updates.ts');
   assert.equal(
     releaseNotes("## What's new\r\n\r\n\r\n- **Hi-Res** badge\n* See [the docs](https://x.y) for `more`\n"),
-    "What's new\n\n• Hi-Res badge\n• See the docs for more",
+    "## What's new\n\n• Hi-Res badge\n• See the docs for more",
+    'headings stay, so the sheet can group changes',
   );
+  const { shortVersion } = await import('../src/settings/updates.ts');
+  assert.equal(shortVersion('1.1.0'), '1.1');
+  assert.equal(shortVersion('v2.0.0'), '2.0');
+  assert.equal(shortVersion('1.0.1'), '1.0.1', 'a real patch number stays');
+  assert.equal(shortVersion('1.10'), '1.10');
   assert.equal(releaseNotes('one\ntwo\nthree', 8), 'one\ntwo\n…', 'cut at a line');
+  const { whatsNew } = await import('../src/settings/updates.ts');
+  assert.equal(
+    whatsNew('A small update.\n\n- Faster covers\n\n**Install:** download the APK.\n\nMuse is free for everyone.'),
+    'A small update.\n\n- Faster covers',
+    'install steps and license lines stay on GitHub',
+  );
+  assert.equal(whatsNew('- One change'), '- One change', 'no install line: all of it');
   assert.equal(releaseNotes(''), '');
 }
 console.log('update checks passed');
@@ -532,3 +579,26 @@ console.log('funky name checks passed');
   assert.equal(songIdMap(undefined, []).size, 0);
 }
 console.log('backup checks passed');
+
+// Widgets: saved minutes from an earlier day start again at 0 with Muse closed.
+{
+  const { freshForToday, localDay } = await import('../src/widgets/today.ts');
+  const at = new Date(2026, 10, 12, 0, 30);
+  assert.equal(localDay(0, at), '2026-11-12');
+  assert.equal(localDay(1, new Date(2026, 0, 1)), '2025-12-31', 'across the year');
+  const saved = { todayMinutes: 42, streak: 5, day: '2026-11-12' };
+  assert.deepEqual(freshForToday(saved, at), saved, 'same day: unchanged');
+  assert.deepEqual(freshForToday({ ...saved, day: '2026-11-11' }, at), { ...saved, day: '2026-11-11', todayMinutes: 0 }, 'yesterday: streak still alive');
+  assert.equal(freshForToday({ ...saved, day: '2026-11-09' }, at).streak, 0, 'a missed day ends the streak');
+  assert.deepEqual(freshForToday({ ...saved, day: '' }, at), { ...saved, day: '' }, 'older saves without a day are left alone');
+}
+console.log('widget checks passed');
+
+// The notices Settings shows match the repo's file.
+{
+  const { readFileSync } = await import('node:fs');
+  const { THIRD_PARTY_NOTICES } = await import('../src/settings/notices.ts');
+  const file = readFileSync(new URL('../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(THIRD_PARTY_NOTICES, file.replace(/^# Third-party notices\n\n/, ''), 'src/settings/notices.ts and THIRD_PARTY_NOTICES.md differ');
+}
+console.log('notices checks passed');

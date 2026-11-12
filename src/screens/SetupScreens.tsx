@@ -1,25 +1,30 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { MusicNote } from '../components/icons';
+import { FolderHeading, FolderPicker } from '../components/FolderPicker';
 import { PrimaryButton, StatusArtwork } from '../components/setup';
-import { countIncludedTracks } from '../library/library';
 import { useAppStyles } from '../theme/styles';
-import type { MusicFolder } from '../types';
+import type { Accent } from '../theme/theme';
+import type { MusicFolder, MusicTrack } from '../types';
 
+/** Settings › Included folders: the same picker as setup, with Save and Cancel (changes are a draft until saved). */
 export function FoldersScreen({
   folders,
+  tracks,
   blockedFolderIds,
   hasSavedFolderRules,
   isLoading,
+  accent,
   onToggleFolder,
   onSave,
   onIncludeAll,
   onCancel,
 }: {
   folders: MusicFolder[];
+  tracks: MusicTrack[];
   blockedFolderIds: string[];
   hasSavedFolderRules: boolean;
   isLoading: boolean;
+  accent: Accent;
   onToggleFolder: (folderId: string) => void;
   onSave: () => void;
   onIncludeAll: () => void;
@@ -28,108 +33,19 @@ export function FoldersScreen({
   const styles = useAppStyles();
   return (
     <View style={styles.screenBody}>
-      <View style={styles.intro}>
-        <Text style={styles.eyebrow}>PICK YOUR FOLDERS</Text>
-        <Text style={styles.title}>
-          Choose your{'\n'}music folders.
-        </Text>
-        <Text style={styles.description}>
-          Pick the folders Muse can use. You can change this later in
-          Settings.
-        </Text>
-      </View>
-
-      <View style={styles.folderSummary}>
-        <View style={styles.folderSummaryMetric}>
-          <Text style={styles.folderSummaryValue}>
-            {folders.filter((folder) => !blockedFolderIds.includes(folder.id)).length}
-          </Text>
-          <Text style={styles.folderSummaryLabel}>INCLUDED</Text>
-        </View>
-        <View style={styles.folderSummaryDivider} />
-        <View style={styles.folderSummaryMetric}>
-          <Text style={styles.folderSummaryValue}>
-            {countIncludedTracks(folders, blockedFolderIds)}
-          </Text>
-          <Text style={styles.folderSummaryLabel}>TRACKS</Text>
-        </View>
-        <Text style={styles.folderSummaryHint}>Tap a folder to include or block it</Text>
-      </View>
-
-      {folders.length === 0 ? (
-        <View style={styles.noFoldersCard}>
-          <MusicNote />
-          <Text style={styles.noFoldersTitle}>No music folders yet</Text>
-          <Text style={styles.noFoldersDescription}>
-            Add music to your phone, then scan again.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.folderList}>
-          {folders.map((folder) => {
-            const blocked = blockedFolderIds.includes(folder.id);
-            return (
-              <View key={folder.id} style={styles.folderRow}>
-                <View style={styles.folderIcon}>
-                  <Text style={styles.folderIconText}>♫</Text>
-                </View>
-                <View style={styles.folderCopy}>
-                  <Text style={styles.folderTitle} numberOfLines={1}>
-                    {folder.title}
-                  </Text>
-                  <Text style={styles.folderTrackCount}>
-                    {folder.trackCount}{' '}
-                    {folder.trackCount === 1 ? 'track' : 'tracks'}
-                  </Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${blocked ? 'Include' : 'Block'} ${folder.title}`}
-                  accessibilityState={{ selected: !blocked }}
-                  onPress={() => onToggleFolder(folder.id)}
-                  style={[
-                    styles.folderRuleButton,
-                    blocked ? styles.folderBlockedButton : styles.folderAllowedButton,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.folderRuleLabel,
-                      blocked
-                        ? styles.folderBlockedLabel
-                        : styles.folderAllowedLabel,
-                    ]}
-                  >
-                    {blocked ? 'Blocked' : 'Included'}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
+      <FolderHeading title="Choose your folders" text="Muse plays songs from the folders you keep on." />
+      <FolderPicker
+        folders={folders}
+        tracks={tracks}
+        blockedFolderIds={blockedFolderIds}
+        onToggleFolder={onToggleFolder}
+        onIncludeAllFolders={onIncludeAll}
+        accent={accent}
+      />
       <View style={styles.bottomArea}>
-        <PrimaryButton
-          label={isLoading ? 'Saving choices...' : 'Save choices'}
-          onPress={onSave}
-          disabled={isLoading}
-        />
-        <Pressable
-          accessibilityRole="button"
-          disabled={isLoading}
-          onPress={onIncludeAll}
-          style={styles.textButton}
-        >
-          <Text style={styles.textButtonLabel}>Include all folders</Text>
-        </Pressable>
+        <PrimaryButton label={isLoading ? 'Saving...' : 'Save'} onPress={onSave} disabled={isLoading} />
         {hasSavedFolderRules && (
-          <Pressable
-            accessibilityRole="button"
-            disabled={isLoading}
-            onPress={onCancel}
-            style={styles.textButton}
-          >
+          <Pressable accessibilityRole="button" disabled={isLoading} onPress={onCancel} style={styles.textButton}>
             <Text style={styles.textButtonLabel}>Cancel</Text>
           </Pressable>
         )}

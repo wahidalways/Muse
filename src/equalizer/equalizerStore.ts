@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { createSavedStore } from '../library/savedStore';
 import { applyAudioEffects, attachAudioEffects } from '../../modules/muse-audio-metadata/effects';
+import { isBitPerfectEngaged, subscribeOutput } from '../playback/output';
 import { DEFAULT_SOUND, buildEffects, parseSound, type Sound } from './sound';
 
 export type EqualizerState = {
@@ -47,6 +48,7 @@ function refresh() {
   syncEffects();
 }
 store.subscribe(refresh);
+subscribeOutput(() => syncEffects());
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -86,7 +88,8 @@ function syncEffects() {
     return;
   }
   applying = true;
-  void applyAudioEffects(buildEffects(snapshot.sound, snapshot.enabled)).finally(() => {
+  // Bit-perfect output: the equalizer steps aside (it would change the bits).
+  void applyAudioEffects(buildEffects(snapshot.sound, snapshot.enabled && !isBitPerfectEngaged())).finally(() => {
     applying = false;
     if (applyAgain) {
       applyAgain = false;

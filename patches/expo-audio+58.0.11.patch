@@ -1,0 +1,49 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt
+index bf3f9c5..cff45d8 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt
+@@ -25,11 +25,11 @@ class AudioPlaylist(
+   updateInterval: Double,
+   dataSourceFactory: DataSource.Factory
+ ) : BaseAudioPlayer(
+-  player = ExoPlayer.Builder(context)
++  player = ExoPlayer.Builder(context, MuseHooks.renderersFactory(context))
+     .setLooper(context.mainLooper)
+     .setAudioAttributes(AudioAttributes.DEFAULT, false)
+     .setHandleAudioBecomingNoisy(true)
+-    .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory))
++    .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory, MuseHooks.extractorsFactory()))
+     .build(),
+   appContext = appContext,
+   updateInterval = updateInterval,
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/MuseHooks.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/MuseHooks.kt
+new file mode 100644
+index 0000000..f42f630
+--- /dev/null
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/MuseHooks.kt
+@@ -0,0 +1,25 @@
++package expo.modules.audio
++
++import android.content.Context
++import androidx.media3.common.util.UnstableApi
++import androidx.media3.exoplayer.DefaultRenderersFactory
++import androidx.media3.exoplayer.RenderersFactory
++import androidx.media3.extractor.DefaultExtractorsFactory
++import androidx.media3.extractor.ExtractorsFactory
++
++// Muse patch: the player is built from Muse's own renderers (Hi-Res and
++// bit-perfect output, ALAC) and readers (AIFF, DSD, APE, WavPack). Looked up
++// by name so expo-audio needs no build dependency on Muse's module; without
++// it, Media3's defaults are used as before.
++@UnstableApi
++internal object MuseHooks {
++  private val entry: Class<*>? = runCatching { Class.forName("expo.modules.musemetadata.playback.MusePlayback") }.getOrNull()
++
++  fun renderersFactory(context: Context): RenderersFactory =
++    runCatching { entry?.getMethod("renderersFactory", Context::class.java)?.invoke(null, context) as? RenderersFactory }.getOrNull()
++      ?: DefaultRenderersFactory(context)
++
++  fun extractorsFactory(): ExtractorsFactory =
++    runCatching { entry?.getMethod("extractorsFactory")?.invoke(null) as? ExtractorsFactory }.getOrNull()
++      ?: DefaultExtractorsFactory()
++}

@@ -360,35 +360,6 @@ export function StatsScreen({
                 </>
               )}
 
-              {/* Top genres */}
-              <SectionHeading title="Top genres" hint="Ranked by plays" />
-              <View style={styles.homeCard}>
-                {stats.topGenres.length > 0 ? (
-                  <>
-                    <RankBars
-                      items={stats.topGenres.map((genre) => ({
-                        key: genre.name,
-                        label: genre.name,
-                        hint: formatListeningTime(genre.seconds),
-                        value: genre.plays,
-                        valueLabel: `${Math.round((genre.plays / stats.genrePlays) * 100)}%`,
-                      }))}
-                    />
-                    {stats.genrePlays < stats.plays && (
-                      <Text style={styles.homeCardFootnote}>
-                        {stats.plays - stats.genrePlays} of {stats.plays} plays had no genre in the
-                        song file, so they are left out.
-                      </Text>
-                    )}
-                  </>
-                ) : (
-                  <Text style={styles.homeMutedText}>
-                    None of these songs have a genre saved in their files yet. Muse reads the
-                    genre tag from each song.
-                  </Text>
-                )}
-              </View>
-
               {/* Top albums */}
               {stats.topAlbums.length > 0 && (
                 <>
@@ -427,6 +398,35 @@ export function StatsScreen({
                   </ScrollView>
                 </>
               )}
+
+              {/* Top genres */}
+              <SectionHeading title="Top genres" hint="Ranked by plays" />
+              <View style={styles.homeCard}>
+                {stats.topGenres.length > 0 ? (
+                  <>
+                    <RankBars
+                      items={stats.topGenres.map((genre) => ({
+                        key: genre.name,
+                        label: genre.name,
+                        hint: formatListeningTime(genre.seconds),
+                        value: genre.plays,
+                        valueLabel: `${Math.round((genre.plays / stats.genrePlays) * 100)}%`,
+                      }))}
+                    />
+                    {stats.genrePlays < stats.plays && (
+                      <Text style={styles.homeCardFootnote}>
+                        {stats.plays - stats.genrePlays} of {stats.plays} plays had no genre in the
+                        song file, so they are left out.
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.homeMutedText}>
+                    None of these songs have a genre saved in their files yet. Muse reads the
+                    genre tag from each song.
+                  </Text>
+                )}
+              </View>
 
               {/* Folders */}
               <SectionHeading title="Top folders" hint="Where your music comes from" />

@@ -21,6 +21,8 @@ type SheetProps = {
   guarded?: boolean;
   /** A labelled button (such as "Done") in place of the close cross. */
   closeLabel?: string;
+  /** Drawn in place of the eyebrow, title and close row; it still drags the sheet. */
+  header?: ReactNode;
 };
 
 /**
@@ -45,7 +47,7 @@ export function Sheet(props: SheetProps) {
 }
 
 /** Mounts with each opening, so a drag never carries over to the next one. */
-function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, guarded = false, closeLabel }: SheetProps) {
+function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, guarded = false, closeLabel, header }: SheetProps) {
   const styles = useAppStyles();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -113,7 +115,7 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
           <GestureDetector gesture={drag}>
             <View>
               <View style={styles.sleepTimerHandle} />
-              <View style={styles.sleepTimerHeading}>
+              {header ?? <View style={styles.sleepTimerHeading}>
                 <View style={styles.sheetHeadingCopy}>
                   <Text style={styles.sleepTimerEyebrow}>{eyebrow}</Text>
                   <Text numberOfLines={1} style={styles.sleepTimerTitle}>
@@ -138,7 +140,7 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
                     <CloseIcon color="text" size={13} />
                   </Pressable>
                 )}
-              </View>
+              </View>}
             </View>
           </GestureDetector>
           {children}

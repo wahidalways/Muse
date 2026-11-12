@@ -269,7 +269,7 @@ class MuseAudioMetadataModule : Module() {
     AsyncFunction("getAudioLibrary") {
       val context = appContext.reactContext
         ?: throw IllegalStateException("Muse cannot access the Android media library.")
-      readAudioLibrary(context.contentResolver)
+      readAudioLibrary(context)
     }
 
     // A cheap fingerprint of the whole media library: Android raises each
@@ -288,6 +288,8 @@ class MuseAudioMetadataModule : Module() {
         volumes.forEach { volume ->
           append('|').append(volume).append('=').append(MediaStore.getGeneration(context, volume))
         }
+        LibraryFiles.pickedTrees(context).forEach { append('|').append(it) }
+        if (LibraryFiles.hasAllFilesAccess(context)) append("|all-files")
       }
     }
 
@@ -345,8 +347,10 @@ class MuseAudioMetadataModule : Module() {
    * BUCKET_ID / BUCKET_DISPLAY_NAME from the files table, song = _ID, uri =
    * file:// + DATA), so saved folder rules, history and queues stay valid.
    */
-  private fun readAudioLibrary(resolver: ContentResolver): List<Map<String, Any?>> {
+  private fun readAudioLibrary(context: Context): List<Map<String, Any?>> {
+    val resolver = context.contentResolver
     val tagsById = readAudioTags(resolver)
+    val tagCache = LibraryFiles.tagCache(context)
     val tracks = mutableListOf<Map<String, Any?>>()
     val cursor = resolver.query(
       MediaStore.Files.getContentUri("external"),
@@ -382,6 +386,14 @@ class MuseAudioMetadataModule : Module() {
             .toString()
         }
         val directory = tags?.directory ?: data?.substringBeforeLast('/', "")?.plus("/")
+        // Android's scanner skips WAV and AIFF tags (and fills the album with
+        // the folder's name), so Muse reads those files' tags itself.
+        val own = if (LibraryFiles.wantsOwnTags(filename, tags?.title, tags?.artist)) {
+          tagCache.get(id, "${result.longOrNull(MediaStore.MediaColumns.DATE_MODIFIED)}") { LibraryFiles.readTags(context, id) }
+        } else {
+          null
+        }
+        val selfTagged = LibraryFiles.isSelfTagged(filename)
 
         tracks.add(
           mapOf(
@@ -391,14 +403,14 @@ class MuseAudioMetadataModule : Module() {
             "folderId" to folderId,
             "folderTitle" to folderTitle,
             "directory" to directory,
-            "title" to tags?.title,
-            "artist" to tags?.artist,
-            "album" to tags?.album,
-            "albumArtist" to tags?.albumArtist,
-            "year" to tags?.year,
-            "trackNumber" to tags?.trackNumber,
-            "genre" to tags?.genre,
-            "duration" to tags?.duration,
+            "title" to (own?.title ?: tags?.title),
+            "artist" to (own?.artist ?: tags?.artist),
+            "album" to if (selfTagged) own?.album else (own?.album ?: tags?.album),
+            "albumArtist" to (own?.albumArtist ?: tags?.albumArtist),
+            "year" to (own?.year ?: tags?.year),
+            "trackNumber" to (own?.trackNumber ?: tags?.trackNumber),
+            "genre" to (own?.genre ?: tags?.genre),
+            "duration" to (tags?.duration?.takeIf { it > 0 } ?: own?.durationSeconds),
             // When the file arrived in the media library (seconds).
             "dateAdded" to result.longOrNull(MediaStore.MediaColumns.DATE_ADDED)
               ?.takeIf { it > 0 },
@@ -420,6 +432,8 @@ class MuseAudioMetadataModule : Module() {
         )
       }
     }
+    tracks += runCatching { LibraryFiles.readPickedTracks(context, tagCache) }.getOrDefault(emptyList())
+    tagCache.save()
     return tracks
   }
 
@@ -542,7 +556,7 @@ class MuseAudioMetadataModule : Module() {
    * which cannot open content:// uris, so it needs a real file.
    */
   private fun readArtworkFile(resolver: ContentResolver, cacheDir: File, trackId: String): String? {
-    val trackRowId = trackId.toLongOrNull() ?: return null
+    val trackRowId = trackId.toLongOrNull() ?: return readBestThumb(resolver, cacheDir, trackId)
     // Per song: Android groups untagged files in one folder into one album,
     // so an album-keyed file showed the first song's cover on all of them.
     val file = File(artworkDirectory(cacheDir), "track-$trackId.jpg")
@@ -550,7 +564,9 @@ class MuseAudioMetadataModule : Module() {
       return Uri.fromFile(file).toString()
     }
 
-    val bitmap = loadArtworkBitmap(resolver, trackRowId, albumIdOf(resolver, trackId)) ?: return null
+    val bitmap = loadArtworkBitmap(resolver, trackRowId, albumIdOf(resolver, trackId))
+      ?: bestPicture(picturesOf(resolver, trackId))?.let { decodeScaled(it.bytes, ARTWORK_SIZE) }
+      ?: return null
     val saved = writeAtomically(file) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
     bitmap.recycle()
     return if (saved) Uri.fromFile(file).toString() else null
@@ -586,8 +602,7 @@ class MuseAudioMetadataModule : Module() {
     return saved
   }
 
-  private fun trackUriOf(trackId: String): Uri? =
-    trackId.toLongOrNull()?.let { ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it) }
+  private fun trackUriOf(trackId: String): Uri? = appContext.reactContext?.let { TrackFiles.uriOf(it, trackId) }
 
   /** Every picture in the song's tags (FilePictures.kt). */
   private fun picturesOf(resolver: ContentResolver, trackId: String): List<FilePicture> {
@@ -825,7 +840,7 @@ class MuseAudioMetadataModule : Module() {
    * audio track. With no bitrate recorded, it is the file's average.
    */
   private fun readAudioDetails(resolver: ContentResolver, trackId: String): Map<String, Any?>? {
-    val rowId = trackId.toLongOrNull() ?: return null
+    val rowId = trackId.toLongOrNull() ?: return ownAudioDetails(trackId, null)
     val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, rowId)
     var mimeType: String? = null
     var size: Long? = null
@@ -891,6 +906,9 @@ class MuseAudioMetadataModule : Module() {
         }
       }.getOrNull()
     }
+    if (codec == null) {
+      return ownAudioDetails(trackId, size) ?: mapOf("mimeType" to mimeType, "size" to size)
+    }
     val bytes = size
     val length = durationMs
     if (bitrate == null && bytes != null && length != null && length > 0) {
@@ -905,6 +923,25 @@ class MuseAudioMetadataModule : Module() {
       "bitDepth" to bitDepth,
       "size" to size,
     )
+  }
+
+  /** Details from Muse's own readers (AIFF, APE, WavPack, DSD), for files Android cannot open. */
+  private fun ownAudioDetails(trackId: String, knownSize: Long?): Map<String, Any?>? {
+    val context = appContext.reactContext ?: return null
+    return TrackFiles.withChannel(context, trackId) { channel ->
+      val values = expo.modules.musemetadata.formats.Tags.read(channelReader(channel), channel.size())
+      val size = knownSize ?: channel.size()
+      val seconds = values.durationSeconds
+      mapOf(
+        "mimeType" to null,
+        "codec" to values.codec,
+        "bitrate" to if (seconds != null && seconds > 0) (size * 8 / seconds).toLong() else null,
+        "sampleRate" to values.sampleRate,
+        "channels" to values.channels,
+        "bitDepth" to values.bitDepth,
+        "size" to size,
+      )
+    }
   }
 
   /**
@@ -1023,8 +1060,7 @@ class MuseAudioMetadataModule : Module() {
   // not parse cleanly just means "no lyrics".
 
   private fun readLyrics(resolver: ContentResolver, trackId: String): String? {
-    val rowId = trackId.toLongOrNull() ?: return null
-    val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, rowId)
+    val uri = trackUriOf(trackId) ?: return null
     return runCatching {
       resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
         // Not closed itself: closing it would close the descriptor, which

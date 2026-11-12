@@ -34,6 +34,7 @@ import { GoalPicker } from '../components/GoalPicker';
 import { ART_SETS, MuseArtTile } from '../components/MuseArt';
 import { Segmented, SettingsBlock, SettingsSection, SettingsSwitchRow, TILE } from '../components/SettingsList';
 import { opticalSize } from '../components/icons';
+import { EASE_OUT } from '../motion/motion';
 import { SKIN_SAMPLE, PLAYER_SKINS, SkinPreview } from '../player/PlayerSkinSheet';
 import { MUSE_LOOK, SAVER_LOOK, setPreference, usePreferences, type ArtworkStyle, type MiniDock } from '../settings/preferences';
 import { funkyName } from '../settings/funkyNames';
@@ -45,6 +46,9 @@ import { useAppStyles } from '../theme/styles';
 import { hapticSelection } from '../utils/haptics';
 import { formatListeningTime } from '../utils/format';
 import type { MusicFolder, MusicTrack } from '../types';
+import { FolderPicker } from '../components/FolderPicker';
+import { showToast } from '../components/Toast';
+import { filesSupported, openAllFilesAccess, useAllFilesAccess } from '../../modules/muse-audio-metadata/files';
 import { GestureDemo, GreetingPreview, HomeDemo, LibraryDemo, LookPhone, PlayerDemo, useTokens } from './previews';
 import { WelcomeScene } from './WelcomeScene';
 
@@ -119,6 +123,8 @@ type Props = {
   onChangeGoal: (minutes: number) => void;
   /** Asks Android for music access and starts the scan in the background. */
   onRequestAccess: () => Promise<AccessResult>;
+  /** Scans again (after "Find them automatically" was turned on). */
+  onRescan: () => void;
   /** What the scan found; null until it is done. */
   library: { folders: MusicFolder[]; tracks: MusicTrack[] } | null;
   blockedFolderIds: string[];
@@ -300,6 +306,7 @@ export function Onboarding(props: Props) {
     return (
       <Welcome
         accent={props.accent}
+        onSelectAppearance={props.onSelectAppearance}
         onSetUp={() => go('access')}
         onQuickStart={() => {
           setQuick(true);
@@ -318,7 +325,7 @@ export function Onboarding(props: Props) {
   const nextButton = (label = 'Next') => <MainButton label={label} busy={isFinishing} onPress={next} />;
   switch (step) {
     case 'access':
-      body = <AccessStep again={askingAgain} />;
+      body = <AccessStep again={askingAgain} onRescan={props.onRescan} />;
       footer = (
         <>
           <MainButton label="Allow access" busy={isAsking} onPress={askForAccess} />
@@ -603,7 +610,17 @@ function Heading({ title, text }: { title: string; text: string }) {
 // ---------------------------------------------------------------------------
 // Steps.
 
-function Welcome({ accent, onSetUp, onQuickStart }: { accent: Accent; onSetUp: () => void; onQuickStart: () => void }) {
+function Welcome({
+  accent,
+  onSelectAppearance,
+  onSetUp,
+  onQuickStart,
+}: {
+  accent: Accent;
+  onSelectAppearance: (appearance: Appearance) => void;
+  onSetUp: () => void;
+  onQuickStart: () => void;
+}) {
   const styles = useAppStyles();
   const tokens = useTokens();
   const insets = useSafeAreaInsets();
@@ -624,8 +641,9 @@ function Welcome({ accent, onSetUp, onQuickStart }: { accent: Accent; onSetUp: (
           <Rect x="0" y="0" width="100%" height="100%" fill="url(#sceneFade)" />
         </Svg>
       </View>
-      <View style={[local.welcomeBrand, { top: insets.top + 16 }]}>
+      <View style={[local.welcomeBrand, { top: insets.top + 10 }]}>
         <BrandMark size={22} />
+        <ThemeToggle dark={tokens.dark} onChange={(dark) => onSelectAppearance(dark ? 'dark' : 'light')} />
       </View>
       <View style={[local.welcomeBody, { paddingBottom: insets.bottom + 20 }]}>
         <Text accessibilityRole="header" style={[local.welcomeTitle, { color: tokens.text }]}>
@@ -651,7 +669,56 @@ function Welcome({ accent, onSetUp, onQuickStart }: { accent: Accent; onSetUp: (
   );
 }
 
-function AccessStep({ again }: { again: boolean }) {
+const TOGGLE_SLOT = 40;
+const TOGGLE_PAD = 4;
+
+/**
+ * Light or dark, right on the first page, so the Welcome can be seen both
+ * ways before setting up. Picking one saves it like Settings › Appearance.
+ */
+function ThemeToggle({ dark, onChange }: { dark: boolean; onChange: (dark: boolean) => void }) {
+  const tokens = useTokens();
+  const still = useReducedMotion();
+  const offset = useSharedValue(dark ? TOGGLE_SLOT : 0);
+  useEffect(() => {
+    offset.set(withTiming(dark ? TOGGLE_SLOT : 0, { duration: still ? 0 : 240, easing: EASE_OUT }));
+  }, [dark, offset, still]);
+  const knob = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
+  const option = (isDark: boolean) => {
+    const isOn = dark === isDark;
+    return (
+      <Pressable
+        key={isDark ? 'dark' : 'light'}
+        accessibilityRole="radio"
+        accessibilityLabel={isDark ? 'Dark' : 'Light'}
+        accessibilityState={{ checked: isOn }}
+        hitSlop={4}
+        onPress={() => {
+          if (!isOn) {
+            hapticSelection();
+            onChange(isDark);
+          }
+        }}
+        style={local.toggleSlot}
+      >
+        <Ionicons
+          name={isDark ? (isOn ? 'moon' : 'moon-outline') : isOn ? 'sunny' : 'sunny-outline'}
+          size={18}
+          color={isOn ? tokens.onAction : tokens.muted}
+        />
+      </Pressable>
+    );
+  };
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel="Appearance" style={[local.toggle, { backgroundColor: tokens.card, borderColor: tokens.line }]}>
+      <Animated.View style={[local.toggleKnob, { backgroundColor: tokens.action }, knob]} />
+      {option(false)}
+      {option(true)}
+    </View>
+  );
+}
+
+function AccessStep({ again, onRescan }: { again: boolean; onRescan: () => void }) {
   const tokens = useTokens();
   return (
     <>
@@ -674,6 +741,7 @@ function AccessStep({ again }: { again: boolean }) {
         </View>
       </View>
       <Text style={[local.caption, { color: tokens.muted }]}>Tap Allow when this shows up</Text>
+      <OtherFormats onGranted={onRescan} />
     </>
   );
 }
@@ -1087,52 +1155,90 @@ function FoldersStep({
   blockedFolderIds,
   onToggleFolder,
   onIncludeAllFolders,
+  onRescan,
   accent,
 }: Props & { tracks: MusicTrack[] }) {
-  const tokens = useTokens();
-  const swatch = (ACCENT_OPTIONS.find((option) => option.id === accent) ?? ACCENT_OPTIONS[0]).swatch;
-  const folders = library?.folders ?? [];
-  const kept = folders.filter((folder) => !blockedFolderIds.includes(folder.id));
-  const songs = kept.reduce((sum, folder) => sum + folder.trackCount, 0);
   return (
     <>
       <Heading title="Choose your folders" text="Muse plays songs from the folders you keep on. You can change this in Settings." />
-      {!library ? (
-        <View style={local.waiting}>
-          <ActivityIndicator color={tokens.accent} />
-          <Text style={[local.caption, { color: tokens.muted }]}>Still finding your music</Text>
+      <FolderPicker
+        folders={library?.folders ?? []}
+        tracks={library?.tracks ?? []}
+        blockedFolderIds={blockedFolderIds}
+        onToggleFolder={onToggleFolder}
+        onIncludeAllFolders={onIncludeAllFolders}
+        accent={accent}
+        waiting={!library}
+      />
+      <OtherFormats onGranted={onRescan} />
+    </>
+  );
+}
+
+/**
+ * Setup's offer for APE, WavPack and DSD, which Android does not list: the
+ * same "Find them automatically" as Settings › Library, with a drawing of the
+ * Android screen it opens, so the extra permission is no surprise. Muse finds
+ * them when you come back. In Expo Go it only says what would happen.
+ */
+function OtherFormats({ onGranted }: { onGranted: () => void }) {
+  const tokens = useTokens();
+  const styles = useAppStyles();
+  const automatic = useAllFilesAccess();
+  // Turned on in Android's screen: scan again so these folders show on the Folders step.
+  const wasOn = useRef(automatic);
+  useEffect(() => {
+    if (automatic && !wasOn.current) {
+      onGranted();
+    }
+    wasOn.current = automatic;
+  }, [automatic, onGranted]);
+  const find = () => {
+    hapticSelection();
+    if (!filesSupported || !openAllFilesAccess()) {
+      showToast("Android's All files access opens here", { detail: 'Only in the Muse app, not in Expo Go', icon: 'search' });
+    }
+  };
+  return (
+    <View style={[local.formats, { backgroundColor: tokens.card }]}>
+      <View style={local.formatsHead}>
+        <View style={[local.formatsIcon, { backgroundColor: tokens.bg }]}>
+          <Ionicons name={automatic ? 'checkmark' : 'search'} size={18} color={tokens.accent} />
         </View>
-      ) : folders.length === 0 ? (
-        <Text style={[local.caption, local.left, { color: tokens.muted }]}>No music found yet. Add songs to your phone, then rescan from Settings.</Text>
-      ) : (
+        <View style={local.formatsCopy}>
+          <Text style={[local.choiceTitle, { color: tokens.text }]}>Got APE, WavPack or DSD files?</Text>
+          <Text style={[local.choiceText, { color: tokens.muted }]}>
+            {automatic
+              ? 'On. Muse finds them all over your phone.'
+              : 'Android hides these from music apps. Muse can find them with one more permission. Optional.'}
+          </Text>
+        </View>
+      </View>
+      {!automatic && (
         <>
-          <View style={local.folderSummary}>
-            <Text style={[local.rowText, { color: tokens.muted }]}>
-              <Text style={{ color: tokens.text }}>{songs.toLocaleString('en-US')} songs</Text> · {kept.length} of {folders.length} folders on
-            </Text>
-            {blockedFolderIds.length > 0 && (
-              <Pressable accessibilityRole="button" onPress={onIncludeAllFolders} style={local.linkButton}>
-                <Text style={[local.link, { color: tokens.accent }]}>Turn all on</Text>
-              </Pressable>
-            )}
+          {/* A drawing of the Android screen that opens next. */}
+          <View accessible={false} importantForAccessibility="no-hide-descendants" style={[local.formatsScreen, { backgroundColor: tokens.bg }]}>
+            <Text style={[local.formatsScreenTitle, { color: tokens.muted }]}>All files access</Text>
+            <View style={local.formatsScreenRow}>
+              <Text style={[local.rowText, { color: tokens.text }]}>Allow access to manage all files</Text>
+              <View style={[local.fakeSwitch, { backgroundColor: tokens.accent }]}>
+                <View style={[local.fakeKnob, { backgroundColor: tokens.bg }]} />
+              </View>
+            </View>
           </View>
-          <SettingsSection>
-            {folders.map((folder) => (
-              <SettingsSwitchRow
-                key={folder.id}
-                icon="folder"
-                tint={TILE.blue}
-                title={folder.title}
-                subtitle={`${folder.trackCount.toLocaleString('en-US')} ${folder.trackCount === 1 ? 'song' : 'songs'}`}
-                value={!blockedFolderIds.includes(folder.id)}
-                onValueChange={() => onToggleFolder(folder.id)}
-                accent={swatch}
-              />
-            ))}
-          </SettingsSection>
+          <Text style={[local.caption, local.left, { color: tokens.muted }]}>
+            Android opens this page. Turn it on, then go back to Muse.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={find}
+            style={({ pressed }) => [local.button, local.formatsButton, local.outlined, { borderColor: tokens.line }, pressed && styles.primaryButtonPressed]}
+          >
+            <Text style={[styles.primaryButtonLabel, local.mainLabel, { color: tokens.text }]}>Find them automatically</Text>
+          </Pressable>
         </>
       )}
-    </>
+    </View>
   );
 }
 
@@ -1266,7 +1372,10 @@ const local = StyleSheet.create({
   // Welcome
   scene: { position: 'absolute', left: 0, right: 0, top: 0 },
   sceneFade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  welcomeBrand: { position: 'absolute', left: 24 },
+  welcomeBrand: { position: 'absolute', left: 24, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  toggle: { flexDirection: 'row', padding: TOGGLE_PAD - 1, borderRadius: 999, borderWidth: 1 },
+  toggleKnob: { position: 'absolute', top: TOGGLE_PAD - 1, left: TOGGLE_PAD - 1, width: TOGGLE_SLOT, height: 36, borderRadius: 999 },
+  toggleSlot: { width: TOGGLE_SLOT, height: 36, alignItems: 'center', justifyContent: 'center' },
   welcomeBody: { position: 'absolute', left: 24, right: 24, bottom: 0 },
   welcomeTitle: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: -0.9 },
   welcomeLead: { marginTop: 10, maxWidth: 320 },
@@ -1280,6 +1389,17 @@ const local = StyleSheet.create({
   popupButton: { alignSelf: 'stretch', height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   popupLabel: { fontSize: 14, fontWeight: '600' },
   group: { marginTop: 24, borderRadius: 14, paddingHorizontal: 16 },
+  // APE, WavPack and DSD: the offer, a drawing of Android's screen and the button.
+  formats: { marginTop: 24, borderRadius: 20, padding: 16 },
+  formatsHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  formatsIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  formatsCopy: { flex: 1, gap: 2 },
+  formatsScreen: { marginTop: 14, borderRadius: 14, padding: 14, gap: 10 },
+  formatsScreenTitle: { fontSize: 12, fontWeight: '600' },
+  formatsScreenRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fakeSwitch: { width: 40, height: 24, borderRadius: 12, padding: 3, alignItems: 'flex-end' },
+  fakeKnob: { width: 18, height: 18, borderRadius: 9 },
+  formatsButton: { marginTop: 14, minHeight: 48, borderRadius: 14 },
   numberRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56 },
   number: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   numberText: { fontSize: 13, fontWeight: '700' },

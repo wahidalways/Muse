@@ -650,7 +650,7 @@ function Skeleton() {
         </View>
       </View>
       <View>
-        <Text style={[styles.pulseSectionTitle, styles.pulseSectionGap]}>Your listening</Text>
+        <Text style={[styles.pulseSectionTitle, styles.pulseSectionGap]}>Today &amp; this week</Text>
         <View style={[styles.pulseTile, { marginTop: 12 }]}>
           {line(72, true)}
           <View style={[styles.pulseSkelCard, { width: 128, height: 28, marginTop: 12 }]} />

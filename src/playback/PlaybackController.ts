@@ -14,6 +14,7 @@ import { subscribeSongCovers } from '../library/covers';
 import { getPreferences, SLEEP_FADE_SECONDS, subscribePreferences } from '../settings/preferences';
 import { getTrackSpeed, subscribeTrackSpeeds } from '../library/trackSpeeds';
 import { startEqualizer } from '../equalizer/equalizerStore';
+import { isBitPerfectEngaged, subscribeOutput } from './output';
 import type { MusicTrack, RepeatMode } from '../types';
 import { withQueued } from './queueOrder';
 
@@ -184,6 +185,8 @@ export class PlaybackController {
       // A new cover for the playing song reaches the lock screen at once.
       { remove: subscribeSongCovers(this.refreshLockScreenCover) },
       { remove: subscribePreferences(this.refreshLockScreenCover) },
+      // Bit-perfect output plays at 1x (speed would resample the song).
+      { remove: subscribeOutput(this.applyTrackSpeed) },
     ];
   }
 
@@ -473,7 +476,7 @@ export class PlaybackController {
    */
   private applyTrackSpeed = () => {
     const track = this.snapshot.currentTrack;
-    const speed = track ? getTrackSpeed(track.id) : 1;
+    const speed = track && !isBitPerfectEngaged() ? getTrackSpeed(track.id) : 1;
     if (speed !== this.speed) {
       this.speed = speed;
       this.player.playbackRate = speed;
@@ -1335,6 +1338,10 @@ export class PlaybackController {
 
   /** Volume for `position` seconds into the current song: crossfade times the sleep fade. */
   private fadeVolume(position: number): { volume: number; fadingOut: boolean } {
+    // Bit-perfect: no fades, the samples go out as they are (the sleep timer still stops on time).
+    if (isBitPerfectEngaged()) {
+      return { volume: 1, fadingOut: false };
+    }
     const between = this.crossfadeVolume(position);
     const sleep = this.sleepFadeVolume(position);
     return { volume: Math.min(between.volume, sleep), fadingOut: between.fadingOut };

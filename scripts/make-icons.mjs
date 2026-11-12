@@ -116,4 +116,3 @@ drawIcon('android-icon-foreground.png', { size: 1024, share: 0.4, ink: LIME, saf
 drawIcon('android-icon-monochrome.png', { size: 1024, share: 0.4, ink: WHITE, safeRadius: ADAPTIVE_SAFE });
 // Full-bleed square (iOS, and anywhere without adaptive icons).
 drawIcon('icon.png', { size: 1024, share: 0.5, ink: LIME, ground: GROUND });
-drawIcon('favicon.png', { size: 48, share: 0.6, ink: LIME, ground: GROUND });

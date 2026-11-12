@@ -102,6 +102,13 @@ const FORMAT_NAMES: Record<string, string> = {
   'audio/raw': 'WAV',
   'audio/amr-wb': 'AMR',
   'audio/3gpp': 'AMR',
+  'audio/x-aiff': 'AIFF',
+  'audio/aiff': 'AIFF',
+  // Muse's own readers name these directly.
+  aiff: 'AIFF',
+  ape: 'APE',
+  wavpack: 'WavPack',
+  dsd: 'DSD',
 };
 
 type FileAudio = {
@@ -114,7 +121,7 @@ type FileAudio = {
 } | null;
 
 /** Formats that keep every bit of the recording. */
-const LOSSLESS = new Set(['FLAC', 'ALAC', 'WAV']);
+const LOSSLESS = new Set(['FLAC', 'ALAC', 'WAV', 'AIFF', 'APE', 'WavPack', 'DSD']);
 
 /**
  * A file's audio in parts, for the player's badge row. `quality` is a plain
@@ -139,6 +146,14 @@ export function summarizeAudio(details: FileAudio, filename: string) {
       ? ('Hi-Res' as const)
       : ('Lossless' as const);
   const specs: string[] = [];
+  // DSD is named by its rate as a multiple of 44.1 kHz: DSD64, DSD128...
+  if (format === 'DSD' && sampleRate) {
+    specs.push(`DSD${Math.round(sampleRate / 44100)}`);
+    if (details?.channels && details.channels !== 2) {
+      specs.push(details.channels === 1 ? 'Mono' : `${details.channels} ch`);
+    }
+    return { format, quality: 'Hi-Res' as const, specs };
+  }
   if (bitDepth) {
     specs.push(`${bitDepth}-bit`);
   }

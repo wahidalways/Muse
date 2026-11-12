@@ -5,6 +5,7 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*'],
+    // Installed agent tooling and local mocks are not Muse code.
+    ignores: ['dist/*', '.agents/**', '.github/**', '.impeccable/**', 'artifacts/**'],
   },
 ]);

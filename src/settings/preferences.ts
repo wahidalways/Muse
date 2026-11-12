@@ -21,6 +21,18 @@ export type PreviousButton = 'restart' | 'back';
 export type AppIconId = 'muse' | 'light' | 'lime' | 'mono' | 'paper' | 'ocean';
 const APP_ICON_IDS: AppIconId[] = ['muse', 'light', 'lime', 'mono', 'paper', 'ocean'];
 
+/** Library's two tabs after Songs: the pair shown, named by both views. */
+export type LibraryTabs = 'albums-artists' | 'albums-folders' | 'artists-folders';
+export type LibraryGroupView = 'albums' | 'artists' | 'folders';
+export const LIBRARY_TAB_CHOICES: { id: LibraryTabs; label: string; views: [LibraryGroupView, LibraryGroupView] }[] = [
+  { id: 'albums-artists', label: 'Albums and Artists', views: ['albums', 'artists'] },
+  { id: 'albums-folders', label: 'Albums and Folders', views: ['albums', 'folders'] },
+  { id: 'artists-folders', label: 'Artists and Folders', views: ['artists', 'folders'] },
+];
+/** The two views after Songs in Library. */
+export const libraryTabViews = (tabs: LibraryTabs) =>
+  (LIBRARY_TAB_CHOICES.find((choice) => choice.id === tabs) ?? LIBRARY_TAB_CHOICES[0]).views;
+
 export type Preferences = {
   startTab: StartTab;
   /** Hide files shorter than shortAudioSeconds (voice notes, ringtones). */
@@ -50,6 +62,7 @@ export type Preferences = {
   artSet: ArtSet;
   playerSkin: PlayerSkin;
   miniDock: MiniDock;
+  libraryTabs: LibraryTabs;
   /** Files shorter than this many seconds are left out when skipShortAudio is on. */
   shortAudioSeconds: number;
   previousButton: PreviousButton;
@@ -90,6 +103,7 @@ const DEFAULTS: Preferences = {
   playerSkin: 'classic',
   // Floating for people who set up Muse before Joined existed; setup saves Joined for new installs.
   miniDock: 'floating',
+  libraryTabs: 'albums-artists',
   shortAudioSeconds: 30,
   previousButton: 'restart',
   sleepFade: true,
@@ -129,6 +143,9 @@ function parsePreferences(value: unknown): Preferences | null {
       ? (saved.playerSkin as PlayerSkin)
       : DEFAULTS.playerSkin,
     miniDock: saved.miniDock === 'joined' ? 'joined' : 'floating',
+    libraryTabs: LIBRARY_TAB_CHOICES.some((choice) => choice.id === saved.libraryTabs)
+      ? (saved.libraryTabs as LibraryTabs)
+      : DEFAULTS.libraryTabs,
     crossfadeSeconds: CROSSFADE_OPTIONS.includes(saved.crossfadeSeconds as number)
       ? (saved.crossfadeSeconds as number)
       : DEFAULTS.crossfadeSeconds,

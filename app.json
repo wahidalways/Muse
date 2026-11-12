@@ -2,7 +2,7 @@
   "expo": {
     "name": "Muse",
     "slug": "muse-offline-player",
-    "version": "1.0.1",
+    "version": "1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -53,7 +53,7 @@
             ],
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "extraProguardRules": "-keep class expo.modules.gl.** { *; }",
+            "extraProguardRules": "-keep class expo.modules.gl.** { *; }\n-keep class expo.modules.musemetadata.playback.MusePlayback { public static *; }",
             "packagingOptions": {
               "exclude": [
                 "/org/apache/commons/codec/language/**"
@@ -78,7 +78,59 @@
         }
       ],
       "./plugins/withAppIcons",
-      "./plugins/withoutGifWebp"
+      "./plugins/withoutGifWebp",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "NowPlaying",
+              "label": "Muse",
+              "description": "The song playing, with play and pause",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 0
+            },
+            {
+              "name": "NowPlayingBar",
+              "label": "Muse bar",
+              "description": "The song with previous, play and next",
+              "minWidth": "250dp",
+              "minHeight": "60dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 0
+            },
+            {
+              "name": "NowPlayingLarge",
+              "label": "Muse player",
+              "description": "A big cover, the song and its controls",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 0
+            },
+            {
+              "name": "Today",
+              "label": "Muse today",
+              "description": "Minutes today, your goal and your streak",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 10800000
+            }
+          ]
+        }
+      ],
+      "expo-status-bar"
     ],
     "ios": {
       "bundleIdentifier": "com.muse.offlineplayer",
@@ -86,7 +138,7 @@
     },
     "android": {
       "package": "com.muse.offlineplayer",
-      "versionCode": 2,
+      "versionCode": 3,
       "blockedPermissions": [
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
@@ -103,11 +155,10 @@
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.MANAGE_EXTERNAL_STORAGE",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "expo-navigation-bar": {

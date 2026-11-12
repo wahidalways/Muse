@@ -33,6 +33,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import type { ListeningEvent, MusicTrack } from '../types';
 import {
   groupTracks,
+  folderGroups,
   smartList,
   sortGroups,
   type GroupKind,
@@ -64,6 +65,7 @@ import {
   type SortDirection,
 } from '../library/sortTracks';
 import { LIBRARY_SORT_OPTIONS } from '../constants';
+import { libraryTabViews, usePreferences, type LibraryGroupView } from '../settings/preferences';
 import { LibraryTrackRow } from './LibraryTab';
 import { shuffleTracks } from '../playback/PlaybackController';
 import { CoverCollage, PlaylistCover } from '../components/CoverCollage';
@@ -107,8 +109,9 @@ const GROUP_INFO: Record<GroupKind, { title: string; one: string; label: string 
   genre: { title: 'Genres', one: 'genre', label: 'Genre' },
   year: { title: 'Years', one: 'year', label: 'Year' },
 };
-/** Albums and Artists live in Library, so Browse leaves them out. */
-const BROWSE: (Exclude<GroupKind, 'album' | 'artist'> | 'folders')[] = ['genre', 'year', 'albumArtist', 'folders'];
+/** Genres and the rest; Albums, Artists or Folders join them when they are not a Library tab. */
+const BROWSE: (GroupKind | 'folders')[] = ['genre', 'year', 'albumArtist'];
+const BROWSE_KIND: Record<LibraryGroupView, GroupKind | 'folders'> = { albums: 'album', artists: 'artist', folders: 'folders' };
 
 /** A list's own order, offered first in its sort sheet. */
 type OwnOrder = { label: string; order: Record<SortDirection, string>; hint?: string };
@@ -203,17 +206,6 @@ function sortPlaylists(items: PlaylistItem[], by: string, direction: SortDirecti
       return sign * comparison || byName(a.item, b.item);
     })
     .map((entry) => entry.item);
-}
-
-/** Device folders as groups, so Folders lists and sorts like Genres. */
-function folderGroups(tracks: MusicTrack[]): TrackGroup[] {
-  const groups = new Map<string, TrackGroup>();
-  for (const track of tracks) {
-    const group = groups.get(track.folderId) ?? { key: track.folderId, title: track.folderTitle, subtitle: null, tracks: [] };
-    group.tracks.push(track);
-    groups.set(track.folderId, group);
-  }
-  return [...groups.values()];
 }
 
 const plural = (count: number, one: string) => `${count} ${count === 1 ? one : `${one}s`}`;
@@ -658,9 +650,11 @@ function CollectionsHome({
     () => SMART.map((info) => ({ info, tracks: smartList(info.id, tracks, history, ratings, favorites).tracks })),
     [favorites, history, ratings, tracks],
   );
-  const browse = useMemo(
-    () =>
-      BROWSE.map((kind) => {
+  const libraryTabs = usePreferences().libraryTabs;
+  const browse = useMemo(() => {
+    const shown = libraryTabViews(libraryTabs);
+    const left = (['albums', 'artists', 'folders'] as const).filter((view) => !shown.includes(view)).map((view) => BROWSE_KIND[view]);
+    return [...left, ...BROWSE].map((kind) => {
         const groups = kind === 'folders' ? sortGroups(folderGroups(tracks), 'name', 'ascending') : groupTracks(tracks, kind);
         return {
           kind,
@@ -669,9 +663,8 @@ function CollectionsHome({
           names: groups.slice(0, 3).map((group) => group.title).join(', '),
           covers: groups.map((group) => group.tracks[0]),
         };
-      }),
-    [tracks],
-  );
+      });
+  }, [libraryTabs, tracks]);
   const favoriteCount = smart[0].tracks.length;
   const menuItem = menu ? items.find((item) => item.playlist.id === menu.id) : undefined;
 

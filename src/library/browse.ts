@@ -237,3 +237,22 @@ export function smartList(
       };
   }
 }
+
+/**
+ * Phone folders as groups, so Folders lists and sorts like Genres. The
+ * subtitle is where the folder sits ("Music" for Music/Rock), since two
+ * folders can share a name.
+ */
+export function folderGroups(tracks: MusicTrack[]): TrackGroup[] {
+  const groups = new Map<string, TrackGroup>();
+  for (const track of tracks) {
+    let group = groups.get(track.folderId);
+    if (!group) {
+      const parent = track.path.split('/').slice(0, -2).filter(Boolean).join('/');
+      group = { key: track.folderId, title: track.folderTitle, subtitle: parent || null, tracks: [] };
+      groups.set(track.folderId, group);
+    }
+    group.tracks.push(track);
+  }
+  return [...groups.values()];
+}

@@ -23,11 +23,13 @@ export const LISTENING_GOAL_OPTIONS = [0, 15, 30, 45, 60, 90, 120];
  * v4 adds each song's genre; v5 drops the test songs v4 builds saved, which
  * cannot play in an APK. Older caches are rescanned.
  */
-export const LIBRARY_CACHE_FILE_NAME = 'library-cache-v5.json';
+// v6: WAV/AIFF tags read by Muse, picked folders (APE, WavPack, DSD).
+export const LIBRARY_CACHE_FILE_NAME = 'library-cache-v6.json';
 export const LEGACY_LIBRARY_CACHE_FILE_NAMES = [
   'library-cache-v2.json',
   'library-cache-v3.json',
   'library-cache-v4.json',
+  'library-cache-v5.json',
 ];
 /** Where older versions kept the library cache, removed on launch. */
 export const LEGACY_LIBRARY_CACHE_KEYS = [

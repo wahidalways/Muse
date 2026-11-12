@@ -1,0 +1,86 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+.eas/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Signing secrets from `eas credentials` (the keystore and its passwords)
+credentials.json
+/credentials/
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS
+.DS_Store
+*.pem
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# local env files
+.env
+.env.*
+!.env.example
+.env*.local
+
+# build artifacts
+*.apk
+*.aab
+*.ipa
+coverage/
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Personal Claude Code permissions (the shared .claude/settings.json stays)
+.claude/settings.local.json
+
+# Local design reviews, never committed
+artifacts/
+
+# Nested local repositories
+/Muse Music/
+
+# Installed agent tooling: reinstall from skills-lock.json. Its design mocks stay local.
+/.agents/
+/.github/agents/
+/.github/hooks/
+/.github/prompts/
+/.github/skills/
+/.impeccable/
+
+# ---- EAS upload only (this file replaces .gitignore for `eas build`; keep the lines above in sync) ----
+# Expo Go test songs: release bundles never require them (__DEV__ in MuseApp.tsx).
+/assets/demo/
+# Dev-only scripts, checks and notes; nothing in the build reads them.
+/scripts/
+/docs/
+/.claude/
