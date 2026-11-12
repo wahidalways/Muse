@@ -114,24 +114,35 @@ class MuseAudioMetadataModule : Module() {
     // Switches the launcher icon: enables one alias, then turns the others off,
     // so there is never a moment with no launcher entry. Throws (and changes
     // nothing) when this build has no such alias, such as Expo Go.
+    // Only aliases whose state really changes are touched. The first call on a
+    // fresh install used to rewrite every alias (manifest default to the same
+    // explicit state); that write is the likely reason fresh installs closed at
+    // the music permission dialog, the first time Muse goes to the background.
     Function("setAppIcon") { id: String ->
       val context = appContext.reactContext
         ?: throw IllegalStateException("Muse cannot change its icon right now.")
       val packageManager = context.packageManager
       val alias = { name: String -> ComponentName(context.packageName, "${context.packageName}.MuseIcon_$name") }
-      packageManager.getActivityInfo(alias(id), PackageManager.MATCH_DISABLED_COMPONENTS)
-      packageManager.setComponentEnabledSetting(
-        alias(id),
-        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-        PackageManager.DONT_KILL_APP,
-      )
-      APP_ICON_IDS.filter { it != id }.forEach { other ->
-        packageManager.setComponentEnabledSetting(
-          alias(other),
-          PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-          PackageManager.DONT_KILL_APP,
-        )
+      val isOn = { component: ComponentName ->
+        when (packageManager.getComponentEnabledSetting(component)) {
+          PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+          PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
+            packageManager.getActivityInfo(component, PackageManager.MATCH_DISABLED_COMPONENTS).enabled
+          else -> false
+        }
       }
+      val set = { component: ComponentName, on: Boolean ->
+        if (isOn(component) != on) {
+          packageManager.setComponentEnabledSetting(
+            component,
+            if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP,
+          )
+        }
+      }
+      packageManager.getActivityInfo(alias(id), PackageManager.MATCH_DISABLED_COMPONENTS)
+      set(alias(id), true)
+      APP_ICON_IDS.filter { it != id }.forEach { other -> set(alias(other), false) }
     }
 
     // Muse has no crash reporting and testers have no cable for the phone's

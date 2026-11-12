@@ -681,20 +681,29 @@ export function MuseApp({
   // switched off, so doing it on the tap closed Muse in your hand.
   // shortcut: a share sheet or picker also sends Muse to the background, so a
   // pending icon then closes Muse behind it; check the leave reason natively if that bites.
+  // Never during setup: its permission dialog and All files access page would close it.
+  const isInApp = screen === 'app';
   useEffect(() => {
+    if (!isInApp) {
+      return;
+    }
+    let isListening = true;
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
         // After the saved choice loads (the defaults would switch it back to
         // Muse), and only if Muse is still out of sight by then.
         void preferencesReady.then(() => {
-          if (AppState.currentState === 'background') {
+          if (isListening && AppState.currentState === 'background') {
             setAppIcon(getPreferences().appIcon);
           }
         });
       }
     });
-    return () => subscription.remove();
-  }, []);
+    return () => {
+      isListening = false;
+      subscription.remove();
+    };
+  }, [isInApp]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
