@@ -1,0 +1,69 @@
+# Builds the Muse APK on GitHub's machines, signed with the same key as every
+# release (from EAS, kept in repo secrets), so it installs over earlier versions.
+# Run it from the Actions tab (or the API); the APK is attached to the run.
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Also runs patch-package (expo-audio's patch).
+      - run: npm ci
+
+      # The native project from app.json and the plugins, as EAS makes it.
+      - run: npx expo prebuild --platform android --no-install
+
+      - name: Build the release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Sign with the Muse key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "The ANDROID_KEYSTORE_* secrets are missing." >&2
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/muse.jks"
+          TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          VERSION=$(node -p "require('./app.json').expo.version")
+          "$TOOLS/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/aligned.apk"
+          "$TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/muse.jks" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "Muse-$VERSION.apk" \
+            "$RUNNER_TEMP/aligned.apk"
+          rm "$RUNNER_TEMP/muse.jks"
+          "$TOOLS/apksigner" verify --print-certs "Muse-$VERSION.apk" | grep -i "SHA-256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muse-apk
+          path: Muse-*.apk
+          if-no-files-found: error
