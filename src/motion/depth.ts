@@ -16,11 +16,3 @@ export function settleSheetDepth(open: boolean) {
   openSheets = Math.max(0, openSheets + (open ? 1 : -1));
   sheetDepth.set(withSpring(openSheets > 0 ? 1 : 0, SETTLE_SPRING));
 }
-
-/**
- * Android's back swipe while Muse can go back in-app (Android 14+): how far
- * along it is, 0 to 1, and which edge it came from (1 left, -1 right). The
- * app content shrinks and shifts with it, the way Android previews a back.
- */
-export const backProgress = makeMutable(0);
-export const backEdge = makeMutable(1);

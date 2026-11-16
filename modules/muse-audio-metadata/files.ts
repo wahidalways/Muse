@@ -52,12 +52,9 @@ type NativeFiles = {
   // Missing from builds made before them.
   setNotificationButtons?(favorite: number, shuffle: number): void;
   addListener(event: 'onNotificationAction', listener: (event: { action: NotificationAction }) => void): { remove(): void };
-  setPredictiveBack?(enabled: boolean): void;
-  addListener(event: 'onBackGesture', listener: (event: BackGesture) => void): { remove(): void };
 };
 
 /** Android's back swipe (Android 14+): its progress 0 to 1, then cancel or commit. */
-export type BackGesture = { phase: 'start' | 'progress' | 'cancel' | 'commit'; progress: number; edge: 'left' | 'right' };
 
 /** The playback notification's extra buttons. */
 export type NotificationAction = 'favorite' | 'shuffle';
@@ -192,19 +189,6 @@ export function setNotificationButtons(favorite: boolean | null, shuffle: boolea
   } catch {
     // An older build without the buttons: nothing to update.
   }
-}
-
-/** Muse follows the back swipe while it has an in-app step to go back to. */
-export function setPredictiveBack(enabled: boolean): void {
-  try {
-    native?.setPredictiveBack?.(enabled);
-  } catch {
-    // An older build: back works as before, without following the finger.
-  }
-}
-
-export function addBackGestureListener(listener: (gesture: BackGesture) => void): { remove(): void } {
-  return native?.addListener('onBackGesture', listener) ?? { remove: () => undefined };
 }
 
 export function addNotificationActionListener(listener: (action: NotificationAction) => void): { remove(): void } {

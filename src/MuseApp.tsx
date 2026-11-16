@@ -50,7 +50,7 @@ import { getPermissionsAsync, requestPermissionsAsync } from 'expo-media-library
 import type { LibrarySort, SortDirection } from './library/sortTracks';
 import { getPlaybackController, shuffleTracks } from './playback/PlaybackController';
 import { settlePlayer, usePlayerTransition } from './player/playerTransition';
-import { backEdge, backProgress, sheetDepth } from './motion/depth';
+import { sheetDepth } from './motion/depth';
 import { openFromTouch } from './motion/origin';
 import {
   addAudioBecomingNoisyListener,
@@ -59,7 +59,6 @@ import {
   setAppIcon,
   takeLastCrash,
 } from '../modules/muse-audio-metadata';
-import { addBackGestureListener, setPredictiveBack } from '../modules/muse-audio-metadata/files';
 import { usePlayback, usePlaybackValue } from './playback/usePlayback';
 import type {
   MusicTrack,
@@ -1496,41 +1495,6 @@ export function MuseApp({
     return () => subscription.remove();
   }, []);
 
-  // Predictive back (Android 14+): Muse follows the swipe while it has an
-  // in-app step to go back to; the back itself still runs through BackHandler.
-  const followsBackSwipe = screen === 'app' && canGoBack;
-  useEffect(() => {
-    setPredictiveBack(followsBackSwipe);
-  }, [followsBackSwipe]);
-  useEffect(() => {
-    const subscription = addBackGestureListener(({ phase, progress, edge }) => {
-      // The open player rides its own morph: it slides down with the swipe.
-      const playerOpen = playerTransition.target.get() === 1;
-      if (phase === 'start') {
-        backEdge.set(edge === 'right' ? -1 : 1);
-      } else if (phase === 'progress') {
-        if (playerOpen) {
-          playerTransition.progress.set(1 - progress * 0.2);
-        } else {
-          backProgress.set(progress);
-        }
-      } else {
-        backProgress.set(withSpring(0, SETTLE_SPRING));
-        if (playerOpen && phase === 'cancel') {
-          settlePlayer(playerTransition, true);
-        } else if (playerOpen) {
-          // The back may only switch the player's view (Lyrics to cover): then it stays open.
-          requestAnimationFrame(() => {
-            if (playerTransition.target.get() === 1) {
-              settlePlayer(playerTransition, true);
-            }
-          });
-        }
-      }
-    });
-    return () => subscription.remove();
-  }, [playerTransition]);
-
   const refreshLibrary = useCallback(async () => {
     setIsLoading(true);
     setLibraryNotice('');
@@ -1686,17 +1650,10 @@ export function MuseApp({
           interpolate(playerTransition.progress.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
           interpolate(sheetDepth.get(), [0, 1], [0, 0.5], Extrapolation.CLAMP),
         );
-    // Android's back swipe: the page about to close shrinks and shifts away from the edge with the finger.
-    const back = reduceMotion ? 0 : backProgress.get();
     // Scale only. Rounded, clipped corners cost a clip of the whole app every
     // frame and wait behind React (not transform/opacity), and over the same
     // color behind they barely showed.
-    return {
-      transform: [
-        { translateX: backEdge.get() * back * 16 },
-        { scale: interpolate(open, [0, 1], [1, 0.94]) * (1 - 0.08 * back) },
-      ],
-    };
+    return { transform: [{ scale: interpolate(open, [0, 1], [1, 0.94]) }] };
   });
   // Library and More are virtualized lists with their own scrolling; the
   // other tabs share this padding inside a plain scroll view.

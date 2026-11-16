@@ -7,9 +7,6 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.Settings
-import androidx.activity.BackEventCompat
-import androidx.activity.ComponentActivity
-import androidx.activity.OnBackPressedCallback
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -30,14 +27,11 @@ class MuseFilesModule : Module() {
   /** Picked-folder files of a delete, waiting for Android's trash prompt. */
   private var trashPicked: List<String> = emptyList()
   private val outputListener: (Map<String, Any?>) -> Unit = { sendEvent("onOutputChange", it) }
-  /** Muse's predictive back callback and the activity it belongs to. */
-  private var backCallback: OnBackPressedCallback? = null
-  private var backActivity: java.lang.ref.WeakReference<ComponentActivity>? = null
 
   override fun definition() = ModuleDefinition {
     Name("MuseFiles")
 
-    Events("onOutputChange", "onUpdateProgress", "onUpdateStatus", "onNotificationAction", "onBackGesture")
+    Events("onOutputChange", "onUpdateProgress", "onUpdateStatus", "onNotificationAction")
 
     OnCreate {
       appContext.reactContext?.let { MuseOutput.load(it) }
@@ -206,50 +200,10 @@ class MuseFilesModule : Module() {
       MusePlayback.setNotificationButtons(favorite, shuffle)
     }
 
-    // ---- Predictive back: the back swipe's progress, so the page follows the finger ----
-
-    // On while Muse has an in-app step to go back to; off, React Native's own back runs as before.
-    Function("setPredictiveBack") { enabled: Boolean ->
-      val activity = appContext.currentActivity as? ComponentActivity ?: return@Function
-      activity.runOnUiThread { backCallbackFor(activity).isEnabled = enabled }
-    }
-
     OnStartObserving("onNotificationAction") {
       MusePlayback.actionListener = { sendEvent("onNotificationAction", mapOf("action" to it)) }
     }
     OnStopObserving("onNotificationAction") { MusePlayback.actionListener = null }
-  }
-
-  /** One callback per activity, added after React Native's so it is asked first while enabled. */
-  private fun backCallbackFor(activity: ComponentActivity): OnBackPressedCallback {
-    backCallback?.takeIf { backActivity?.get() === activity }?.let { return it }
-    backCallback?.remove()
-    val callback = object : OnBackPressedCallback(false) {
-      override fun handleOnBackStarted(backEvent: BackEventCompat) = sendBack("start", 0f, backEvent.swipeEdge)
-
-      override fun handleOnBackProgressed(backEvent: BackEventCompat) = sendBack("progress", backEvent.progress, backEvent.swipeEdge)
-
-      override fun handleOnBackCancelled() = sendBack("cancel", 0f, BackEventCompat.EDGE_LEFT)
-
-      override fun handleOnBackPressed() {
-        sendBack("commit", 1f, BackEventCompat.EDGE_LEFT)
-        // The back itself is React Native's: BackHandler in JS decides what closes.
-        isEnabled = false
-        activity.onBackPressedDispatcher.onBackPressed()
-        isEnabled = true
-      }
-    }
-    activity.onBackPressedDispatcher.addCallback(activity, callback)
-    backCallback = callback
-    backActivity = java.lang.ref.WeakReference(activity)
-    return callback
-  }
-
-  private fun sendBack(phase: String, progress: Float, edge: Int) {
-    sendEvent(
-      "onBackGesture",
-      mapOf("phase" to phase, "progress" to progress.toDouble(), "edge" to if (edge == BackEventCompat.EDGE_RIGHT) "right" else "left"),
-    )
   }
 
   private fun deletePicked(context: android.content.Context, ids: List<String>) {

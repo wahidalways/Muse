@@ -11,6 +11,4 @@ android {
 dependencies {
   // Compile-time only: expo-audio ships ExoPlayer; the effects read its audio session.
   compileOnly "androidx.media3:media3-exoplayer:1.9.1"
-  // Compile-time only: the app ships AndroidX Activity (React Native's back handling uses it).
-  compileOnly "androidx.activity:activity:1.8.0"
 }
