@@ -51,6 +51,8 @@ private const val FULL_ARTWORK_SIZE = 4096
 private const val MAX_FULL_PIXELS = 16_000_000L
 /** Longest side of the lock screen's picture. Android shows it at about 1000 px at most. */
 private const val LOCK_SCREEN_SIZE = 1440
+/** Home-screen widgets show the cover at about 170 dp; they decode it at full size from a data URI. */
+private const val WIDGET_COVER_SIZE = 320
 /** Slices of the color wheel a cover's colors are tallied in (15 degrees each). */
 private const val HUE_SLICES = 24
 /** A second color counts when it covers at least this share of the main one's area. */
@@ -180,6 +182,13 @@ class MuseAudioMetadataModule : Module() {
       android.os.Process.killProcess(android.os.Process.myPid())
     }
 
+    // The phone's own dark mode now. React Native only hears of a change while
+    // Muse's screen is open, so playback in the background can miss one.
+    Function("isSystemDark") {
+      (android.content.res.Resources.getSystem().configuration.uiMode and
+        android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+
     // True when this build has the icon aliases (a Muse build made with the plugin).
     Function("canSetAppIcon") {
       val context = appContext.reactContext ?: return@Function false
@@ -283,24 +292,45 @@ class MuseAudioMetadataModule : Module() {
       readAudioLibrary(context)
     }
 
-    // A cheap fingerprint of the whole media library: Android raises each
-    // volume's generation on every added, changed or removed file. Muse
-    // compares it with the last scan and only rescans when it moved. Null
-    // before Android 11, which has no generation, so callers scan instead.
+    // A cheap fingerprint of the music: the newest change and the row count
+    // of Android's audio files (a removal lowers the count), plus the same for
+    // APE/WavPack/DSD files with All files access. Muse compares it with the
+    // last scan and only rescans when it moved, so photos and downloads no
+    // longer cause a rescan. Picked folders can hold files Muse cannot query,
+    // so with any picked, every volume's generation counts (any file change).
+    // Null before Android 11, which has no generation, so callers scan instead.
     AsyncFunction("getLibraryVersion") {
       val context = appContext.reactContext
         ?: throw IllegalStateException("Muse cannot access the Android media library.")
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
         return@AsyncFunction null
       }
-      val volumes = MediaStore.getExternalVolumeNames(context).sorted()
+      val resolver = context.contentResolver
+      val picked = LibraryFiles.pickedTrees(context)
+      val allFiles = LibraryFiles.hasAllFilesAccess(context)
+      val extra = if (allFiles) {
+        val name = MediaStore.MediaColumns.DATA
+        changeStamp(
+          resolver,
+          MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL),
+          PICKED_ONLY_EXTENSIONS.joinToString(" OR ") { "LOWER($name) LIKE ?" },
+          PICKED_ONLY_EXTENSIONS.map { "%.$it" }.toTypedArray(),
+        )
+      } else {
+        ""
+      }
+      val audio = changeStamp(resolver, MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), null, null)
       buildString {
         append(MediaStore.getVersion(context))
-        volumes.forEach { volume ->
-          append('|').append(volume).append('=').append(MediaStore.getGeneration(context, volume))
+        append("|audio=").append(audio)
+        if (allFiles) append("|all-files=").append(extra)
+        // Picked folders, or a query failing: any file change counts, as before.
+        if (picked.isNotEmpty() || audio == null || extra == null) {
+          MediaStore.getExternalVolumeNames(context).sorted().forEach { volume ->
+            append('|').append(volume).append('=').append(MediaStore.getGeneration(context, volume))
+          }
         }
-        LibraryFiles.pickedTrees(context).forEach { append('|').append(it) }
-        if (LibraryFiles.hasAllFilesAccess(context)) append("|all-files")
+        picked.forEach { append('|').append(it) }
       }
     }
 
@@ -347,7 +377,14 @@ class MuseAudioMetadataModule : Module() {
     AsyncFunction("getLockScreenCover") { uri: String ->
       val context = appContext.reactContext
         ?: throw IllegalStateException("Muse cannot access the Android media library.")
-      Uri.parse(uri).path?.let { path -> lockScreenCopy(context.cacheDir, File(path)) }
+      Uri.parse(uri).path?.let { path -> sizedCopy(context.cacheDir, File(path), LOCK_SCREEN_SIZE, "lock") }
+    }
+
+    // A small file:// copy for the home-screen widgets, which get it as a data URI.
+    AsyncFunction("getWidgetCover") { uri: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Muse cannot access the Android media library.")
+      Uri.parse(uri).path?.let { path -> sizedCopy(context.cacheDir, File(path), WIDGET_COVER_SIZE, "widget") }
     }
   }
 
@@ -583,6 +620,16 @@ class MuseAudioMetadataModule : Module() {
     return if (saved) Uri.fromFile(file).toString() else null
   }
 
+  /** "<newest change generation>:<rows>" of a MediaStore query (Android 11+), or null when it fails. */
+  private fun changeStamp(resolver: ContentResolver, uri: Uri, selection: String?, args: Array<String>?): String? =
+    runCatching {
+      val generation = MediaStore.MediaColumns.GENERATION_MODIFIED
+      resolver.query(uri, arrayOf(generation), selection, args, "$generation DESC")?.use { cursor ->
+        val newest = if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+        "$newest:${cursor.count}"
+      }
+    }.getOrNull()
+
   private fun albumIdOf(resolver: ContentResolver, trackId: String): Long? =
     resolver.query(
       MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -707,11 +754,11 @@ class MuseAudioMetadataModule : Module() {
   }
 
   /**
-   * The picture at most LOCK_SCREEN_SIZE on its longest side: itself when it
-   * already is, else a JPEG copy in cache/muse-artwork/lock, made once. Null
-   * when it cannot be read.
+   * The picture at most `size` on its longest side: itself when it already
+   * is, else a JPEG copy in cache/muse-artwork/<folder>, made once. Null when
+   * it cannot be read.
    */
-  private fun lockScreenCopy(cacheDir: File, source: File): String? {
+  private fun sizedCopy(cacheDir: File, source: File, size: Int, folder: String): String? {
     if (!source.isFile) {
       return null
     }
@@ -721,12 +768,12 @@ class MuseAudioMetadataModule : Module() {
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
       return null
     }
-    if (longest <= LOCK_SCREEN_SIZE) {
+    if (longest <= size) {
       return Uri.fromFile(source).toString()
     }
     // Named by folder, name and change time, so a replaced picture gets a new copy.
     val file = File(
-      artworkDirectory(cacheDir, "lock"),
+      artworkDirectory(cacheDir, folder),
       "${source.parentFile?.name}-${source.nameWithoutExtension}-${source.lastModified()}.jpg",
     )
     if (file.exists() && file.length() > 0) {
@@ -734,12 +781,12 @@ class MuseAudioMetadataModule : Module() {
     }
     // Halves first (cheap, while decoding), then the exact size.
     var sample = 1
-    while (longest / (sample * 2) >= LOCK_SCREEN_SIZE) {
+    while (longest / (sample * 2) >= size) {
       sample *= 2
     }
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
     val decoded = runCatching { BitmapFactory.decodeFile(source.path, options) }.getOrNull() ?: return null
-    val scale = LOCK_SCREEN_SIZE.toFloat() / maxOf(decoded.width, decoded.height)
+    val scale = size.toFloat() / maxOf(decoded.width, decoded.height)
     val bitmap = if (scale < 1f) {
       runCatching {
         Bitmap.createScaledBitmap(

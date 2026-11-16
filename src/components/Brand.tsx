@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Linking, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable } from './Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { opticalSize } from './icons';
 import Animated, {
@@ -120,7 +121,7 @@ export function CreditLink({ withIcon = false }: { withIcon?: boolean }) {
         // No browser is rare; there is nothing useful to show if so.
         Linking.openURL(CREDIT_URL).catch(() => undefined);
       }}
-      style={({ pressed }) => [styles.creditLinkRow, pressed && styles.creditLinkPressed]}
+      style={[styles.creditLinkRow]}
     >
       <Text style={styles.creditLink}>{CREDIT_NAME}</Text>
       {withIcon && (
@@ -176,7 +177,7 @@ function CreditChip({
         // No browser is rare; there is nothing useful to show if so.
         Linking.openURL(url).catch(() => undefined);
       }}
-      style={({ pressed }) => [credit.chip, { backgroundColor: colors.chip }, pressed && credit.pressed]}
+      style={[credit.chip, { backgroundColor: colors.chip }]}
     >
       <Ionicons accessible={false} name={name} size={17} color={colors.text} />
     </Pressable>
@@ -189,5 +190,4 @@ const credit = StyleSheet.create({
   divider: { width: 1, height: 16, marginHorizontal: 4, opacity: 0.5 },
   // Soft round chips, so X and GitHub read as tappable.
   chip: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.7 },
 });

@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Pressable } from './Pressable';
 import {
   GestureDetector,
   GestureHandlerRootView,
@@ -398,7 +398,7 @@ function Tile({
       accessibilityState={{ checked: selected, busy }}
       disabled={busy}
       onPress={onPress}
-      style={({ pressed }) => [{ width: size }, pressed && styles.coverTilePressed]}
+      style={[{ width: size }]}
     >
       <View>
         <View style={[styles.coverTilePic, { width: size, height: size }]}>{children}</View>
@@ -539,7 +539,7 @@ function ViewerBody({ track, onClose, onChange }: { track: MusicTrack; onClose: 
         <Pressable
           accessibilityRole="button"
           onPress={onChange}
-          style={({ pressed }) => [viewerLayout.change, pressed && viewerLayout.pressed]}
+          style={[viewerLayout.change]}
         >
           <ControlIcon name="image" size={18} color="#000000" />
           <Text style={viewerLayout.changeText}>Change cover</Text>
@@ -603,9 +603,6 @@ const viewerLayout = StyleSheet.create({
     color: '#000000',
     fontSize: 15,
     fontWeight: '700',
-  },
-  pressed: {
-    opacity: 0.8,
   },
 });
 

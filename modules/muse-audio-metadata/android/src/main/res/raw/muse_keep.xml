@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The notification icon is looked up by name (expo-audio patch: MuseHooks.smallIcon), so the resource shrinker cannot see it is used. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/muse_notification_icon" />

@@ -2,12 +2,12 @@ import { memo, useCallback, useContext, useEffect, useRef, useState, type Compon
 import {
   ActivityIndicator,
   BackHandler,
-  Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -63,6 +63,7 @@ import { SongMenu } from '../components/SongMenu';
 import { useSecondsLeft } from './useSecondsLeft';
 import { LyricsView } from './LyricsView';
 import { QueuePane } from './QueuePane';
+import { playerSwipeEnabled } from './UpNextList';
 import { VinylDisc } from './VinylDisc';
 import { PlayerSkinSheet, skinLabel } from './PlayerSkinSheet';
 
@@ -293,6 +294,8 @@ export const FullPlayer = memo(function FullPlayer({
 
   const dragStart = useSharedValue(1);
   const dismissPan = usePanGesture({
+    // Off while a song is dragged in Up Next, so the player holds still.
+    enabled: playerSwipeEnabled,
     // Downward drags only, and only once clearly vertical.
     activeOffsetY: 12,
     failOffsetX: [-14, 14],
@@ -780,7 +783,6 @@ export const FullPlayer = memo(function FullPlayer({
               hapticSelection();
               setMenu('info');
             }}
-            style={({ pressed }) => pressed && styles.playerMinimalPressed}
           >
             <Text
               numberOfLines={MINIMAL_TITLE_LINES}
@@ -797,7 +799,7 @@ export const FullPlayer = memo(function FullPlayer({
             disabled={!shown.artist}
             hitSlop={{ top: 4, bottom: 8 }}
             onPress={() => openGroup('artist')}
-            style={({ pressed }) => [styles.playerMinimalLink, pressed && styles.playerMinimalPressed]}
+            style={[styles.playerMinimalLink]}
           >
             <Text numberOfLines={1} style={styles.playerMinimalArtist}>
               {shown.artist ?? 'Unknown artist'}
@@ -808,7 +810,7 @@ export const FullPlayer = memo(function FullPlayer({
               accessibilityRole="link"
               hitSlop={{ top: 4, bottom: 12 }}
               onPress={() => openGroup('album')}
-              style={({ pressed }) => [styles.playerMinimalLink, pressed && styles.playerMinimalPressed]}
+              style={[styles.playerMinimalLink]}
             >
               <Text numberOfLines={1} style={styles.playerMinimalAlbum}>
                 {shown.album}
@@ -1017,7 +1019,7 @@ export const FullPlayer = memo(function FullPlayer({
                     </PressableScale>
                   </View>
 
-                  {showVolume && <VolumeSlider />}
+                  {showVolume && <VolumeSlider active={isOpen} />}
 
                   {error.length > 0 && (
                     <View style={styles.fullPlayerErrorRow}>
@@ -1029,11 +1031,10 @@ export const FullPlayer = memo(function FullPlayer({
                           accessibilityRole="button"
                           accessibilityLabel="Skip to the next song"
                           onPress={() => swipe.skip(1)}
-                          style={({ pressed }) => [
+                          style={[
                             styles.homeChip,
                             styles.homeChipAction,
                             styles.fullPlayerErrorSkip,
-                            pressed && styles.librarySortChipPressed,
                           ]}
                         >
                           <Text style={styles.homeChipActionText}>Skip</Text>
@@ -1311,7 +1312,7 @@ function SpeedSheet({
       <Pressable
         accessibilityRole="button"
         onPress={onClose}
-        style={({ pressed }) => [styles.primaryButton, styles.speedDone, pressed && styles.primaryButtonPressed]}
+        style={[styles.primaryButton, styles.speedDone]}
       >
         <Text style={styles.primaryButtonLabel}>Done</Text>
       </Pressable>

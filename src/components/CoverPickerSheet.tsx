@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { launchImageLibraryAsync } from 'expo-image-picker';
 import type { MusicTrack } from '../types';
 import {

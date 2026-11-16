@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, Text } from 'react-native';
+import { ScrollView, Text } from 'react-native';
+import { Pressable } from '../../components/Pressable';
 import { Sheet } from '../../components/Sheet';
 import { CheckIcon } from '../../components/icons';
 import { useAppStyles } from '../../theme/styles';

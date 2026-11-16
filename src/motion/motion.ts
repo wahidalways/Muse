@@ -32,6 +32,37 @@ export const SNAP_BACK_SPRING = {
   reduceMotion: ReduceMotion.System,
 } as const;
 
+// ---- Flow: every touch answers with a spring (artifacts/flow-motion.html) ----
+
+/** A press sinks fast, with no bounce, as the finger lands. */
+export const PRESS_IN_SPRING = {
+  duration: 160,
+  dampingRatio: 1,
+  reduceMotion: ReduceMotion.System,
+} as const;
+
+/** Lifting the finger: back with a little life. */
+export const PRESS_OUT_SPRING = {
+  duration: 420,
+  dampingRatio: 0.55,
+  reduceMotion: ReduceMotion.System,
+} as const;
+
+/** The one bit of delight: a heart filling. */
+export const POP_SPRING = {
+  duration: 450,
+  dampingRatio: 0.45,
+  reduceMotion: ReduceMotion.System,
+} as const;
+
+/** Something gliding to a new spot, like the tab lens or a switch: a hint of overshoot. */
+export const GLIDE_SPRING = {
+  duration: 420,
+  dampingRatio: 0.72,
+  reduceMotion: ReduceMotion.System,
+} as const;
+
+
 /**
  * Where a flick would come to rest if the finger kept decelerating, so a fast
  * short swipe commits and a slow long one does not.
@@ -61,10 +92,10 @@ export function clamp(value: number, min: number, max: number): number {
 
 // Layout animations follow the phone's reduce-motion setting by default.
 
-/** A page pushed on top, as on iOS: it comes in from the right. */
-export const PUSH_IN = FadeInRight.duration(260).easing(EASE_OUT);
-/** The page underneath, coming back after a pop: in from the left. */
-export const POP_IN = FadeInLeft.duration(260).easing(EASE_OUT);
+/** A page pushed on top, as on iOS: it comes in from the right and settles on a spring (flow). */
+export const PUSH_IN = FadeInRight.springify().duration(420).dampingRatio(0.86);
+/** The page underneath, coming back after a pop: in from the left, on the same spring. */
+export const POP_IN = FadeInLeft.springify().duration(420).dampingRatio(0.86);
 /**
  * A bottom sheet rising on the iOS sheet curve; its backdrop fades. It moves
  * by transform, not SlideInDown's layout position: an Android modal re-lays

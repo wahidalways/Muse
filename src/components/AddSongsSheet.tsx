@@ -1,5 +1,6 @@
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { FlashList } from '@shopify/flash-list';
 import type { MusicTrack } from '../types';
 import { buildSearchIndex, matchesAllWords, searchWords } from '../library/search';

@@ -1,5 +1,6 @@
 import { useContext, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import type { MusicTrack } from '../types';
@@ -128,7 +129,7 @@ function Picker({ track, tint, onClose }: { track: MusicTrack; tint: [string, st
           }
           onClose();
         }}
-        style={({ pressed }) => [styles.primaryButton, styles.playerSkinUse, pressed && styles.primaryButtonPressed]}
+        style={[styles.primaryButton, styles.playerSkinUse]}
       >
         <Text style={styles.primaryButtonLabel}>{chosen === current ? `Keep ${label}` : `Use ${label}`}</Text>
       </Pressable>

@@ -1,5 +1,6 @@
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 // The gesture library's ScrollView claims sideways drags before the tab swipe.
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { FadeIn } from 'react-native-reanimated';

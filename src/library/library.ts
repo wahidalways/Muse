@@ -203,13 +203,10 @@ export function parseLibraryView(value: string | null): LibraryView {
   };
 }
 
-export function countIncludedTracks(
-  musicFolders: MusicFolder[],
-  blockedIds: string[],
-): number {
-  return musicFolders.reduce(
-    (total, folder) =>
-      total + (blockedIds.includes(folder.id) ? 0 : folder.trackCount),
-    0,
-  );
+/** A song's file type for folder filters: its extension in capitals ("MP3", "WAV"), or "Other". */
+export function formatOf(track: MusicTrack): string {
+  const dot = track.filename.lastIndexOf('.');
+  const extension = dot > 0 ? track.filename.slice(dot + 1).toUpperCase() : '';
+  return /^[A-Z0-9]{1,5}$/.test(extension) ? extension : 'Other';
 }
+

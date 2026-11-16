@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The playback notification's status bar icon: the four Muse bars of the app icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="#FFFFFFFF"
+      android:pathData="M2,14.38A1.5,1.5 0,0 1,5 14.38V18.32A1.5,1.5 0,0 1,2 18.32Z M7.67,10.02A1.5,1.5 0,0 1,10.67 10.02V18.32A1.5,1.5 0,0 1,7.67 18.32Z M13.34,5.67A1.5,1.5 0,0 1,16.34 5.67V18.32A1.5,1.5 0,0 1,13.34 18.32Z M18.97,11.78A1.5,1.5 0,0 1,21.97 11.78V18.32A1.5,1.5 0,0 1,18.97 18.32Z" />
+</vector>

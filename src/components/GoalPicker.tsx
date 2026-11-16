@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { LISTENING_GOAL_OPTIONS } from '../constants';
 import { formatListeningTime } from '../utils/format';
 import { useAppStyles } from '../theme/styles';

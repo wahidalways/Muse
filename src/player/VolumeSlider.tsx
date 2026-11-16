@@ -23,7 +23,7 @@ export function canShowVolumeSlider(): boolean {
  * The phone's media volume: the same one the volume buttons move, so each
  * follows the other. Hidden where it cannot be read (Expo Go).
  */
-export function VolumeSlider() {
+export function VolumeSlider({ active = true }: { active?: boolean }) {
   const styles = useAppStyles();
   const [initial] = useState(getMediaVolume);
   const [percent, setPercent] = useState(Math.round((initial ?? 0) * 100));
@@ -32,7 +32,17 @@ export function VolumeSlider() {
   const isDragging = useSharedValue(false);
   const lastSent = useSharedValue(-1);
 
+  // Follows the system volume only while shown: the observer wakes on every system setting change.
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+    // Catches up on changes made while hidden (the volume buttons with the player closed).
+    const now = getMediaVolume();
+    if (now !== null) {
+      volume.set(now);
+    }
+    const frame = requestAnimationFrame(() => now !== null && setPercent(Math.round(now * 100)));
     const subscription = addMediaVolumeListener((next) => {
       setPercent(Math.round(next * 100));
       // The buttons move the slider, except under a finger.
@@ -40,8 +50,11 @@ export function VolumeSlider() {
         volume.set(withTiming(next, { duration: 120 }));
       }
     });
-    return () => subscription.remove();
-  }, [isDragging, volume]);
+    return () => {
+      cancelAnimationFrame(frame);
+      subscription.remove();
+    };
+  }, [active, isDragging, volume]);
 
   const setFromTouch = (x: number) => {
     'worklet';

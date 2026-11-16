@@ -10,6 +10,7 @@ import {
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { lockScreenArtwork, lockScreenCoverKey } from './lockScreenArtwork';
+import { syncNotificationButtons } from './notificationButtons';
 import { subscribeSongCovers } from '../library/covers';
 import { getPreferences, SLEEP_FADE_SECONDS, subscribePreferences } from '../settings/preferences';
 import { getTrackSpeed, subscribeTrackSpeeds } from '../library/trackSpeeds';
@@ -19,6 +20,8 @@ import type { MusicTrack, RepeatMode } from '../types';
 import { withQueued } from './queueOrder';
 
 export const PLAYBACK_STATE_KEY = '@muse/playback-state/v1';
+/** The position alone, saved every few seconds while playing so the whole queue is not rewritten each time. Backups skip it (playback-state prefix). */
+const PLAYBACK_POSITION_KEY = '@muse/playback-state-position/v1';
 
 /**
  * The native player only ever holds a small window of the queue: a couple of
@@ -72,6 +75,8 @@ export type PlaybackSnapshot = {
   sleepAtTrackEnd: boolean;
   /** Where the queue came from ("Library", an album, a playlist), for "Playing from". */
   queueSource: string | null;
+  /** The saved song has been looked for (restore finished), found or not. */
+  restored: boolean;
 };
 
 export type PlaybackProgress = {
@@ -107,6 +112,7 @@ const INITIAL_SNAPSHOT: PlaybackSnapshot = {
   sleepTimerEndsAt: null,
   sleepAtTrackEnd: false,
   queueSource: null,
+  restored: false,
 };
 
 export class PlaybackController {
@@ -143,9 +149,13 @@ export class PlaybackController {
   private listenSeconds = 0;
   private finishedListenSeconds = 0;
   private lastStatusAt = 0;
+  /** When `progress` last changed (a report or a seek), for estimates between reports. */
+  private progressAt = 0;
   private audioModeReady: Promise<void> | null = null;
   private canPersist = false;
   private lastSavedAt = 0;
+  /** What the last full save wrote; while it still matches, a save writes only the position. */
+  private savedShape: readonly unknown[] = [];
   /**
    * Restored position, applied once the song has loaded. A seek sent before
    * that is dropped, and the first report of 0:00 would then be saved.
@@ -232,6 +242,16 @@ export class PlaybackController {
 
   getProgress = () => this.progress;
 
+  /** The position now: the last report moved on by the time since, while playing (reports come once a second). */
+  getEstimatedTime = () => {
+    const { currentTime, duration } = this.progress;
+    if (!this.snapshot.isPlaying) {
+      return currentTime;
+    }
+    const since = Math.min(1.5, (Date.now() - this.progressAt) / 1000) * this.speed;
+    return duration > 0 ? Math.min(duration, currentTime + since) : currentTime + since;
+  };
+
   /** Seconds heard so far of the current listen. */
   getListenSeconds = () => this.listenSeconds;
 
@@ -239,6 +259,10 @@ export class PlaybackController {
   getFinishedListenSeconds = () => this.finishedListenSeconds;
 
   private update(partial: Partial<PlaybackSnapshot>) {
+    if (partial.isPlaying !== undefined && partial.isPlaying !== this.snapshot.isPlaying) {
+      // The estimate counts from here: no time passed in the song while paused.
+      this.progressAt = Date.now();
+    }
     this.snapshot = { ...this.snapshot, ...partial };
     this.snapshotListeners.forEach((listener) => listener());
   }
@@ -251,7 +275,11 @@ export class PlaybackController {
       return;
     }
     this.progress = next;
-    this.progressListeners.forEach((listener) => listener());
+    this.progressAt = Date.now();
+    // Only screens read it, and none shows in the background: they catch up on return.
+    if (AppState.currentState === 'active') {
+      this.progressListeners.forEach((listener) => listener());
+    }
   }
 
   /**
@@ -918,6 +946,14 @@ export class PlaybackController {
         return;
       }
       const savedState = parseSavedPlaybackState(savedValue);
+      const savedPosition = parseSavedPosition(await AsyncStorage.getItem(PLAYBACK_POSITION_KEY).catch(() => null));
+      if (
+        savedPosition &&
+        savedPosition.currentTrackId === savedState.currentTrackId &&
+        savedPosition.queueIndex === savedState.queueIndex
+      ) {
+        savedState.position = savedPosition.position;
+      }
       const blocked = new Set(blockedFolderIds);
       const availableTracks = new Map(
         libraryTracks
@@ -975,6 +1011,9 @@ export class PlaybackController {
       );
     } finally {
       this.canPersist = true;
+      if (!this.snapshot.restored) {
+        this.update({ restored: true });
+      }
     }
   };
 
@@ -1201,7 +1240,9 @@ export class PlaybackController {
   }
 
   private handleAppStateChange = (state: AppStateStatus) => {
-    if (state !== 'active') {
+    if (state === 'active') {
+      this.progressListeners.forEach((listener) => listener());
+    } else {
       // Frames stop in the background, so a waiting load runs now.
       this.flushPendingLoad();
       this.save();
@@ -1523,11 +1564,22 @@ export class PlaybackController {
       return;
     }
     this.lastSavedAt = Date.now();
+    const position = Math.max(0, this.progress.currentTime);
+    const positionValue = JSON.stringify({ currentTrackId: currentTrack.id, queueIndex, position });
+    const shape = [queue, this.originalQueue, currentTrack.id, queueIndex, shuffle, repeatMode, this.snapshot.queueSource];
+    const onError = (error: unknown) => {
+      this.setError(error instanceof Error ? error.message : 'Could not save your player settings.');
+    };
+    if (shape.length === this.savedShape.length && shape.every((part, index) => part === this.savedShape[index])) {
+      AsyncStorage.setItem(PLAYBACK_POSITION_KEY, positionValue).catch(onError);
+      return;
+    }
+    this.savedShape = shape;
     const savedState: SavedPlaybackState = {
       trackIds: queue.map((track) => track.id),
       currentTrackId: currentTrack.id,
       queueIndex,
-      position: Math.max(0, this.progress.currentTime),
+      position,
       shuffle,
       repeatMode,
       ...(shuffle
@@ -1535,15 +1587,13 @@ export class PlaybackController {
         : {}),
       ...(this.snapshot.queueSource ? { queueSource: this.snapshot.queueSource } : {}),
     };
-    AsyncStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(savedState)).catch(
-      (error: unknown) => {
-        this.setError(
-          error instanceof Error
-            ? error.message
-            : 'Could not save your player settings.',
-        );
-      },
-    );
+    AsyncStorage.multiSet([
+      [PLAYBACK_STATE_KEY, JSON.stringify(savedState)],
+      [PLAYBACK_POSITION_KEY, positionValue],
+    ]).catch((error: unknown) => {
+      this.savedShape = [];
+      onError(error);
+    });
   }
 }
 
@@ -1563,6 +1613,23 @@ export function shuffleTracks(tracksToShuffle: MusicTrack[]): MusicTrack[] {
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
   return shuffled;
+}
+
+/** The position save, or null when missing or not valid (the full save's position is used then). */
+function parseSavedPosition(value: string | null): { currentTrackId: string; queueIndex: number; position: number } | null {
+  try {
+    const parsed = value ? (JSON.parse(value) as Record<string, unknown>) : null;
+    return parsed &&
+      typeof parsed.currentTrackId === 'string' &&
+      Number.isInteger(parsed.queueIndex) &&
+      typeof parsed.position === 'number' &&
+      Number.isFinite(parsed.position) &&
+      parsed.position >= 0
+      ? { currentTrackId: parsed.currentTrackId, queueIndex: parsed.queueIndex as number, position: parsed.position }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseSavedPlaybackState(value: string): SavedPlaybackState {
@@ -1624,6 +1691,7 @@ export function getPlaybackController(): PlaybackController {
   }
   const controller = new PlaybackController();
   store.__musePlaybackController = controller;
+  syncNotificationButtons(controller);
   return controller;
 }
 

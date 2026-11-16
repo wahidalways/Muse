@@ -1,5 +1,6 @@
-import { useEffect, useRef, useSyncExternalStore, type ComponentRef } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { ScrollView, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { getPlaybackController } from '../playback/PlaybackController';
 import { activeLyricsLine, type Lyrics } from '../library/lyrics';
 import { useAppStyles } from '../theme/styles';
@@ -45,10 +46,29 @@ export function LyricsView({
 function SyncedLines({ lyrics, onSeekTo }: { lyrics: Lyrics; onSeekTo: (seconds: number) => void }) {
   const styles = useAppStyles();
   const controller = getPlaybackController();
-  // Re-renders only when the line changes, not on every position report.
-  const active = useSyncExternalStore(controller.subscribeProgress, () =>
-    activeLyricsLine(lyrics.lines, controller.getProgress().currentTime),
-  );
+  // Reports come once a second, so a timer moves to the next line on time.
+  const [active, setActive] = useState(() => activeLyricsLine(lyrics.lines, controller.getEstimatedTime()));
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const update = () => {
+      clearTimeout(timer);
+      const seconds = controller.getEstimatedTime();
+      const index = activeLyricsLine(lyrics.lines, seconds);
+      setActive(index);
+      const next = lyrics.lines[index + 1]?.time;
+      if (next != null && controller.getSnapshot().isPlaying) {
+        timer = setTimeout(update, ((next - seconds) * 1000) / controller.getPlaybackSpeed() + 20);
+      }
+    };
+    update();
+    const unsubscribeProgress = controller.subscribeProgress(update);
+    const unsubscribeState = controller.subscribe(update);
+    return () => {
+      clearTimeout(timer);
+      unsubscribeProgress();
+      unsubscribeState();
+    };
+  }, [controller, lyrics]);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const lineTops = useRef<number[]>([]);
   const viewHeight = useRef(0);

@@ -15,7 +15,6 @@ import {
 } from 'react';
 import {
   BackHandler,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -25,6 +24,7 @@ import {
   type TextInput,
   type ViewStyle,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import Animated, {
   Easing,
   Extrapolation,
@@ -100,8 +100,6 @@ import { formatListeningTime, formatTrackDuration } from '../utils/format';
 
 const NO_ANCHOR = { disabled: true };
 const ROW_ART = 46;
-const ROW_PRESSED = { transform: [{ scale: 0.985 }] };
-const CARD_PRESSED = { transform: [{ scale: 0.97 }] };
 /** Height of the slim bar under the status bar. */
 const SLIM_BAR = 52;
 /** View and sort changes: the first rows settle in, one after another. */
@@ -319,8 +317,6 @@ export const LibraryTrackRow = memo(function LibraryTrackRow({
           selected && styles.libraryTrackRowSelected,
           !selecting && !track.uri && styles.libraryTrackRowDisabled,
           pressed && !isCurrent && styles.sortSheetOptionPressed,
-          // A gentle give under the finger; scale only, so it is instant.
-          pressed && ROW_PRESSED,
         ]}
       >
         {glow && (
@@ -922,7 +918,6 @@ export function LibraryTab({
               onAccessibilityAction={openMenu}
               onPress={open}
               onLongPress={openMenu}
-              style={({ pressed }) => pressed && CARD_PRESSED}
             >
               <AlbumArtwork track={item.tracks[0]} size={albumArt} radius={16} />
               <Text numberOfLines={1} style={styles.libraryAlbumTitle}>
@@ -957,7 +952,6 @@ export function LibraryTab({
             style={({ pressed }) => [
               styles.libraryArtistRow,
               pressed && styles.sortSheetOptionPressed,
-              pressed && ROW_PRESSED,
             ]}
           >
             {/* Up to four of the album covers inside: a circle for an artist, a rounded square for a folder. */}
@@ -1057,7 +1051,7 @@ export function LibraryTab({
             accessibilityLabel={`Reverse order. Now ${directionLabels[shownDirection]}`}
             hitSlop={{ top: 6, bottom: 6, left: 8, right: 2 }}
             onPress={reverseSort}
-            style={({ pressed }) => [styles.librarySortReverse, pressed && styles.librarySortChipPressed]}
+            style={[styles.librarySortReverse]}
           >
             <ControlIcon name={shownDirection === 'ascending' ? 'sort-up' : 'sort-down'} size={14} tone="accent" />
           </Pressable>
@@ -1066,7 +1060,7 @@ export function LibraryTab({
             accessibilityLabel={sortButtonLabel}
             hitSlop={{ top: 6, bottom: 6 }}
             onPress={openSortSheet}
-            style={({ pressed }) => [styles.librarySortLink, pressed && styles.librarySortChipPressed]}
+            style={[styles.librarySortLink]}
           >
             <Text numberOfLines={1} style={styles.librarySortButtonText}>
               {selectedSortLabel}
@@ -1112,7 +1106,6 @@ export function LibraryTab({
             styles.libraryShuffleButton,
             shuffleList.length === 0 && styles.libraryTrackRowDisabled,
             pressed && styles.libraryActionPressed,
-            pressed && CARD_PRESSED,
           ]}
         >
           <ControlIcon name="shuffle" size={18} tone="accent" />
@@ -1153,11 +1146,10 @@ export function LibraryTab({
             accessibilityRole="button"
             accessibilityHint="Also looks in playlists, genres and folders"
             onPress={() => onSearchEverywhere(deferredSearchText.trim())}
-            style={({ pressed }) => [
+            style={[
               styles.homeChip,
               styles.homeChipAction,
               styles.libraryEmptyAction,
-              pressed && styles.librarySortChipPressed,
             ]}
           >
             <Text style={styles.homeChipActionText}>Search everywhere</Text>
@@ -1246,7 +1238,7 @@ export function LibraryTab({
               hapticSelection();
               goToCurrent(true);
             }}
-            style={({ pressed }) => [styles.homeChip, styles.homeChipAction, styles.libraryLocateChip, pressed && styles.librarySortChipPressed]}
+            style={[styles.homeChip, styles.homeChipAction, styles.libraryLocateChip]}
           >
             <ControlIcon name={offScreen === 'up' ? 'chevron-up' : 'chevron-down'} size={14} tone="accent" />
             <Text style={styles.homeChipActionText}>Playing song</Text>

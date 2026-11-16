@@ -819,9 +819,6 @@ const styleDefinitions = {
   playerMinimalLink: {
     alignSelf: 'flex-start',
   },
-  playerMinimalPressed: {
-    opacity: 0.6,
-  },
   playerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -964,9 +961,6 @@ const styleDefinitions = {
   },
   playerPaneRowPast: {
     opacity: 0.5,
-  },
-  playerPaneRowPressed: {
-    opacity: 0.7,
   },
   playerPaneHead: {
     marginTop: 22,
@@ -4141,9 +4135,6 @@ const styleDefinitions = {
     fontWeight: '700',
   },
   // The current sort, as a chip that opens the sort sheet.
-  librarySortChipPressed: {
-    opacity: 0.7,
-  },
   libraryTrackRow: {
     minHeight: 64,
     flexDirection: 'row',
@@ -4731,9 +4722,6 @@ const styleDefinitions = {
     gap: 4,
     minHeight: 28,
   },
-  creditLinkPressed: {
-    opacity: 0.6,
-  },
   creditLink: {
     color: colors.lime,
     fontSize: 16,
@@ -4749,9 +4737,6 @@ const styleDefinitions = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 18,
-  },
-  settingRowPressed: {
-    opacity: 0.7,
   },
   settingCopy: {
     flex: 1,
@@ -5062,9 +5047,6 @@ const styleDefinitions = {
     color: colors.muted,
     fontSize: 12,
     marginTop: 2,
-  },
-  coverTilePressed: {
-    opacity: 0.7,
   },
   coverMessage: {
     alignItems: 'center',

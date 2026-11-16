@@ -1,5 +1,6 @@
 import type { ComponentRef, Ref } from 'react';
-import { Pressable, TextInput } from 'react-native';
+import { TextInput } from 'react-native';
+import { Pressable } from './Pressable';
 import { colors, useAppStyles } from '../theme/styles';
 import { CloseIcon, ControlIcon } from './icons';
 

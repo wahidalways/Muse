@@ -1,13 +1,18 @@
 import { useEffect, useRef, type ComponentRef, type ReactNode } from 'react';
-import { Modal, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Modal, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable } from './Pressable';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useAppStyles } from '../theme/styles';
 import { useKeyboardLift } from './useKeyboardLift';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { EASE_OUT, SHEET_IN, SNAP_BACK_SPRING, project } from '../motion/motion';
+import { EASE_OUT, SHEET_IN, SNAP_BACK_SPRING, project, rubberband } from '../motion/motion';
+import { settleSheetDepth, sheetDepth } from '../motion/depth';
 import { CloseIcon } from './icons';
+
+/** The sheet runs this far below the screen, so stretching it up never shows a gap under it. */
+const SKIRT = 48;
 
 type SheetProps = {
   visible: boolean;
@@ -54,7 +59,8 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
   const sheetRef = useRef<ComponentRef<typeof Animated.View>>(null);
   const bottomPadding = Math.max(insets.bottom, 20);
   // Modals do not resize for the keyboard, so a name field would sit under it.
-  const keyboardLift = useKeyboardLift(sheetRef, visible, bottomPadding);
+  // The skirt is padding too, so the content still lands right on the keyboard.
+  const keyboardLift = useKeyboardLift(sheetRef, visible, bottomPadding + SKIRT);
 
   const dragY = useSharedValue(0);
   const sheetHeight = useSharedValue(0);
@@ -62,6 +68,11 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
   useEffect(() => {
     isGuarded.set(guarded);
   }, [guarded, isGuarded]);
+  // The app steps back while the sheet is up, and comes forward as it closes.
+  useEffect(() => {
+    settleSheetDepth(true);
+    return () => settleSheetDepth(false);
+  }, []);
   // Same rule as the player: past a third of the way down (counting the
   // flick's momentum) it closes; otherwise it springs back.
   const drag = usePanGesture({
@@ -69,13 +80,18 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
     failOffsetX: [-20, 20],
     onUpdate: (event) => {
       'worklet';
-      dragY.set(Math.max(0, event.translationY));
+      // Down follows the finger; up stretches a little (the sheet's skirt below the screen hides the gap).
+      const y = event.translationY;
+      dragY.set(y >= 0 ? y : rubberband(y, SKIRT));
+      sheetDepth.set(1 - Math.min(1, Math.max(0, y) / Math.max(1, sheetHeight.get())));
     },
     onDeactivate: (event) => {
       'worklet';
       const projected = event.translationY + project(event.velocityY);
       if (!event.canceled && projected > sheetHeight.get() / 3 && isGuarded.get()) {
         dragY.set(withSpring(0, { ...SNAP_BACK_SPRING, velocity: event.velocityY }));
+        // Guarded (unsaved changes): it stays up while onClose asks, so the app steps back again too.
+        sheetDepth.set(withSpring(1, SNAP_BACK_SPRING));
         scheduleOnRN(onClose);
       } else if (!event.canceled && projected > sheetHeight.get() / 3) {
         dragY.set(
@@ -87,6 +103,7 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
         );
       } else {
         dragY.set(withSpring(0, { ...SNAP_BACK_SPRING, velocity: event.velocityY }));
+        sheetDepth.set(withSpring(1, SNAP_BACK_SPRING));
       }
     },
   });
@@ -108,8 +125,8 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
           onLayout={(event) => sheetHeight.set(event.nativeEvent.layout.height)}
           style={[
             styles.sleepTimerSheet,
-            { paddingBottom: bottomPadding, maxHeight: height * 0.88, marginBottom: keyboardLift },
-            tall && { height: height * 0.88 },
+            { paddingBottom: bottomPadding + SKIRT, maxHeight: height * 0.88 + SKIRT, marginBottom: keyboardLift - SKIRT },
+            tall && { height: height * 0.88 + SKIRT },
           ]}
         >
           <GestureDetector gesture={drag}>
@@ -126,7 +143,7 @@ function SheetPanel({ visible, eyebrow, title, onClose, children, tall = false, 
                   <Pressable
                     accessibilityRole="button"
                     onPress={onClose}
-                    style={({ pressed }) => [styles.sheetDone, pressed && styles.primaryButtonPressed]}
+                    style={[styles.sheetDone]}
                   >
                     <Text style={styles.sheetDoneText}>{closeLabel}</Text>
                   </Pressable>

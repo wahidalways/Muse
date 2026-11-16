@@ -6,7 +6,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import {
   GestureDetector,
   useCompetingGestures,
@@ -144,9 +145,9 @@ function useFillStyle(ratio: SharedValue<number>, width: SharedValue<number>) {
   }));
 }
 
-export function MiniPlayerProgress({ fallbackDuration }: { fallbackDuration: number }) {
+export function MiniPlayerProgress({ fallbackDuration, live = true }: { fallbackDuration: number; live?: boolean }) {
   const styles = useAppStyles();
-  const { ratio } = useSmoothProgress(fallbackDuration);
+  const { ratio } = useSmoothProgress(fallbackDuration, undefined, live);
   const width = useSharedValue(0);
   const fillStyle = useFillStyle(ratio, width);
   return (

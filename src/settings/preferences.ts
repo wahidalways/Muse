@@ -73,6 +73,8 @@ export type Preferences = {
   /** Nothing is added to listening history (stats, play counts, goal, recap, mixes). */
   historyPaused: boolean;
   appIcon: AppIconId;
+  /** File types left out of a folder (Choose your folders), by folder id: "MP3", "WAV"... */
+  hiddenFormats: Record<string, string[]>;
 };
 
 export const SHORT_AUDIO_OPTIONS = [15, 30, 60, 120];
@@ -110,6 +112,7 @@ const DEFAULTS: Preferences = {
   resumeOnConnect: false,
   historyPaused: false,
   appIcon: 'muse',
+  hiddenFormats: {},
 };
 
 const START_TABS: StartTab[] = ['last', 'home', 'library', 'more'];
@@ -157,6 +160,15 @@ function parsePreferences(value: unknown): Preferences | null {
     resumeOnConnect: flag('resumeOnConnect'),
     historyPaused: flag('historyPaused'),
     appIcon: APP_ICON_IDS.includes(saved.appIcon as AppIconId) ? (saved.appIcon as AppIconId) : DEFAULTS.appIcon,
+    hiddenFormats:
+      typeof saved.hiddenFormats === 'object' && saved.hiddenFormats !== null
+        ? Object.fromEntries(
+            Object.entries(saved.hiddenFormats).flatMap(([folderId, formats]) => {
+              const kept = Array.isArray(formats) ? formats.filter((format): format is string => typeof format === 'string') : [];
+              return kept.length > 0 ? [[folderId, kept]] : [];
+            }),
+          )
+        : DEFAULTS.hiddenFormats,
   };
 }
 

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
-  Pressable,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,9 +14,11 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getDocumentAsync } from 'expo-document-picker';
 import { launchImageLibraryAsync } from 'expo-image-picker';
+import { getPermissionsAsync } from 'expo-media-library';
 import Animated, {
   FadeIn,
   FadeInLeft,
@@ -48,14 +52,15 @@ import { formatListeningTime } from '../utils/format';
 import type { MusicFolder, MusicTrack } from '../types';
 import { FolderPicker } from '../components/FolderPicker';
 import { showToast } from '../components/Toast';
+import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 import { filesSupported, openAllFilesAccess, useAllFilesAccess } from '../../modules/muse-audio-metadata/files';
 import { GestureDemo, GreetingPreview, HomeDemo, LibraryDemo, LookPhone, PlayerDemo, useTokens } from './previews';
 import { WelcomeScene } from './WelcomeScene';
 
-export type AccessResult = 'granted' | 'denied' | 'unsupported';
+export type AccessResult = 'granted' | 'denied' | 'blocked' | 'unsupported';
 
-type Step = 'welcome' | 'access' | 'look' | 'player' | 'you' | 'folders' | 'tour' | 'denied';
-type Flow = Exclude<Step, 'welcome' | 'denied'>;
+type Step = 'welcome' | 'access' | 'look' | 'player' | 'you' | 'folders' | 'tour';
+type Flow = Exclude<Step, 'welcome'>;
 
 /** The first run: access first, so the scan runs while people pick their look. */
 const FIRST_FLOW: Flow[] = ['access', 'look', 'player', 'you', 'folders', 'tour'];
@@ -75,21 +80,12 @@ const MINI_DOCKS: { id: MiniDock; label: string }[] = [
   { id: 'joined', label: 'Joined' },
   { id: 'floating', label: 'Floating' },
 ];
-/**
- * Look, Player and You are three cards of one Personalize step: one part of
- * the progress bar, a switch to move between them, Next going card to card.
- */
-const CARDS: { id: 'look' | 'player' | 'you'; label: string }[] = [
-  { id: 'look', label: 'Look' },
-  { id: 'player', label: 'Player' },
-  { id: 'you', label: 'You' },
-];
-/** What the progress bar counts: each flow step's part, named under the bar. */
+/** What the progress bar counts: one part per step, named under the bar ("2 of 6 · Look"). */
 const PART: Record<Flow, string> = {
   access: 'Music access',
-  look: 'Personalize',
-  player: 'Personalize',
-  you: 'Personalize',
+  look: 'Look',
+  player: 'Player',
+  you: 'You',
   folders: 'Folders',
   tour: 'Tour',
 };
@@ -145,10 +141,9 @@ export function Onboarding(props: Props) {
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const history = useRef<Step[]>([]);
   const [quick, setQuick] = useState(false);
-  const [access, setAccess] = useState<'unknown' | 'granted' | 'later' | 'denied'>('unknown');
+  const [access, setAccess] = useState<'unknown' | 'granted' | 'later'>('unknown');
   /** Where to go once access is allowed, when it was asked for again on the way. */
   const [after, setAfter] = useState<Flow | 'finish' | null>(null);
-  const [isAsking, setIsAsking] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   /** The step the scan finished on, which says "Found"; later steps stay quiet. */
   const [foundOn, setFoundOn] = useState<Step | null>(null);
@@ -234,33 +229,20 @@ export function Onboarding(props: Props) {
     go('access');
   }, [access, finish, go, mode]);
 
-  const askForAccess = useCallback(async () => {
-    setIsAsking(true);
-    let result: AccessResult;
-    try {
-      result = await onRequestAccess();
-    } finally {
-      setIsAsking(false);
-    }
-    if (result === 'denied') {
-      setAccess('denied');
-      go('denied');
-      return;
-    }
-    if (result !== 'granted') {
-      return;
-    }
-    setAccess('granted');
+  const allowMusic = useCallback(() => setAccess('granted'), []);
+  const rows = useAccessRows(onRequestAccess, allowMusic);
+  const isAsking = rows.isAsking;
+  /** Continue from Access once music is allowed. */
+  const proceed = () => {
     if (quick || after === 'finish') {
       void finish();
     } else if (after) {
       setAfter(null);
-      // `access` in this closure is still the old value; this step was just allowed.
       go(after, true);
     } else {
       go('look');
     }
-  }, [after, finish, go, onRequestAccess, quick]);
+  };
 
   // Android's back button walks back through the steps; on Welcome it leaves the app.
   useEffect(() => {
@@ -269,32 +251,12 @@ export function Onboarding(props: Props) {
   }, [back, isAsking, isFinishing]);
 
   const flowIndex = flow.indexOf(step as Flow);
-  const parts = [...new Set(flow.map((item) => PART[item]))];
-  const card = CARDS.find((item) => item.id === step);
-  const progressLabel = flowIndex >= 0 ? (card ? `${PART[step as Flow]} · ${card.label}` : PART[step as Flow]) : '';
-  /** The card switch above each Personalize card's heading; moving left slides in from the left. */
-  const cardSwitch = card ? (
-    <View style={local.cardSwitch}>
-      <Segmented
-        label="Personalize"
-        options={CARDS}
-        value={card.id}
-        onChange={(target) => {
-          hapticSelection();
-          const forward = CARDS.findIndex((item) => item.id === target) > CARDS.indexOf(card);
-          go(target);
-          if (!forward) {
-            setDirection('back');
-          }
-        }}
-      />
-    </View>
-  ) : null;
+  const progressLabel = flowIndex >= 0 ? PART[step as Flow] : '';
   const askingAgain = step === 'access' && (after !== null || access === 'later');
   const inFlow = !quick && flowIndex >= 0 && !askingAgain;
   const tracks = library?.tracks ?? [];
   const status =
-    mode === 'replay' || access !== 'granted' || step === 'denied'
+    mode === 'replay' || access !== 'granted'
       ? null
       : !library
         ? 'scanning'
@@ -324,12 +286,43 @@ export function Onboarding(props: Props) {
   let footer: ReactNode;
   const nextButton = (label = 'Next') => <MainButton label={label} busy={isFinishing} onPress={next} />;
   switch (step) {
-    case 'access':
-      body = <AccessStep again={askingAgain} onRescan={props.onRescan} />;
+    case 'access': {
+      body = (
+        <AccessStep again={askingAgain} rows={rows} accent={props.accent} onOpenAppSettings={props.onOpenAppSettings} onRescan={props.onRescan} />
+      );
+      const { pending } = rows;
+      const label =
+        pending.length > 1
+          ? 'Allow access'
+          : pending[0] === 'music'
+            ? 'Allow music access'
+            : pending[0] === 'notify'
+              ? 'Allow notifications'
+              : rows.music === 'on'
+                ? 'Continue'
+                : 'Open Settings';
       footer = (
         <>
-          <MainButton label="Allow access" busy={isAsking} onPress={askForAccess} />
-          {mode === 'first' && !quick && !askingAgain && (
+          <MainButton
+            label={label}
+            busy={isAsking}
+            onPress={() => {
+              // One tap asks for each needed permission in turn; a no to notifications still continues.
+              if (pending.length > 0) {
+                // Start listening, or asked again on the way to Folders: go on once music is allowed.
+                void rows.askPending().then((musicOn) => {
+                  if (musicOn && (quick || after !== null)) {
+                    proceed();
+                  }
+                });
+              } else if (rows.music === 'on') {
+                proceed();
+              } else {
+                props.onOpenAppSettings();
+              }
+            }}
+          />
+          {mode === 'first' && !quick && !askingAgain && rows.music !== 'on' && (
             <TextButton
               label="Not now"
               onPress={() => {
@@ -341,17 +334,9 @@ export function Onboarding(props: Props) {
         </>
       );
       break;
-    case 'denied':
-      body = <DeniedStep />;
-      footer = (
-        <>
-          <MainButton label="Open Settings" onPress={props.onOpenAppSettings} />
-          <TextButton label="Try again" onPress={askForAccess} />
-        </>
-      );
-      break;
+    }
     case 'look':
-      heading = <Heading title="Pick your look" text="Start from a base, then make it yours. Muse changes as you tap." />;
+      heading = <Heading title="Pick your look" text="Start from a base, then change anything. Muse updates as you tap." />;
       pinned = <LookPhone tracks={tracks} />;
       body = <LookStep {...shared} />;
       footer = nextButton();
@@ -417,12 +402,7 @@ export function Onboarding(props: Props) {
               checkMore();
             }}
           >
-            {heading ? (
-              <View>
-                {cardSwitch}
-                {heading}
-              </View>
-            ) : null}
+            {heading}
             {pinned ? <View style={[local.pinned, { backgroundColor: tokens.bg }]}>{pinned}</View> : null}
             <View>{body}</View>
           </ScrollView>
@@ -434,7 +414,7 @@ export function Onboarding(props: Props) {
       <TopBar
         topInset={insets.top}
         onBack={back}
-        progress={inFlow ? { index: parts.indexOf(PART[step as Flow]), count: parts.length, label: progressLabel } : null}
+        progress={inFlow ? { index: flowIndex, count: flow.length, label: progressLabel } : null}
         onSkip={inFlow ? skipRest : null}
       />
     </View>
@@ -464,7 +444,7 @@ function TopBar({
         accessibilityLabel="Go back"
         hitSlop={8}
         onPress={onBack}
-        style={({ pressed }) => [local.backChip, { backgroundColor: tokens.card }, pressed && local.pressed]}
+        style={[local.backChip, { backgroundColor: tokens.card }]}
       >
         <Ionicons accessible={false} name="chevron-back" size={opticalSize('chevron-back', 20)} color={tokens.text} />
       </Pressable>
@@ -480,7 +460,7 @@ function TopBar({
               <View key={index} style={[local.progressPart, { backgroundColor: index <= progress.index ? tokens.accent : tokens.line }]} />
             ))}
           </View>
-          {/* Where you are and how far: "2 of 4 · Personalize · Player". */}
+          {/* Where you are and how far: "3 of 6 · Player". */}
           <Text numberOfLines={1} style={[local.progressLabel, { color: tokens.muted }]}>
             {`${progress.index + 1} of ${progress.count} · ${progress.label}`}
           </Text>
@@ -493,7 +473,7 @@ function TopBar({
           accessibilityRole="button"
           hitSlop={6}
           onPress={onSkip}
-          style={({ pressed }) => [local.skip, { backgroundColor: tokens.card }, pressed && local.pressed]}
+          style={[local.skip, { backgroundColor: tokens.card }]}
         >
           <Text style={[local.skipLabel, { color: tokens.text }]}>Skip the rest</Text>
         </Pressable>
@@ -524,7 +504,7 @@ function Footer({
             accessibilityRole="button"
             accessibilityLabel="More options below"
             onPress={onMore}
-            style={({ pressed }) => [local.morePill, { backgroundColor: tokens.card, borderColor: tokens.line }, pressed && local.pressed]}
+            style={[local.morePill, { backgroundColor: tokens.card, borderColor: tokens.line }]}
           >
             <Text style={[local.moreLabel, { color: tokens.text }]}>More below</Text>
             <Ionicons accessible={false} name="chevron-down" size={14} color={tokens.text} />
@@ -575,7 +555,7 @@ function MainButton({ label, onPress, busy = false }: { label: string; onPress: 
       accessibilityRole="button"
       accessibilityState={{ busy }}
       onPress={busy ? undefined : onPress}
-      style={({ pressed }) => [styles.primaryButton, local.button, pressed && styles.primaryButtonPressed]}
+      style={[styles.primaryButton, local.button]}
     >
       {busy ? (
         <ActivityIndicator color={String(styles.primaryButtonLabel.color)} />
@@ -658,7 +638,7 @@ function Welcome({
           <Pressable
             accessibilityRole="button"
             onPress={onQuickStart}
-            style={({ pressed }) => [local.button, local.outlined, { borderColor: tokens.line }, pressed && styles.primaryButtonPressed]}
+            style={[local.button, local.outlined, { borderColor: tokens.line }]}
           >
             <Text style={[styles.primaryButtonLabel, local.mainLabel, { color: tokens.text }]}>Start listening</Text>
           </Pressable>
@@ -718,50 +698,171 @@ function ThemeToggle({ dark, onChange }: { dark: boolean; onChange: (dark: boole
   );
 }
 
-function AccessStep({ again, onRescan }: { again: boolean; onRescan: () => void }) {
+/** Android 13 and up ask for notifications; older versions allow them, so the row is left out. */
+const ASKS_NOTIFICATIONS = Platform.OS === 'android' && Number(Platform.Version) >= 33;
+
+/**
+ * The Access step's permissions: music (needed), notifications (needed,
+ * Android 13+) and All files access (optional). Each row asks Android when
+ * tapped; the main button asks for the needed ones still unanswered.
+ */
+function useAccessRows(onRequestAccess: () => Promise<AccessResult>, onMusicAllowed: () => void) {
+  const [music, setMusic] = useState<PermissionState>('off');
+  const [notify, setNotify] = useState<PermissionState>(ASKS_NOTIFICATIONS ? 'off' : 'on');
+  const files = useAllFilesAccess();
+  const [isAsking, setIsAsking] = useState(false);
+
+  /** True when music is allowed afterwards. */
+  const askMusic = useCallback(async () => {
+    setIsAsking(true);
+    try {
+      const result = await onRequestAccess();
+      if (result === 'granted') {
+        setMusic('on');
+        onMusicAllowed();
+      } else if (result === 'denied' || result === 'blocked') {
+        setMusic(result);
+      }
+      return result === 'granted';
+    } finally {
+      setIsAsking(false);
+    }
+  }, [onMusicAllowed, onRequestAccess]);
+
+  const askNotify = useCallback(async () => {
+    setIsAsking(true);
+    try {
+      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+      setNotify(result === 'granted' ? 'on' : result === 'never_ask_again' ? 'blocked' : 'denied');
+    } catch {
+      // No prompt possible right now: the row stays as it was.
+    } finally {
+      setIsAsking(false);
+    }
+  }, []);
+
+  // Already allowed (a reinstall), or turned on in Android Settings and back.
+  const checkNotify = useCallback(() => {
+    if (ASKS_NOTIFICATIONS) {
+      void PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).then((on) => {
+        if (on) {
+          setNotify('on');
+        }
+      });
+    }
+  }, []);
+  useEffect(checkNotify, [checkNotify]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkNotify();
+        // Back from Settings: when it was allowed there, asking again is silent and starts the scan.
+        // Check first: asking while still blocked opens and closes Android's prompt, which
+        // makes the app 'active' again and would ask again, forever.
+        if (music === 'blocked') {
+          void getPermissionsAsync(false, ['audio'])
+            .then((permission) => {
+              if (permission.granted) {
+                void askMusic();
+              }
+            })
+            .catch(() => undefined);
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [askMusic, checkNotify, music]);
+
+  /** Needed and never answered (or music said no once): what the main button asks for. */
+  const pending = [
+    ...(music === 'off' || music === 'denied' ? (['music'] as const) : []),
+    ...(notify === 'off' ? (['notify'] as const) : []),
+  ];
+  /** Asks for each needed one in turn; true when music is allowed at the end. */
+  const askPending = async () => {
+    const musicOn = pending.includes('music') ? await askMusic() : music === 'on';
+    if (pending.includes('notify')) {
+      await askNotify();
+    }
+    return musicOn;
+  };
+  return { music, notify, files, isAsking, pending, askMusic, askNotify, askPending };
+}
+
+type PermissionState = 'off' | 'on' | 'denied' | 'blocked';
+type AccessRows = ReturnType<typeof useAccessRows>;
+
+function AccessStep({
+  again,
+  rows,
+  accent,
+  onOpenAppSettings,
+  onRescan,
+}: {
+  again: boolean;
+  rows: AccessRows;
+  accent: Accent;
+  onOpenAppSettings: () => void;
+  onRescan: () => void;
+}) {
   const tokens = useTokens();
+  const swatch = ACCENT_OPTIONS.find((option) => option.id === accent)?.swatch ?? tokens.accent;
+  const [sheet, setSheet] = useState<ConfirmRequest | null>(null);
+  const counted = ASKS_NOTIFICATIONS ? 3 : 2;
+  const on = [rows.music === 'on', ASKS_NOTIFICATIONS && rows.notify === 'on', rows.files].filter(Boolean).length;
+
+  const subtitle = (state: PermissionState, why: string) =>
+    state === 'denied' ? 'Not allowed. Tap to ask again.' : state === 'blocked' ? 'Android stopped asking. Tap to turn it on in Settings.' : why;
+  /** A tap on a row: ask Android, or say where to change it. */
+  const tap = (state: PermissionState, ask: () => void, name: string, where: string) => {
+    if (state === 'on') {
+      showToast('Already on', { detail: 'You can turn it off in Android Settings' });
+    } else if (state === 'blocked') {
+      setSheet({
+        eyebrow: 'Permissions',
+        title: `Turn on ${name} in Settings`,
+        message: `You said no twice, so Android won't ask again. In Android Settings, tap ${where}, then come back to Muse.`,
+        confirmLabel: 'Open Settings',
+        cancelLabel: 'Not now',
+        onConfirm: onOpenAppSettings,
+      });
+    } else {
+      ask();
+    }
+  };
+
   return (
     <>
       {again ? (
         <Heading title="One last thing: your music" text="Muse needs access to show your folders and songs. You can turn it off any time in Android Settings." />
       ) : (
-        <Heading title="Let Muse find your music" text="Android will ask once. Muse only reads music and audio files." />
+        <Heading title="Let Muse find your music" text="Tap each one to turn it on. You can change them later in Android Settings." />
       )}
-      {/* A drawing of the popup Android shows next, so it is no surprise. */}
-      <View accessible={false} importantForAccessibility="no-hide-descendants" style={[local.systemPopup, { backgroundColor: tokens.card }]}>
-        <Ionicons name="musical-notes-outline" size={26} color={tokens.accent} />
-        <Text style={[local.popupText, { color: tokens.text }]}>
-          Allow <Text style={local.bold}>Muse</Text> to access music and audio on this device?
-        </Text>
-        <View style={[local.popupButton, { borderColor: tokens.accent }]}>
-          <Text style={[local.popupLabel, { color: tokens.text }]}>Allow</Text>
-        </View>
-        <View style={[local.popupButton, { borderColor: 'transparent', backgroundColor: tokens.bg }]}>
-          <Text style={[local.popupLabel, { color: tokens.muted }]}>Don&apos;t allow</Text>
-        </View>
-      </View>
-      <Text style={[local.caption, { color: tokens.muted }]}>Tap Allow when this shows up</Text>
-      <OtherFormats onGranted={onRescan} />
-    </>
-  );
-}
-
-function DeniedStep() {
-  const tokens = useTokens();
-  const steps = ['Tap Open Settings below', 'Tap Permissions', 'Tap Music and audio, then Allow'];
-  return (
-    <>
-      <Heading title="Muse can't see your music yet" text="Turn on music access for Muse in Android Settings, then come back." />
-      <View style={[local.group, { backgroundColor: tokens.card }]}>
-        {steps.map((text, index) => (
-          <View key={text} style={[local.numberRow, index > 0 && { borderTopColor: tokens.line, borderTopWidth: StyleSheet.hairlineWidth }]}>
-            <View style={[local.number, { backgroundColor: tokens.bg }]}>
-              <Text style={[local.numberText, { color: tokens.text }]}>{index + 1}</Text>
-            </View>
-            <Text style={[local.rowText, { color: tokens.text }]}>{text}</Text>
-          </View>
-        ))}
-      </View>
+      <Text style={[local.caption, local.left, { color: tokens.muted }]}>{on === counted ? 'All on' : `${on} of ${counted} on`}</Text>
+      <SettingsSection title="Needed">
+        <SettingsSwitchRow
+          icon="musical-notes"
+          tint={TILE.pink}
+          title="Music and audio"
+          subtitle={subtitle(rows.music, 'Find and play your songs')}
+          value={rows.music === 'on'}
+          onValueChange={() => tap(rows.music, () => void rows.askMusic(), 'music access', 'Permissions › Music and audio › Allow')}
+          accent={swatch}
+        />
+        {ASKS_NOTIFICATIONS && (
+          <SettingsSwitchRow
+            icon="notifications"
+            tint={TILE.orange}
+            title="Notifications"
+            subtitle={subtitle(rows.notify, 'Controls in your notifications')}
+            value={rows.notify === 'on'}
+            onValueChange={() => tap(rows.notify, () => void rows.askNotify(), 'notifications', 'Notifications › All Muse notifications')}
+            accent={swatch}
+          />
+        )}
+      </SettingsSection>
+      <AllFilesRow title="Optional" accent={accent} onGranted={onRescan} />
+      <ConfirmSheet request={sheet} onClose={() => setSheet(null)} />
     </>
   );
 }
@@ -1127,7 +1228,7 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
           accessibilityRole="button"
           accessibilityLabel="Pick from Photos"
           onPress={() => void pickPicture('photos')}
-          style={({ pressed }) => [local.avatarCell, { backgroundColor: tokens.card, borderColor: 'transparent' }, pressed && local.pressed]}
+          style={[local.avatarCell, { backgroundColor: tokens.card, borderColor: 'transparent' }]}
         >
           <Ionicons accessible={false} name="images-outline" size={21} color={tokens.text} />
         </Pressable>
@@ -1135,7 +1236,7 @@ function YouStep({ goalMinutes, onChangeGoal }: { goalMinutes: number; onChangeG
           accessibilityRole="button"
           accessibilityLabel="Pick from Files"
           onPress={() => void pickPicture('files')}
-          style={({ pressed }) => [local.avatarCell, { backgroundColor: tokens.card, borderColor: 'transparent' }, pressed && local.pressed]}
+          style={[local.avatarCell, { backgroundColor: tokens.card, borderColor: 'transparent' }]}
         >
           <Ionicons accessible={false} name="folder-open-outline" size={21} color={tokens.text} />
         </Pressable>
@@ -1170,75 +1271,46 @@ function FoldersStep({
         accent={accent}
         waiting={!library}
       />
-      <OtherFormats onGranted={onRescan} />
+      <AllFilesRow title="More formats" accent={accent} onGranted={onRescan} />
     </>
   );
 }
 
 /**
- * Setup's offer for APE, WavPack and DSD, which Android does not list: the
- * same "Find them automatically" as Settings › Library, with a drawing of the
- * Android screen it opens, so the extra permission is no surprise. Muse finds
- * them when you come back. In Expo Go it only says what would happen.
+ * All files access, for APE, WavPack and DSD (Android hides them from music
+ * apps): one switch row that opens Android's own page, on Access and on
+ * Folders. Muse scans again when it comes back on. In Expo Go it only says
+ * what would happen.
  */
-function OtherFormats({ onGranted }: { onGranted: () => void }) {
-  const tokens = useTokens();
-  const styles = useAppStyles();
-  const automatic = useAllFilesAccess();
-  // Turned on in Android's screen: scan again so these folders show on the Folders step.
-  const wasOn = useRef(automatic);
+function AllFilesRow({ title, accent, onGranted }: { title: string; accent: Accent; onGranted: () => void }) {
+  const on = useAllFilesAccess();
+  const swatch = ACCENT_OPTIONS.find((option) => option.id === accent)?.swatch ?? ACCENT_OPTIONS[0].swatch;
+  // Turned on in Android's page: scan again so these folders show on the Folders step.
+  const wasOn = useRef(on);
   useEffect(() => {
-    if (automatic && !wasOn.current) {
+    if (on && !wasOn.current) {
       onGranted();
     }
-    wasOn.current = automatic;
-  }, [automatic, onGranted]);
-  const find = () => {
-    hapticSelection();
-    if (!filesSupported || !openAllFilesAccess()) {
-      showToast("Android's All files access opens here", { detail: 'Only in the Muse app, not in Expo Go', icon: 'search' });
-    }
-  };
+    wasOn.current = on;
+  }, [on, onGranted]);
   return (
-    <View style={[local.formats, { backgroundColor: tokens.card }]}>
-      <View style={local.formatsHead}>
-        <View style={[local.formatsIcon, { backgroundColor: tokens.bg }]}>
-          <Ionicons name={automatic ? 'checkmark' : 'search'} size={18} color={tokens.accent} />
-        </View>
-        <View style={local.formatsCopy}>
-          <Text style={[local.choiceTitle, { color: tokens.text }]}>Got APE, WavPack or DSD files?</Text>
-          <Text style={[local.choiceText, { color: tokens.muted }]}>
-            {automatic
-              ? 'On. Muse finds them all over your phone.'
-              : 'Android hides these from music apps. Muse can find them with one more permission. Optional.'}
-          </Text>
-        </View>
-      </View>
-      {!automatic && (
-        <>
-          {/* A drawing of the Android screen that opens next. */}
-          <View accessible={false} importantForAccessibility="no-hide-descendants" style={[local.formatsScreen, { backgroundColor: tokens.bg }]}>
-            <Text style={[local.formatsScreenTitle, { color: tokens.muted }]}>All files access</Text>
-            <View style={local.formatsScreenRow}>
-              <Text style={[local.rowText, { color: tokens.text }]}>Allow access to manage all files</Text>
-              <View style={[local.fakeSwitch, { backgroundColor: tokens.accent }]}>
-                <View style={[local.fakeKnob, { backgroundColor: tokens.bg }]} />
-              </View>
-            </View>
-          </View>
-          <Text style={[local.caption, local.left, { color: tokens.muted }]}>
-            Android opens this page. Turn it on, then go back to Muse.
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={find}
-            style={({ pressed }) => [local.button, local.formatsButton, local.outlined, { borderColor: tokens.line }, pressed && styles.primaryButtonPressed]}
-          >
-            <Text style={[styles.primaryButtonLabel, local.mainLabel, { color: tokens.text }]}>Find them automatically</Text>
-          </Pressable>
-        </>
-      )}
-    </View>
+    <SettingsSection title={title}>
+      <SettingsSwitchRow
+        icon="folder-open"
+        tint={TILE.blue}
+        title="All files access"
+        subtitle={on ? 'On. Muse looks in every folder.' : 'Find APE, WavPack and DSD'}
+        value={on}
+        onValueChange={() => {
+          if (on) {
+            showToast('Already on', { detail: 'You can turn it off in Android Settings' });
+          } else if (!filesSupported || !openAllFilesAccess()) {
+            showToast("Android's All files access opens here", { detail: 'Only in the Muse app, not in Expo Go', icon: 'search' });
+          }
+        }}
+        accent={swatch}
+      />
+    </SettingsSection>
   );
 }
 
@@ -1347,7 +1419,6 @@ const local = StyleSheet.create({
   progressColumn: { flex: 1, height: 40, justifyContent: 'center' },
   progress: { flexDirection: 'row', gap: 4 },
   progressLabel: { position: 'absolute', left: 0, right: 0, top: 27, fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  cardSwitch: { marginBottom: 18 },
   progressPart: { flex: 1, height: 4, borderRadius: 2 },
   skip: { height: 32, borderRadius: 16, paddingHorizontal: 12, justifyContent: 'center' },
   skipLabel: { fontSize: 13, fontWeight: '600' },
@@ -1368,7 +1439,6 @@ const local = StyleSheet.create({
   label: { marginTop: 24, marginBottom: 10, marginLeft: 4, fontSize: 13, fontWeight: '600' },
   caption: { marginTop: 10, fontSize: 13, lineHeight: 18, textAlign: 'center' },
   left: { textAlign: 'left', marginLeft: 4 },
-  bold: { fontWeight: '700' },
   // Welcome
   scene: { position: 'absolute', left: 0, right: 0, top: 0 },
   sceneFade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
@@ -1383,27 +1453,6 @@ const local = StyleSheet.create({
   welcomeActions: { marginTop: 40, gap: 10 },
   // Its own breathing room, so the credit reads as a footer and not part of the hint above.
   credit: { marginTop: 32 },
-  // Access and denied
-  systemPopup: { marginTop: 24, borderRadius: 24, padding: 20, alignItems: 'center' },
-  popupText: { marginTop: 12, marginBottom: 16, fontSize: 16, lineHeight: 22, textAlign: 'center' },
-  popupButton: { alignSelf: 'stretch', height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
-  popupLabel: { fontSize: 14, fontWeight: '600' },
-  group: { marginTop: 24, borderRadius: 14, paddingHorizontal: 16 },
-  // APE, WavPack and DSD: the offer, a drawing of Android's screen and the button.
-  formats: { marginTop: 24, borderRadius: 20, padding: 16 },
-  formatsHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  formatsIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  formatsCopy: { flex: 1, gap: 2 },
-  formatsScreen: { marginTop: 14, borderRadius: 14, padding: 14, gap: 10 },
-  formatsScreenTitle: { fontSize: 12, fontWeight: '600' },
-  formatsScreenRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  fakeSwitch: { width: 40, height: 24, borderRadius: 12, padding: 3, alignItems: 'flex-end' },
-  fakeKnob: { width: 18, height: 18, borderRadius: 9 },
-  formatsButton: { marginTop: 14, minHeight: 48, borderRadius: 14 },
-  numberRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56 },
-  number: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  numberText: { fontSize: 13, fontWeight: '700' },
-  rowText: { flex: 1, fontSize: 15, fontWeight: '500' },
   // Player
   // Choose your player: a pager of big previews, the name, dots, then chips.
   pager: { marginHorizontal: -24 },
@@ -1424,7 +1473,6 @@ const local = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   nameInput: { flex: 1 },
   surprise: { minHeight: 52, borderRadius: 14, paddingHorizontal: 12 },
-  pressed: { opacity: 0.7 },
   // The pinned preview: full width background so options scroll cleanly under it.
   pinned: { marginHorizontal: -24, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 14 },
   firstLabel: { marginTop: 4 },

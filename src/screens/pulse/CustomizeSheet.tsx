@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from '../../components/Pressable';
 // The gesture library's ScrollView lets a handle's drag win over scrolling the list.
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';

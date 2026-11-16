@@ -1,15 +1,7 @@
-import {
-  createContext,
-  forwardRef,
-  useCallback,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  useState,
-  type ComponentRef,
-} from 'react';
-import { Pressable, Text, View, type ViewProps } from 'react-native';
-import { FlashList, type ListRenderItem } from '@shopify/flash-list';
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Pressable } from '../components/Pressable';
+import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { EASE_OUT } from '../motion/motion';
 import { ThemeContext } from '../theme/theme';
@@ -23,7 +15,7 @@ import { addToPlaylist, createPlaylist } from '../library/playlists';
 import { getPlaybackController } from '../playback/PlaybackController';
 import { useAppStyles } from '../theme/styles';
 import { hapticSelection } from '../utils/haptics';
-import { QueueRow } from './UpNextList';
+import { QueueDragGhost, QueueRow, useQueueDrag, type QueueScroller } from './UpNextList';
 
 /** Songs played before, shown above the current one. */
 const HISTORY_SHOWN = 30;
@@ -40,25 +32,11 @@ const getKey = (item: Item) => item.key;
 const getType = (item: Item) => item.kind;
 
 /**
- * Each row sits in its own cell in a recycling list, so a dragged row's
- * own zIndex cannot lift it over the cells below. Its cell lifts instead:
- * a plain view (FlashList measures it), raised for the row being dragged.
- */
-const LiftedCell = createContext(-1);
-const DragCell = forwardRef<ComponentRef<typeof View>, ViewProps & { index: number }>(function DragCell(
-  { index, style, ...rest },
-  ref,
-) {
-  const lifted = useContext(LiftedCell);
-  return <View ref={ref} {...rest} style={index === lifted ? [style, LIFT] : style} />;
-});
-const LIFT = { zIndex: 10, elevation: 10 };
-
-/**
  * Up Next, in the full player. Opens on the current song; what played
  * before is just above it (scroll up), dimmed, and plays again on a tap.
  * Below: the whole queue in a recycling list, so a queue of thousands
- * costs the same as thirty. Drag a handle to reorder, swipe left to remove.
+ * costs the same as thirty. Hold a song (or press its handle) and drag it to
+ * a new place, swipe left to remove.
  */
 export function QueuePane({
   queue,
@@ -133,33 +111,32 @@ export function QueuePane({
   const listStyle = useAnimatedStyle(() => ({ opacity: listShown.get() }));
   const showList = useCallback(() => listShown.set(withTiming(1, LIST_FADE)), [listShown]);
 
-  // Drag state, shared by the rows on the UI thread (see UpNextList).
-  const dragIndex = useSharedValue(-1);
-  const dragY = useSharedValue(0);
-  const hoverIndex = useSharedValue(-1);
-  /** The list position of the row being dragged. Kept with its queue: a drop changes the queue, which clears it. */
-  const [lifted, setLifted] = useState<{ queue: MusicTrack[]; cell: number } | null>(null);
-  const liftedCell = lifted?.queue === queue ? lifted.cell : -1;
-  const firstNext = items.findIndex((item) => item.kind === 'next');
-  const lift = useCallback((index: number) => setLifted({ queue, cell: firstNext + index }), [firstNext, queue]);
-  useLayoutEffect(() => {
-    dragIndex.set(-1);
-    dragY.set(0);
-    hoverIndex.set(-1);
-  }, [dragIndex, dragY, hoverIndex, queue]);
   const move = useCallback(
-    (from: number, to: number) => {
-      if (from === to) {
-        dragIndex.set(-1);
-        dragY.set(0);
-        hoverIndex.set(-1);
-        setLifted(null);
-        return;
-      }
-      onMove(firstQueueIndex + from, firstQueueIndex + to);
-    },
-    [dragIndex, dragY, firstQueueIndex, hoverIndex, onMove],
+    (from: number, to: number) => onMove(firstQueueIndex + from, firstQueueIndex + to),
+    [firstQueueIndex, onMove],
   );
+  // Where the list is scrolled to and how far it goes, for a drag that scrolls it at the edges.
+  const listRef = useRef<FlashListRef<Item>>(null);
+  const scroll = useRef({ offset: 0, content: 0, view: 0 });
+  const trackScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    scroll.current = { offset: contentOffset.y, content: contentSize.height, view: layoutMeasurement.height };
+  }, []);
+  const scroller = useMemo<QueueScroller>(
+    () => ({
+      offset: () => scroll.current.offset,
+      max: () => scroll.current.content - scroll.current.view,
+      scrollTo: (offset) => {
+        scroll.current.offset = offset;
+        listRef.current?.scrollToOffset({ offset, animated: false });
+      },
+    }),
+    [],
+  );
+  // Dragging a song (see useQueueDrag): rows start it, this pane's wrapper keeps the finger.
+  const { values, ghost, wrapperRef, startDrag, responder, dragging, reset } = useQueueDrag(upcoming.length, move, scroller);
+  // A song ending mid-drag shifts Up Next too, so a held song is let go then as well.
+  useLayoutEffect(reset, [reset, queue, currentIndex]);
 
   const saveAsPlaylist = (name: string) => {
     setIsNaming(false);
@@ -185,7 +162,7 @@ export function QueuePane({
                 hapticSelection();
                 getPlaybackController().playNow(item.track);
               }}
-              style={({ pressed }) => [styles.playerPaneRow, past && styles.playerPaneRowPast, pressed && styles.playerPaneRowPressed]}
+              style={[styles.playerPaneRow, past && styles.playerPaneRowPast]}
             >
               <View style={styles.libraryArtWrap}>
                 <AlbumArtwork track={item.track} size={40} />
@@ -221,7 +198,7 @@ export function QueuePane({
                       accessibilityRole="button"
                       accessibilityLabel="Save Up Next as a playlist"
                       onPress={() => setIsNaming(true)}
-                      style={({ pressed }) => [styles.playerPaneChip, chip, pressed && styles.playerPaneRowPressed]}
+                      style={[styles.playerPaneChip, chip]}
                     >
                       <Text style={styles.playerPaneChipText}>Save as playlist</Text>
                     </Pressable>
@@ -233,7 +210,7 @@ export function QueuePane({
                         getPlaybackController().clearUpNext();
                         showToast('Up Next cleared', { icon: 'queue' });
                       }}
-                      style={({ pressed }) => [styles.playerPaneChip, chip, pressed && styles.playerPaneRowPressed]}
+                      style={[styles.playerPaneChip, chip]}
                     >
                       <Text style={styles.playerPaneChipText}>Clear</Text>
                     </Pressable>
@@ -245,7 +222,7 @@ export function QueuePane({
                   accessibilityRole="switch"
                   accessibilityState={{ checked: shuffle }}
                   onPress={onToggleShuffle}
-                  style={({ pressed }) => [styles.playerPaneChip, styles.playerPanePill, chip, pressed && styles.playerPaneRowPressed]}
+                  style={[styles.playerPaneChip, styles.playerPanePill, chip]}
                 >
                   <ControlIcon name="shuffle" size={15} tone={shuffle ? 'accent' : 'muted'} />
                   <Text style={[styles.playerPaneChipText, shuffle ? styles.playerPanePillOn : styles.playerPanePillOff]}>Shuffle</Text>
@@ -254,7 +231,7 @@ export function QueuePane({
                   accessibilityRole="button"
                   accessibilityLabel={repeatMode === 'none' ? 'Repeat off' : repeatMode === 'all' ? 'Repeat all' : 'Repeat one'}
                   onPress={onCycleRepeat}
-                  style={({ pressed }) => [styles.playerPaneChip, styles.playerPanePill, chip, pressed && styles.playerPaneRowPressed]}
+                  style={[styles.playerPaneChip, styles.playerPanePill, chip]}
                 >
                   <ControlIcon name="repeat" size={15} tone={repeatMode !== 'none' ? 'accent' : 'muted'} showOne={repeatMode === 'single'} />
                   <Text style={[styles.playerPaneChipText, repeatMode !== 'none' ? styles.playerPanePillOn : styles.playerPanePillOff]}>
@@ -273,37 +250,46 @@ export function QueuePane({
               index={item.index}
               count={upcoming.length}
               queueIndex={firstQueueIndex + item.index}
-              dragIndex={dragIndex}
-              dragY={dragY}
-              hoverIndex={hoverIndex}
+              drag={values}
               last={item.index === upcoming.length - 1}
+              onStartDrag={startDrag}
               onSelect={onSelect}
               onMove={move}
               onRemove={onRemove}
               removeLabel="Remove from Up Next"
               plain
-              onLift={lift}
             />
           );
       }
     },
-    [chip, dragIndex, dragY, firstQueueIndex, hoverIndex, isPlaying, lift, move, onCycleRepeat, onRemove, onSelect, onToggleShuffle, repeatMode, shuffle, styles, upcoming.length],
+    [chip, startDrag, values, firstQueueIndex, isPlaying, move, onCycleRepeat, onRemove, onSelect, onToggleShuffle, repeatMode, shuffle, styles, upcoming.length],
   );
 
   return (
-    <LiftedCell.Provider value={liftedCell}>
-      <Animated.View style={[styles.flexSpacer, listStyle]}>
+    <>
+      <Animated.View ref={wrapperRef} collapsable={false} style={[styles.flexSpacer, listStyle]} {...responder}>
         <FlashList
+          ref={listRef}
           data={items}
           keyExtractor={getKey}
           getItemType={getType}
           renderItem={renderItem}
-          CellRendererComponent={DragCell}
+          // Still while a song is dragged, so the drag keeps the finger.
+          scrollEnabled={!dragging}
           initialScrollIndex={Math.max(0, initialIndex)}
           onLoad={showList}
+          onScroll={trackScroll}
+          onContentSizeChange={(_width, height) => {
+            scroll.current.content = height;
+          }}
+          onLayout={(event) => {
+            scroll.current.view = event.nativeEvent.layout.height;
+          }}
           contentContainerStyle={styles.playerPaneList}
           showsVerticalScrollIndicator={false}
         />
+        {/* The song being dragged floats here, above the list and its recycling. */}
+        <QueueDragGhost ghost={ghost} plain />
       </Animated.View>
       <NamePrompt
         visible={isNaming}
@@ -313,6 +299,6 @@ export function QueuePane({
         onClose={() => setIsNaming(false)}
         onSubmit={saveAsPlaylist}
       />
-    </LiftedCell.Provider>
+    </>
   );
 }

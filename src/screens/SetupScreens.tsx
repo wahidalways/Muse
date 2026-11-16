@@ -1,6 +1,8 @@
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 
-import { FolderHeading, FolderPicker } from '../components/FolderPicker';
+import { FolderPicker } from '../components/FolderPicker';
+import { PageBar } from '../components/PageBar';
 import { PrimaryButton, StatusArtwork } from '../components/setup';
 import { useAppStyles } from '../theme/styles';
 import type { Accent } from '../theme/theme';
@@ -18,6 +20,7 @@ export function FoldersScreen({
   onSave,
   onIncludeAll,
   onCancel,
+  onBack,
 }: {
   folders: MusicFolder[];
   tracks: MusicTrack[];
@@ -29,11 +32,19 @@ export function FoldersScreen({
   onSave: () => void;
   onIncludeAll: () => void;
   onCancel: () => void;
+  /** Back: Cancel when opened from Settings. */
+  onBack: () => void;
 }) {
   const styles = useAppStyles();
   return (
     <View style={styles.screenBody}>
-      <FolderHeading title="Choose your folders" text="Muse plays songs from the folders you keep on." />
+      {/* A Settings page, so its bar: back and a title, no Muse logo. */}
+      <PageBar
+        title={hasSavedFolderRules ? 'Included folders' : 'Choose your folders'}
+        subtitle="Muse plays songs from the folders you keep on"
+        onBack={onBack}
+        backLabel={hasSavedFolderRules ? 'Back to Settings' : 'Back'}
+      />
       <FolderPicker
         folders={folders}
         tracks={tracks}

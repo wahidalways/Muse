@@ -1,6 +1,6 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StyleSheet, useColorScheme } from 'react-native';
+import { AppState, Keyboard, StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // The one icon set Muse uses: the package root would ship all 19 icon fonts.
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -12,17 +12,49 @@ import { useCurrentTrackId } from './src/playback/usePlayback';
 import { usePreferences } from './src/settings/preferences';
 import { accentForCover } from './src/theme/dynamicAccent';
 import { coverColor, useSongCover } from './src/library/covers';
+import { systemColorScheme } from './modules/muse-audio-metadata';
 
 // Start loading the icon font at launch so controls do not appear late.
 // Icons render on their own once it is ready, so a failure is not fatal.
 Ionicons.loadFont().catch(() => undefined);
 
+/**
+ * The phone's light or dark mode. React Native only hears of a change while
+ * Muse's screen is open, and playback keeps Muse running without it, so a
+ * change made then was missed: Muse also reads the phone each time it opens.
+ */
+function useSystemScheme() {
+  const reported = useColorScheme();
+  const [read, setRead] = useState(() => ({ reported, scheme: systemColorScheme() ?? reported }));
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setRead({ reported, scheme: systemColorScheme() ?? reported });
+      }
+    });
+    return () => subscription.remove();
+  }, [reported]);
+  // A change React Native reports after the last read wins.
+  return read.reported === reported ? read.scheme : reported;
+}
+
 export default function App() {
-  const systemColorScheme = useColorScheme();
+  const systemScheme = useSystemScheme();
   // Follows the phone until a choice is saved; System keeps following it.
   const [appearance, setAppearance] = useState<Appearance>('system');
   const theme =
-    appearance === 'system' ? (systemColorScheme === 'dark' ? 'dark' : 'light') : appearance;
+    appearance === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : appearance;
+
+  // Hidden tabs stay mounted, so a search field could keep focus out of sight,
+  // and Android opened the keyboard for it when Muse came back.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        Keyboard.dismiss();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
   // Muse Lime until a choice is saved; anyone who picked a color keeps it.
   const [accent, setAccent] = useState<Accent>('lime');
   const [isAmoled, setIsAmoled] = useState(false);

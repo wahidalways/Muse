@@ -49,7 +49,18 @@ type NativeFiles = {
   addListener(event: 'onOutputChange', listener: (state: OutputState) => void): { remove(): void };
   addListener(event: 'onUpdateProgress', listener: (progress: UpdateProgress) => void): { remove(): void };
   addListener(event: 'onUpdateStatus', listener: (status: UpdateStatus) => void): { remove(): void };
+  // Missing from builds made before them.
+  setNotificationButtons?(favorite: number, shuffle: number): void;
+  addListener(event: 'onNotificationAction', listener: (event: { action: NotificationAction }) => void): { remove(): void };
+  setPredictiveBack?(enabled: boolean): void;
+  addListener(event: 'onBackGesture', listener: (event: BackGesture) => void): { remove(): void };
 };
+
+/** Android's back swipe (Android 14+): its progress 0 to 1, then cancel or commit. */
+export type BackGesture = { phase: 'start' | 'progress' | 'cancel' | 'commit'; progress: number; edge: 'left' | 'right' };
+
+/** The playback notification's extra buttons. */
+export type NotificationAction = 'favorite' | 'shuffle';
 
 export type UpdateProgress = { received: number; total: number };
 /** Android's installer: its prompt is up, Muse was replaced, the person said no, or it failed. */
@@ -171,4 +182,31 @@ export function addUpdateProgressListener(listener: (progress: UpdateProgress) =
 
 export function addUpdateStatusListener(listener: (status: UpdateStatus) => void): { remove(): void } {
   return native?.addListener('onUpdateStatus', listener) ?? { remove: () => undefined };
+}
+
+/** The notification's ♥ and shuffle: null hides that button (no song). */
+export function setNotificationButtons(favorite: boolean | null, shuffle: boolean | null): void {
+  const state = (value: boolean | null) => (value === null ? -1 : value ? 1 : 0);
+  try {
+    native?.setNotificationButtons?.(state(favorite), state(shuffle));
+  } catch {
+    // An older build without the buttons: nothing to update.
+  }
+}
+
+/** Muse follows the back swipe while it has an in-app step to go back to. */
+export function setPredictiveBack(enabled: boolean): void {
+  try {
+    native?.setPredictiveBack?.(enabled);
+  } catch {
+    // An older build: back works as before, without following the finger.
+  }
+}
+
+export function addBackGestureListener(listener: (gesture: BackGesture) => void): { remove(): void } {
+  return native?.addListener('onBackGesture', listener) ?? { remove: () => undefined };
+}
+
+export function addNotificationActionListener(listener: (action: NotificationAction) => void): { remove(): void } {
+  return native?.addListener('onNotificationAction', (event) => listener(event.action)) ?? { remove: () => undefined };
 }

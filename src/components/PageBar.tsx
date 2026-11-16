@@ -1,8 +1,8 @@
-import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable } from './Pressable';
 import { useAppStyles } from '../theme/styles';
 import { ControlIcon } from './icons';
 
-const PRESSED = { transform: [{ scale: 0.97 }] };
 
 /**
  * A page's top row on Settings pages and Collections lists: the back button
@@ -31,7 +31,7 @@ export function PageBar({
         accessibilityLabel={backLabel}
         hitSlop={8}
         onPress={onBack}
-        style={({ pressed }) => [styles.collNavButton, pressed && PRESSED]}
+        style={[styles.collNavButton]}
       >
         <ControlIcon name="back" size={20} />
       </Pressable>

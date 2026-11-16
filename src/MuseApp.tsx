@@ -19,13 +19,13 @@ import {
   BackHandler,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   Share,
   Text,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Pressable } from './components/Pressable';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
 import { sidewaysDragLock } from './motion/gestureLock';
@@ -50,6 +50,8 @@ import { getPermissionsAsync, requestPermissionsAsync } from 'expo-media-library
 import type { LibrarySort, SortDirection } from './library/sortTracks';
 import { getPlaybackController, shuffleTracks } from './playback/PlaybackController';
 import { settlePlayer, usePlayerTransition } from './player/playerTransition';
+import { backEdge, backProgress, sheetDepth } from './motion/depth';
+import { openFromTouch } from './motion/origin';
 import {
   addAudioBecomingNoisyListener,
   addHeadphonesConnectedListener,
@@ -57,6 +59,7 @@ import {
   setAppIcon,
   takeLastCrash,
 } from '../modules/muse-audio-metadata';
+import { addBackGestureListener, setPredictiveBack } from '../modules/muse-audio-metadata/files';
 import { usePlayback, usePlaybackValue } from './playback/usePlayback';
 import type {
   MusicTrack,
@@ -72,6 +75,7 @@ import {
   getPreferences,
   preferencesReady,
   resetPreferences,
+  setPreference,
   usePreferences,
 } from './settings/preferences';
 import { setWeekStart } from './settings/pulse';
@@ -119,8 +123,8 @@ import { SleepTimerModal } from './player/SleepTimerModal';
 import {
   canRestoreSavedLibrary,
   canDeleteTrack,
-  countIncludedTracks,
   deleteTrackFiles,
+  formatOf,
   loadMusicLibrary,
   parseCachedLibrary,
   parseFolderRules,
@@ -134,7 +138,6 @@ import { useAppStyles } from './theme/styles';
 import {
   EASE_OUT,
   POP_IN,
-  PUSH_IN,
   SETTLE_SPRING,
   SNAP_BACK_SPRING,
   project,
@@ -332,19 +335,26 @@ export function MuseApp({
   const [folders, setFolders] = useState<MusicFolder[]>([]);
   const [deviceTracks, setTracks] = useState<MusicTrack[]>([]);
   const preferences = usePreferences();
-  const { skipShortAudio, shortAudioSeconds, historyPaused } = preferences;
+  const { skipShortAudio, shortAudioSeconds, historyPaused, hiddenFormats } = preferences;
   // Unknown lengths (0) stay: only clearly short files are voice notes or tones.
   // Expo Go's demo songs (15-38 s) always stay, so testing never shows an empty library.
+  // File types turned off for a folder (Choose your folders) stay out too.
   const tracks = useMemo(
     () =>
-      skipShortAudio
-        ? deviceTracks.filter(
-            (track) => track.duration <= 0 || track.duration >= shortAudioSeconds || track.folderId === demo?.DEMO_FOLDER.id,
-          )
-        : deviceTracks,
-    [deviceTracks, shortAudioSeconds, skipShortAudio],
+      deviceTracks.filter(
+        (track) =>
+          (!skipShortAudio || track.duration <= 0 || track.duration >= shortAudioSeconds || track.folderId === demo?.DEMO_FOLDER.id) &&
+          !hiddenFormats[track.folderId]?.includes(formatOf(track)),
+      ),
+    [deviceTracks, hiddenFormats, shortAudioSeconds, skipShortAudio],
   );
   const [blockedFolderIds, setBlockedFolderIds] = useState<string[]>([]);
+  /**
+   * File types per folder when Included folders was opened from Settings: Cancel
+   * puts them back. Null when the folder screen came up another way, or once
+   * saved, so Cancel never restores an old snapshot.
+   */
+  const [formatsBeforeEdit, setFormatsBeforeEdit] = useState<Record<string, string[]> | null>(null);
   /** Asking before deleting files that cannot go to the trash; Delete runs deleteSongs again, confirmed. */
   const [deleteConfirm, setDeleteConfirm] = useState<(ConfirmRequest & { picked: MusicTrack[] }) | null>(null);
   const [hasSavedFolderRules, setHasSavedFolderRules] = useState(false);
@@ -361,10 +371,11 @@ export function MuseApp({
     DEFAULT_LIBRARY_VIEW.sortDirection,
   );
   const [isLibraryViewLoaded, setIsLibraryViewLoaded] = useState(false);
-  const trackCount = useMemo(
-    () => countIncludedTracks(folders, blockedFolderIds),
-    [blockedFolderIds, folders],
-  );
+  // Counted from the songs shown, so hidden file types and short clips are left out.
+  const trackCount = useMemo(() => {
+    const blocked = new Set(blockedFolderIds);
+    return tracks.filter((track) => !blocked.has(track.folderId)).length;
+  }, [blockedFolderIds, tracks]);
   const playbackController = getPlaybackController();
   // Field by field: the app re-renders when one of these changes, not on
   // queue edits (reorder, add, shuffle, repeat), which only the player shows.
@@ -471,10 +482,16 @@ export function MuseApp({
     );
   }, [blockedFolderIds, tracks]);
   // Stable between keystrokes, so Search does not regroup the whole library.
-  const searchFolders = useMemo(
-    () => folders.filter((folder) => !blockedFolderIds.includes(folder.id)),
-    [blockedFolderIds, folders],
-  );
+  // Song counts from the songs shown (hidden file types and short clips left out); empty folders drop out.
+  const searchFolders = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const track of tracks) {
+      counts.set(track.folderId, (counts.get(track.folderId) ?? 0) + 1);
+    }
+    return folders
+      .filter((folder) => !blockedFolderIds.includes(folder.id) && (counts.get(folder.id) ?? 0) > 0)
+      .map((folder) => ({ ...folder, trackCount: counts.get(folder.id) ?? 0 }));
+  }, [blockedFolderIds, folders, tracks]);
 
   useEffect(() => {
     // Keep the player's queue in step with the library, so the full player
@@ -1136,7 +1153,8 @@ export function MuseApp({
     try {
       const permission = await requestPermissionsAsync(false, ['audio']);
       if (!permission.granted) {
-        return 'denied';
+        // Two noes: Android stops showing its popup, so setup points to Settings.
+        return permission.canAskAgain ? 'denied' : 'blocked';
       }
     } catch {
       return 'denied';
@@ -1245,6 +1263,7 @@ export function MuseApp({
         JSON.stringify(nextBlockedIds),
       );
       setBlockedFolderIds(nextBlockedIds);
+      setFormatsBeforeEdit(null);
       setHasSavedFolderRules(true);
       setScreen('app');
       setActiveTab(folderReturnTab);
@@ -1268,6 +1287,7 @@ export function MuseApp({
         JSON.stringify([]),
       );
       setBlockedFolderIds([]);
+      setFormatsBeforeEdit(null);
       setHasSavedFolderRules(true);
       setScreen('app');
       setActiveTab(folderReturnTab);
@@ -1286,6 +1306,10 @@ export function MuseApp({
       const savedRules = await AsyncStorage.getItem(FOLDER_RULES_KEY);
       const blockedIds = savedRules ? parseFolderRules(savedRules) : [];
       setBlockedFolderIds(blockedIds);
+      if (formatsBeforeEdit) {
+        setPreference('hiddenFormats', formatsBeforeEdit);
+        setFormatsBeforeEdit(null);
+      }
       setScreen('app');
       setActiveTab(folderReturnTab);
     } catch (error) {
@@ -1294,9 +1318,10 @@ export function MuseApp({
       );
       setScreen('error');
     }
-  }, [folderReturnTab]);
+  }, [folderReturnTab, formatsBeforeEdit]);
 
   const openFolderSettings = () => {
+    setFormatsBeforeEdit(getPreferences().hiddenFormats);
     setFolderReturnTab(activeTab);
     setScreen('folders');
   };
@@ -1311,6 +1336,32 @@ export function MuseApp({
       : screen !== 'onboarding' && screen !== 'starting');
 
   const openFullPlayer = useCallback(() => changePlayerOpen(true), [changePlayerOpen]);
+
+  // A tap on the playback notification opens the full player (muse://player,
+  // patches/expo-audio: MuseHooks.playerIntent), once Muse is past its launch screen.
+  const [playerLinks, setPlayerLinks] = useState(0);
+  const handledPlayerLinks = useRef(0);
+  useEffect(() => {
+    const take = (url: string | null | undefined) => {
+      if (url === 'muse://player') {
+        setPlayerLinks((count) => count + 1);
+      }
+    };
+    void Linking.getInitialURL().then(take);
+    const subscription = Linking.addEventListener('url', ({ url }) => take(url));
+    return () => subscription.remove();
+  }, []);
+  // On a cold start the app screen comes up before the saved song is restored:
+  // wait for it, and drop the tap only if the restore found no song.
+  const playbackRestored = usePlaybackValue((snapshot) => snapshot.restored);
+  useEffect(() => {
+    if (playerLinks > handledPlayerLinks.current && screen === 'app' && (currentTrack || playbackRestored)) {
+      handledPlayerLinks.current = playerLinks;
+      if (currentTrack) {
+        openFullPlayer();
+      }
+    }
+  }, [currentTrack, openFullPlayer, playbackRestored, playerLinks, screen]);
 
   /** Back on a Collections page; from the page the player opened, back to the player. */
   const backInMore = useCallback(() => {
@@ -1444,6 +1495,41 @@ export function MuseApp({
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => handleBackPress.current());
     return () => subscription.remove();
   }, []);
+
+  // Predictive back (Android 14+): Muse follows the swipe while it has an
+  // in-app step to go back to; the back itself still runs through BackHandler.
+  const followsBackSwipe = screen === 'app' && canGoBack;
+  useEffect(() => {
+    setPredictiveBack(followsBackSwipe);
+  }, [followsBackSwipe]);
+  useEffect(() => {
+    const subscription = addBackGestureListener(({ phase, progress, edge }) => {
+      // The open player rides its own morph: it slides down with the swipe.
+      const playerOpen = playerTransition.target.get() === 1;
+      if (phase === 'start') {
+        backEdge.set(edge === 'right' ? -1 : 1);
+      } else if (phase === 'progress') {
+        if (playerOpen) {
+          playerTransition.progress.set(1 - progress * 0.2);
+        } else {
+          backProgress.set(progress);
+        }
+      } else {
+        backProgress.set(withSpring(0, SETTLE_SPRING));
+        if (playerOpen && phase === 'cancel') {
+          settlePlayer(playerTransition, true);
+        } else if (playerOpen) {
+          // The back may only switch the player's view (Lyrics to cover): then it stays open.
+          requestAnimationFrame(() => {
+            if (playerTransition.target.get() === 1) {
+              settlePlayer(playerTransition, true);
+            }
+          });
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [playerTransition]);
 
   const refreshLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -1591,15 +1677,26 @@ export function MuseApp({
   // Stats slides over Home like a pushed page; switching tabs just fades.
   const statsDirection = useNavDirection(isStatsOpen ? 1 : 0, activeTab);
   const reduceMotion = useReducedMotion();
-  // The app recedes behind the opening player, as behind an iOS sheet.
+  // The app recedes behind the opening player, as behind an iOS sheet, and a
+  // little less behind a bottom sheet (motion/depth.ts), following its drag.
   const recedeStyle = useAnimatedStyle(() => {
     const open = reduceMotion
       ? 0
-      : interpolate(playerTransition.progress.get(), [0, 1], [0, 1], Extrapolation.CLAMP);
+      : Math.max(
+          interpolate(playerTransition.progress.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
+          interpolate(sheetDepth.get(), [0, 1], [0, 0.5], Extrapolation.CLAMP),
+        );
+    // Android's back swipe: the page about to close shrinks and shifts away from the edge with the finger.
+    const back = reduceMotion ? 0 : backProgress.get();
     // Scale only. Rounded, clipped corners cost a clip of the whole app every
     // frame and wait behind React (not transform/opacity), and over the same
     // color behind they barely showed.
-    return { transform: [{ scale: interpolate(open, [0, 1], [1, 0.94]) }] };
+    return {
+      transform: [
+        { translateX: backEdge.get() * back * 16 },
+        { scale: interpolate(open, [0, 1], [1, 0.94]) * (1 - 0.08 * back) },
+      ],
+    };
   });
   // Library and More are virtualized lists with their own scrolling; the
   // other tabs share this padding inside a plain scroll view.
@@ -1755,7 +1852,7 @@ export function MuseApp({
                 scrollEventThrottle={32}
               >
                 <View style={styles.screenBody}>
-                    <Animated.View entering={statsDirection === 'forward' ? PUSH_IN : undefined}>
+                    <Animated.View entering={statsDirection === 'forward' ? openFromTouch() : undefined}>
                       <StatsScreen
                         history={visibleHistory}
                         historyLoaded={isHistoryLoaded}
@@ -1962,7 +2059,8 @@ export function MuseApp({
             ]}
             showsVerticalScrollIndicator={false}
           >
-            {screen !== 'starting' && (
+            {/* Included folders has its own page bar, like the rest of Settings. */}
+            {screen !== 'starting' && screen !== 'folders' && (
               <Header showBack onBack={goBack} />
             )}
 
@@ -1978,6 +2076,7 @@ export function MuseApp({
                 onSave={saveFolderRules}
                 onIncludeAll={allowAllFolders}
                 onCancel={cancelFolderChanges}
+                onBack={goBack}
               />
             )}
 

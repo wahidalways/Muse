@@ -27,6 +27,35 @@ object MusePlayback {
 
   @JvmStatic
   fun extractorsFactory(): ExtractorsFactory = MuseExtractorsFactory()
+
+  // ---- The playback notification's ♥ and shuffle (expo-audio's MuseHooks reads these) ----
+
+  /** -1: hidden (no song), 0: off, 1: on. */
+  @Volatile private var favorite = -1
+  @Volatile private var shuffle = -1
+  @Volatile private var refresh: Runnable? = null
+  /** Set while JS listens (MuseFilesModule): "favorite" or "shuffle". */
+  @Volatile var actionListener: ((String) -> Unit)? = null
+
+  @JvmStatic
+  fun notificationButtons(): IntArray = intArrayOf(favorite, shuffle)
+
+  @JvmStatic
+  fun setNotificationRefresher(runnable: Runnable?) {
+    refresh = runnable
+  }
+
+  @JvmStatic
+  fun onNotificationAction(action: String) {
+    actionListener?.invoke(action)
+  }
+
+  fun setNotificationButtons(favorite: Int, shuffle: Int) {
+    if (favorite == this.favorite && shuffle == this.shuffle) return
+    this.favorite = favorite
+    this.shuffle = shuffle
+    refresh?.run()
+  }
 }
 
 /** Hi-Res float output, Muse's output stage, and Muse's ALAC decoder first. */

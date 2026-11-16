@@ -1,5 +1,6 @@
 import { useDeferredValue, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import type { ListeningEvent, MusicFolder, MusicTrack } from '../types';
 import { groupTracks, type GroupKind, type TrackGroup } from '../library/browse';
 import { usePlaylists, type Playlist } from '../library/playlists';
@@ -361,7 +362,7 @@ function SongsFirst({
                 accessibilityRole="button"
                 accessibilityLabel={`${genre.title}, ${songCount(genre.tracks.length)}`}
                 onPress={() => onOpenGenre(genre)}
-                style={({ pressed }) => [styles.goalChip, styles.searchChip, pressed && styles.settingRowPressed]}
+                style={[styles.goalChip, styles.searchChip]}
               >
                 <Text style={styles.goalChipLabel}>{genre.title}</Text>
               </Pressable>
@@ -431,7 +432,7 @@ function TopResultCard({ result, onOpen }: { result: TopResult; onOpen: () => vo
       accessibilityRole="button"
       accessibilityLabel={result.kind === 'song' ? `Play ${title}` : `Open ${title}, ${hint}`}
       onPress={onOpen}
-      style={({ pressed }) => [styles.homeCard, styles.insightRow, pressed && styles.settingRowPressed]}
+      style={[styles.homeCard, styles.insightRow]}
     >
       {result.kind === 'playlist' ? (
         <View style={styles.searchTopArt}>
@@ -496,7 +497,7 @@ function ResultRow({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? `${title}, ${hint}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.homeSongRow, last && styles.homeSongRowLast, pressed && styles.settingRowPressed]}
+      style={[styles.homeSongRow, last && styles.homeSongRowLast]}
     >
       {leading}
       <View style={styles.homeSongCopy}>

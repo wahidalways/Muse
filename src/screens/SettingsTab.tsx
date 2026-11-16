@@ -10,7 +10,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { ActivityIndicator, BackHandler, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Linking, ScrollView, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
@@ -63,7 +64,8 @@ import { getPlaybackController } from '../playback/PlaybackController';
 import type { MusicTrack } from '../types';
 import { ART_SETS } from '../components/MuseArt';
 import { canShowVolumeSlider } from '../player/VolumeSlider';
-import { POP_IN, PUSH_IN, useNavDirection } from '../motion/motion';
+import { POP_IN, useNavDirection } from '../motion/motion';
+import { openFromTouch } from '../motion/origin';
 import { APP_VERSION, BrandMark, CREDIT_NAME, LICENSE_URL, MakerCredit, MUSE_MOTTO } from '../components/Brand';
 import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 import { HomePreview } from '../onboarding/previews';
@@ -321,7 +323,7 @@ export function SettingsTab(props: Props) {
     <FindContext.Provider value={find}>
       <Animated.View
         key={page ?? 'list'}
-        entering={direction === 'forward' ? PUSH_IN : direction === 'back' ? POP_IN : undefined}
+        entering={direction === 'forward' ? openFromTouch() : direction === 'back' ? POP_IN : undefined}
         style={[styles.tabBody, styles.settingsEdge]}
       >
         {page === 'search' ? (
@@ -1532,7 +1534,7 @@ function AboutPage({ accent }: Props) {
                   void runUpdateCheck();
                 }
               }}
-              style={({ pressed }) => [styles.primaryButton, styles.updateButton, pressed && styles.primaryButtonPressed]}
+              style={[styles.primaryButton, styles.updateButton]}
             >
               {update === 'checking' ? <ActivityIndicator color={String(styles.primaryButtonLabel.color)} /> : null}
               <Text style={styles.primaryButtonLabel}>
@@ -1583,7 +1585,7 @@ function AboutPage({ accent }: Props) {
                 // No browser is rare; there is nothing useful to show if so.
                 Linking.openURL(LICENSE_URL).catch(() => undefined);
               }}
-              style={({ pressed }) => [styles.creditLinkRow, pressed && styles.creditLinkPressed]}
+              style={[styles.creditLinkRow]}
             >
               <Text style={styles.creditLink}>Read the license</Text>
             </Pressable>
@@ -1605,7 +1607,7 @@ function AboutPage({ accent }: Props) {
                   ),
                 })
               }
-              style={({ pressed }) => [styles.creditLinkRow, pressed && styles.creditLinkPressed]}
+              style={[styles.creditLinkRow]}
             >
               <Text style={styles.creditLink}>Open-source notices</Text>
             </Pressable>

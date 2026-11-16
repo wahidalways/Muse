@@ -1,5 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAppStyles } from '../theme/styles';
 import { Sheet } from './Sheet';
@@ -57,7 +58,7 @@ export function ConfirmSheet({ request, onClose }: { request: ConfirmRequest | n
             <Pressable
               accessibilityRole="button"
               onPress={onClose}
-              style={({ pressed }) => [styles.confirmButton, styles.confirmSecondary, pressed && styles.primaryButtonPressed]}
+              style={[styles.confirmButton, styles.confirmSecondary]}
             >
               <Text style={styles.confirmSecondaryText}>{cancelLabel}</Text>
             </Pressable>
@@ -65,10 +66,9 @@ export function ConfirmSheet({ request, onClose }: { request: ConfirmRequest | n
           <Pressable
             accessibilityRole="button"
             onPress={confirm}
-            style={({ pressed }) => [
+            style={[
               styles.confirmButton,
               shown.destructive ? styles.confirmDanger : styles.primaryButton,
-              pressed && styles.primaryButtonPressed,
             ]}
           >
             <Text style={shown.destructive ? styles.confirmDangerText : styles.primaryButtonLabel}>{shown.confirmLabel}</Text>

@@ -67,6 +67,8 @@ type MuseAudioMetadataModule = {
   getImageColor?(uri: string): Promise<CoverColor | null>;
   // Missing from builds made before the lock-screen size cap.
   getLockScreenCover?(uri: string): Promise<string | null>;
+  // Missing from builds made before 1.5.
+  getWidgetCover?(uri: string): Promise<string | null>;
   getAudioDetails(trackId: string): Promise<AudioDetails | null>;
   getArtworkColor(trackId: string): Promise<CoverColor | null>;
   addListener(event: 'onAudioBecomingNoisy' | 'onHeadphonesConnected', listener: () => void): { remove(): void };
@@ -74,6 +76,8 @@ type MuseAudioMetadataModule = {
   setAppIcon?(id: string): void;
   canSetAppIcon?(): boolean;
   closeApp?(): void;
+  // Missing from builds made before it.
+  isSystemDark?(): boolean;
   // Missing from builds made before crash reports.
   takeLastCrash?(): string | null;
   addListener(
@@ -173,6 +177,15 @@ export async function getLockScreenCover(uri: string): Promise<string | null> {
   }
 }
 
+/** A file:// copy at most 320 px for the home-screen widgets, which decode it at full size. Null when none could be made. */
+export async function getWidgetCover(uri: string): Promise<string | null> {
+  try {
+    return (await nativeModule?.getWidgetCover?.(uri)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Every picture inside the song's file, full size, in file order. */
 export async function getFilePictures(trackId: string): Promise<FilePicture[]> {
   try {
@@ -227,6 +240,16 @@ export function closeApp(): boolean {
   }
   nativeModule.closeApp();
   return true;
+}
+
+/** The phone's dark mode read fresh from Android; null in Expo Go or older builds. */
+export function systemColorScheme(): 'dark' | 'light' | null {
+  try {
+    const dark = nativeModule?.isSystemDark?.();
+    return dark === undefined ? null : dark ? 'dark' : 'light';
+  } catch {
+    return null;
+  }
 }
 
 /** Why Muse crashed last time, once: reading deletes it. Null when it did not crash. */

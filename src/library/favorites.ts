@@ -28,6 +28,12 @@ export function toggleFavorite(trackId: string) {
   store.update((ids) => (ids.includes(trackId) ? ids.filter((id) => id !== trackId) : [...ids, trackId]));
 }
 
+export const subscribeFavorites = store.subscribe;
+
+export function isFavorite(trackId: string): boolean {
+  return favoriteSet().has(trackId);
+}
+
 export function useIsFavorite(trackId: string): boolean {
   return useSyncExternalStore(store.subscribe, () => favoriteSet().has(trackId));
 }

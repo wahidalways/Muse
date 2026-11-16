@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { MusicNote } from './icons';
 import { BrandMark } from './Brand';
 import { useAppStyles } from '../theme/styles';

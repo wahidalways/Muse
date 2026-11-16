@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable } from './Pressable';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Sheet } from './Sheet';
 import { ART_SETS, MuseArtTile } from './MuseArt';
@@ -112,7 +113,7 @@ function Picker({ onClose }: { onClose: () => void }) {
           }
           onClose();
         }}
-        style={({ pressed }) => [styles.primaryButton, styles.artUseButton, pressed && styles.primaryButtonPressed]}
+        style={[styles.primaryButton, styles.artUseButton]}
       >
         <Text style={styles.primaryButtonLabel}>{chosen === current ? `Keep ${info.label}` : `Use ${info.label}`}</Text>
       </Pressable>

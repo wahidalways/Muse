@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable } from './Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, {
   Easing,
@@ -80,7 +81,7 @@ export function SurpriseButton({
       accessibilityHint="Picks a random funky name, and a picture if you have not chosen one"
       hitSlop={label ? 4 : 10}
       onPress={roll}
-      style={({ pressed }) => [local.button, style, pressed && local.pressed]}
+      style={[local.button, style]}
     >
       {dice}
       {label ? <Text style={[local.label, { color: labelColor ?? color }]}>{label}</Text> : null}
@@ -91,5 +92,4 @@ export function SurpriseButton({
 const local = StyleSheet.create({
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   label: { fontSize: 13, fontWeight: '700' },
-  pressed: { opacity: 0.75 },
 });

@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, type ComponentProps, type ComponentRef, type RefObject } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { Glass } from '../components/Glass';
 import { useGlassStyle } from '../theme/glassStyle';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -205,7 +206,12 @@ export const MiniPlayer = memo(function MiniPlayer({
           </PressableScale>
         </View>
       </View>
-      <MiniProgressLine fallbackDuration={track.duration} isPlaying={isPlaying} />
+      <MiniProgressLine
+        fallbackDuration={track.duration}
+        isPlaying={isPlaying}
+        // Hidden under the player or the folded bar: steps once a second instead of every frame.
+        live={!isCovered && !(isBarFolded && !isSolid)}
+      />
     </Shell>
     </Animated.View>
   );
@@ -219,9 +225,11 @@ export const MiniPlayer = memo(function MiniPlayer({
 export function MiniProgressLine({
   fallbackDuration,
   isPlaying,
+  live,
 }: {
   fallbackDuration: number;
   isPlaying: boolean;
+  live?: boolean;
 }) {
   const styles = useAppStyles();
   const { currentTime, duration } = usePlaybackProgress();
@@ -237,7 +245,7 @@ export function MiniProgressLine({
       // Dimmed while paused, so paused reads at a glance, not only from the glyph.
       style={[styles.miniPlayerLine, !isPlaying && styles.miniPlayerLinePaused]}
     >
-      <MiniPlayerProgress fallbackDuration={fallbackDuration} />
+      <MiniPlayerProgress fallbackDuration={fallbackDuration} live={live} />
     </View>
   );
 }

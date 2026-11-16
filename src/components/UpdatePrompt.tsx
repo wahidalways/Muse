@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import Animated from 'react-native-reanimated';
 
 import { AppIconMark } from './AppIconSheet';
@@ -180,7 +181,7 @@ function ChangeList({ notes }: { notes: string }) {
           accessibilityRole="button"
           accessibilityState={{ expanded: isOpen }}
           onPress={() => setIsOpen((open) => !open)}
-          style={({ pressed }) => [styles.updateMore, pressed && styles.primaryButtonPressed]}
+          style={[styles.updateMore]}
         >
           <Text style={styles.updateMoreText}>{isOpen ? 'Show less' : `See all ${total} changes`}</Text>
           <Ionicons accessible={false} name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} style={styles.updateMoreGlyph} />
@@ -194,7 +195,7 @@ function ChangeList({ notes }: { notes: string }) {
 function GhostButton({ label, onPress, icon }: { label: string; onPress: () => void; icon?: IconName }) {
   const styles = useAppStyles();
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.updateGhost, pressed && styles.primaryButtonPressed]}>
+    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.updateGhost]}>
       {icon && <Ionicons accessible={false} name={icon} size={16} style={styles.updateMutedGlyph} />}
       <Text style={styles.updateGhostText}>{label}</Text>
     </Pressable>
@@ -482,7 +483,7 @@ export function UpdatePopup({
   let action;
   if (installed) {
     action = (
-      <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}>
+      <Pressable accessibilityRole="button" onPress={close} style={[styles.primaryButton]}>
         <Text style={styles.primaryButtonLabel}>Done</Text>
       </Pressable>
     );
@@ -529,7 +530,7 @@ export function UpdatePopup({
     );
   } else if (stage.kind === 'failed') {
     action = (
-      <Pressable accessibilityRole="button" onPress={() => void start()} style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}>
+      <Pressable accessibilityRole="button" onPress={() => void start()} style={[styles.primaryButton]}>
         <Text style={styles.primaryButtonLabel}>Try again</Text>
       </Pressable>
     );
@@ -539,7 +540,7 @@ export function UpdatePopup({
         accessibilityRole="button"
         accessibilityLabel={shown.apkSize ? `Update, ${formatBytes(shown.apkSize)}` : 'Update'}
         onPress={() => void start()}
-        style={({ pressed }) => [styles.primaryButton, styles.updateGo, pressed && styles.primaryButtonPressed]}
+        style={[styles.primaryButton, styles.updateGo]}
       >
         <Ionicons accessible={false} name="arrow-down" size={18} style={styles.updateGoGlyph} />
         <Text style={styles.primaryButtonLabel}>Update</Text>
@@ -565,7 +566,7 @@ export function UpdatePopup({
         <Pressable
           accessibilityRole="button"
           onPress={close}
-          style={({ pressed }) => [styles.updateSplitWord, pressed && styles.primaryButtonPressed]}
+          style={[styles.updateSplitWord]}
         >
           <Text style={styles.updateGhostText}>Later</Text>
         </Pressable>
@@ -577,7 +578,7 @@ export function UpdatePopup({
               accessibilityLabel="Remind me later"
               accessibilityHint="Choose when to be reminded"
               onPress={() => turn('later')}
-              style={({ pressed }) => [styles.updateSplitArrow, pressed && styles.primaryButtonPressed]}
+              style={[styles.updateSplitArrow]}
             >
               <Ionicons accessible={false} name="chevron-down" size={18} style={styles.updateMutedGlyph} />
             </Pressable>

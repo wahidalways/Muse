@@ -10,18 +10,15 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 
-import { EASE_OUT } from '../motion/motion';
-
-const PRESS_IN = { duration: 100, easing: EASE_OUT };
-const PRESS_OUT = { duration: 150, easing: EASE_OUT };
+import { PRESS_IN_SPRING, PRESS_OUT_SPRING } from '../motion/motion';
 
 /**
- * A button that scales to 97% while pressed. The scale runs on the UI thread
- * and starts on press-in, so the response is immediate even when JS is busy.
- * For buttons only: full-width rows should not scale.
+ * A button with a haptic that sinks while pressed and springs back with a
+ * little life (the flow press, components/Pressable). The scale runs on the
+ * UI thread. For buttons only: full-width rows should not scale.
  */
 export function PressableScale({
   style,
@@ -48,11 +45,11 @@ export function PressableScale({
       pressRetentionOffset={16}
       onPressIn={(event: GestureResponderEvent) => {
         hapticImpact();
-        scale.set(withTiming(0.97, PRESS_IN));
+        scale.set(withSpring(0.92, PRESS_IN_SPRING));
         onPressIn?.(event);
       }}
       onPressOut={(event: GestureResponderEvent) => {
-        scale.set(withTiming(1, PRESS_OUT));
+        scale.set(withSpring(1, PRESS_OUT_SPRING));
         onPressOut?.(event);
       }}
     >

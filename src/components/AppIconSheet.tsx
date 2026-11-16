@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import ICONS from '../../plugins/app-icons.json';
 import { canSetAppIcon } from '../../modules/muse-audio-metadata';
 import { setPreference, usePreferences, type AppIconId } from '../settings/preferences';

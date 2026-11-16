@@ -1,8 +1,8 @@
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt
-index bf3f9c5..cff45d8 100644
+index bf3f9c5..8c24d03 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlaylist.kt
-@@ -25,11 +25,11 @@ class AudioPlaylist(
+@@ -25,11 +25,12 @@ class AudioPlaylist(
    updateInterval: Double,
    dataSourceFactory: DataSource.Factory
  ) : BaseAudioPlayer(
@@ -12,24 +12,53 @@ index bf3f9c5..cff45d8 100644
      .setAudioAttributes(AudioAttributes.DEFAULT, false)
      .setHandleAudioBecomingNoisy(true)
 -    .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory))
++    .setLoadControl(MuseHooks.loadControl())
 +    .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory, MuseHooks.extractorsFactory()))
      .build(),
    appContext = appContext,
    updateInterval = updateInterval,
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt
+index 53571c6..bea91d0 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt
+@@ -80,6 +80,14 @@ abstract class BaseAudioPlayer(
+     val listener = object : Player.Listener {
+       override fun onIsPlayingChanged(isPlaying: Boolean) {
+         playing = isPlaying
++        // Muse: the 1 s ticker only reports while playing, so it stops while paused.
++        if (isPlaying) {
++          if (updateJob?.isActive != true) {
++            startUpdating()
++          }
++        } else {
++          updateJob?.cancel()
++        }
+         onPlaybackStateChange?.invoke(isPlaying)
+ 
+         val isTransient = !isPlaying &&
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/MuseHooks.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/MuseHooks.kt
 new file mode 100644
-index 0000000..f42f630
+index 0000000..d8b1bec
 --- /dev/null
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/MuseHooks.kt
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,115 @@
 +package expo.modules.audio
 +
++import android.app.PendingIntent
 +import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import android.os.Bundle
++import androidx.core.app.NotificationCompat
 +import androidx.media3.common.util.UnstableApi
++import androidx.media3.exoplayer.DefaultLoadControl
 +import androidx.media3.exoplayer.DefaultRenderersFactory
++import androidx.media3.exoplayer.LoadControl
 +import androidx.media3.exoplayer.RenderersFactory
 +import androidx.media3.extractor.DefaultExtractorsFactory
 +import androidx.media3.extractor.ExtractorsFactory
++import androidx.media3.session.CommandButton
++import androidx.media3.session.SessionCommand
 +
 +// Muse patch: the player is built from Muse's own renderers (Hi-Res and
 +// bit-perfect output, ALAC) and readers (AIFF, DSD, APE, WavPack). Looked up
@@ -46,4 +75,262 @@ index 0000000..f42f630
 +  fun extractorsFactory(): ExtractorsFactory =
 +    runCatching { entry?.getMethod("extractorsFactory")?.invoke(null) as? ExtractorsFactory }.getOrNull()
 +      ?: DefaultExtractorsFactory()
++
++  // Keeps the last 15 s in memory, so a small seek back plays from it instead of
++  // re-reading the file (Muse's APE frames are 6.7 s and must be decoded whole).
++  // The byte budget makes room for it: decoded PCM (APE, DSD as 88.2 kHz float)
++  // is large, and the default 13 MB would leave little for the buffer ahead.
++  fun loadControl(): LoadControl =
++    DefaultLoadControl.Builder()
++      .setBackBuffer(15_000, true)
++      .setTargetBufferBytes(32 shl 20)
++      .build()
++
++  // ---- The playback notification ----
++
++  const val ACTION_FAVORITE = "expo.modules.audio.action.MUSE_FAVORITE"
++  const val ACTION_SHUFFLE = "expo.modules.audio.action.MUSE_SHUFFLE"
++  const val CHANNEL_NAME = "Playback"
++
++  val sessionCommands = listOf(SessionCommand(ACTION_FAVORITE, Bundle.EMPTY), SessionCommand(ACTION_SHUFFLE, Bundle.EMPTY))
++
++  /** Muse's bars in the status bar (Muse's module ships the drawable). */
++  fun smallIcon(context: Context): Int =
++    context.resources.getIdentifier("muse_notification_icon", "drawable", context.packageName).takeIf { it != 0 }
++      ?: androidx.media3.session.R.drawable.media3_icon_circular_play
++
++  /** A tap on the notification opens Muse's full player; MuseApp listens for this link. */
++  fun playerIntent(launch: Intent): Intent =
++    Intent(Intent.ACTION_VIEW, Uri.parse("muse://player"))
++      .setComponent(launch.component)
++      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
++
++  /** Called with a Runnable when Muse's ♥ or shuffle changes, so the buttons redraw; null to stop. */
++  fun attach(refresh: Runnable?) {
++    runCatching { entry?.getMethod("setNotificationRefresher", Runnable::class.java)?.invoke(null, refresh) }
++  }
++
++  /** True when the action was Muse's own (♥ or shuffle), handed to Muse. */
++  fun onAction(action: String?): Boolean {
++    val name = when (action) {
++      ACTION_FAVORITE -> "favorite"
++      ACTION_SHUFFLE -> "shuffle"
++      else -> return false
++    }
++    runCatching { entry?.getMethod("onNotificationAction", String::class.java)?.invoke(null, name) }
++    return true
++  }
++
++  private class Extra(val icon: Int, val label: String, val action: String)
++
++  /** -1: hidden (no song), 0: off, 1: on, for ♥ and shuffle. */
++  private fun extras(): List<Extra> {
++    val state = runCatching { entry?.getMethod("notificationButtons")?.invoke(null) as? IntArray }.getOrNull() ?: return emptyList()
++    val favorite = state.getOrElse(0) { -1 }
++    val shuffle = state.getOrElse(1) { -1 }
++    return listOfNotNull(
++      if (favorite < 0) null else if (favorite == 1) {
++        Extra(CommandButton.ICON_HEART_FILLED, "Remove from Favorites", ACTION_FAVORITE)
++      } else {
++        Extra(CommandButton.ICON_HEART_UNFILLED, "Add to Favorites", ACTION_FAVORITE)
++      },
++      if (shuffle < 0) null else if (shuffle == 1) {
++        Extra(CommandButton.ICON_SHUFFLE_ON, "Turn shuffle off", ACTION_SHUFFLE)
++      } else {
++        Extra(CommandButton.ICON_SHUFFLE_OFF, "Turn shuffle on", ACTION_SHUFFLE)
++      },
++    )
++  }
++
++  /** ♥ and shuffle after the transport buttons: Android 13+ shows them in its two extra spots. */
++  fun extraButtons(): List<CommandButton> = extras().map {
++    CommandButton.Builder(it.icon)
++      .setDisplayName(it.label)
++      .setEnabled(true)
++      .setSessionCommand(SessionCommand(it.action, Bundle.EMPTY))
++      .setSlots(CommandButton.SLOT_OVERFLOW)
++      .build()
++  }
++
++  /** The same for Android 12 and older, which draw the notification's own actions. */
++  fun extraActions(pendingIntent: (String) -> PendingIntent): List<NotificationCompat.Action> = extras().map {
++    NotificationCompat.Action(CommandButton.getIconResIdForIconConstant(it.icon), it.label, pendingIntent(it.action))
++  }
 +}
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 53c36f7..38a3707 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -61,6 +61,9 @@ class AudioControlsService : MediaSessionService() {
+       weakContext = value?.let { WeakReference(it) }
+     }
+ 
++  /** Muse: posted at least once for the current song set, so a missing one was swiped away. */
++  private var museNotificationPosted = false
++
+   var playsInSilentMode: Boolean = true
+   var playbackListener: Player.Listener? = null
+ 
+@@ -94,6 +97,7 @@ class AudioControlsService : MediaSessionService() {
+         ACTION_SEEK_BACKWARD -> seekBackward()
+         ACTION_NEXT_TRACK -> nextTrack()
+         ACTION_PREVIOUS_TRACK -> previousTrack()
++        else -> MuseHooks.onAction(intent?.action)
+       }
+     }
+ 
+@@ -123,7 +127,7 @@ class AudioControlsService : MediaSessionService() {
+ 
+   private fun buildPlaceholderNotification(): Notification =
+     NotificationCompat.Builder(this, CHANNEL_ID)
+-      .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
++      .setSmallIcon(MuseHooks.smallIcon(this))
+       .setContentTitle("‎")
+       .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+       .setSilent(true)
+@@ -134,6 +138,15 @@ class AudioControlsService : MediaSessionService() {
+     super.onCreate()
+     audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+     createNotificationChannelIfNeeded()
++    // Muse's ♥ and shuffle changed: redraw the buttons (on the main thread, the session's).
++    val main = android.os.Handler(android.os.Looper.getMainLooper())
++    MuseHooks.attach(Runnable {
++      main.post {
++        val playable = currentPlayable ?: return@post
++        updateSessionCustomLayout(playable.player.isPlaying)
++        postOrStartForegroundNotification(startInForeground = false)
++      }
++    })
+   }
+ 
+   private fun shouldPlayInSilentMode(): Boolean {
+@@ -143,20 +156,19 @@ class AudioControlsService : MediaSessionService() {
+   private fun createNotificationChannelIfNeeded() {
+     val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+-      if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
+-        notificationManager.createNotificationChannel(
+-          NotificationChannel(
+-            CHANNEL_ID,
+-            CHANNEL_ID,
+-            NotificationManager.IMPORTANCE_LOW
+-          )
++      // Always: creating it again renames a channel made before as "expo_audio_channel".
++      notificationManager.createNotificationChannel(
++        NotificationChannel(
++          CHANNEL_ID,
++          MuseHooks.CHANNEL_NAME,
++          NotificationManager.IMPORTANCE_LOW
+         )
+-      }
++      )
+     }
+   }
+ 
+   private fun buildContentIntent(): PendingIntent? {
+-    val appIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return null
++    val appIntent = MuseHooks.playerIntent(packageManager.getLaunchIntentForPackage(packageName) ?: return null)
+     return PendingIntent.getActivity(
+       this,
+       0,
+@@ -179,7 +191,7 @@ class AudioControlsService : MediaSessionService() {
+     val session = mediaSession ?: return null
+ 
+     val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+-      .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
++      .setSmallIcon(MuseHooks.smallIcon(this))
+       // If the title is null or empty string android sets the notification to "<AppName> is running..." we want to keep the notification empty so we \u200E to keep the text empty.
+       .setContentTitle(currentMetadata?.title ?: "\u200E")
+       .setContentText(currentMetadata?.artist)
+@@ -262,6 +274,9 @@ class AudioControlsService : MediaSessionService() {
+         compactViewIndices.add(currentIndex)
+       }
+ 
++      // Muse's ♥ and shuffle: in the expanded notification only.
++      MuseHooks.extraActions { buildActionPendingIntent(it) }.forEach { builder.addAction(it) }
++
+       style.setShowActionsInCompactView(*compactViewIndices.toIntArray())
+     }
+ 
+@@ -354,6 +369,8 @@ class AudioControlsService : MediaSessionService() {
+       )
+     }
+ 
++    mediaButtons.addAll(MuseHooks.extraButtons())
++
+     session.setCustomLayout(mediaButtons)
+     session.setMediaButtonPreferences(mediaButtons)
+   }
+@@ -391,8 +408,16 @@ class AudioControlsService : MediaSessionService() {
+           e
+         )
+       }
++      museNotificationPosted = true
+     } else {
++      // Muse: swiped away while paused stays away (a heart or shuffle change no
++      // longer brings it back); it returns when music plays again.
++      val playing = mediaSession?.player?.isPlaying == true
++      if (museNotificationPosted && !playing && notificationManager.activeNotifications.none { it.id == notificationId }) {
++        return
++      }
+       notificationManager.notify(notificationId, notification)
++      museNotificationPosted = true
+     }
+   }
+ 
+@@ -598,8 +623,17 @@ class AudioControlsService : MediaSessionService() {
+ 
+       artworkLoadJob = scope.launch {
+         try {
++          // Muse: the notification icon is small; Media3 reads the session's own copy for the
++          // lock screen. Halved until about 720 px, so a 1440 px cover holds 2 MB, not 8.
++          val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
++          url.openConnection().getInputStream().use { BitmapFactory.decodeStream(it, null, bounds) }
++          var sample = 1
++          while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 720) {
++            sample *= 2
++          }
++          val options = BitmapFactory.Options().apply { inSampleSize = sample }
+           val bitmap = url.openConnection().getInputStream().use {
+-            BitmapFactory.decodeStream(it)
++            BitmapFactory.decodeStream(it, null, options)
+           }
+ 
+           if (isActive) {
+@@ -641,11 +675,13 @@ class AudioControlsService : MediaSessionService() {
+     val notificationManager: NotificationManager =
+       getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+     notificationManager.cancel(notificationId)
++    museNotificationPosted = false
+   }
+ 
+   override fun onDestroy() {
+     super.onDestroy()
+ 
++    MuseHooks.attach(null)
+     removePlayerListener()
+     clearArtwork()
+     scope.cancel()
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+index ee83be1..c9050c4 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+@@ -45,6 +45,7 @@ class AudioMediaSessionCallback(
+           if (service.supportsNextTrack()) {
+             add(SessionCommand(AudioControlsService.ACTION_NEXT_TRACK, Bundle.EMPTY))
+           }
++          expo.modules.audio.MuseHooks.sessionCommands.forEach { add(it) }
+         }
+         .build()
+ 
+@@ -80,6 +81,10 @@ class AudioMediaSessionCallback(
+         service.previousTrack()
+         Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+       }
++      expo.modules.audio.MuseHooks.ACTION_FAVORITE, expo.modules.audio.MuseHooks.ACTION_SHUFFLE -> {
++        expo.modules.audio.MuseHooks.onAction(command.customAction)
++        Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
++      }
+       else -> super.onCustomCommand(session, controller, command, args)
+     }
+   }

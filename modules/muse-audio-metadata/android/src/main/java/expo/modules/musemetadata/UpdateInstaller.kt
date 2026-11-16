@@ -21,6 +21,8 @@ import java.security.MessageDigest
  */
 internal object UpdateInstaller {
   private const val ACTION_STATUS = "expo.modules.musemetadata.UPDATE_STATUS"
+  /** Where release APKs live (src/settings/updates.ts reads the same repository). */
+  private const val RELEASES = "https://github.com/wahidalways/Muse/releases/download/"
   @Volatile private var cancelled = false
 
   fun cancel() {
@@ -30,10 +32,16 @@ internal object UpdateInstaller {
   /** Downloads to cache/updates/<name>; `progress(received, total)` about every 1%. Returns the file, or throws. */
   fun download(context: Context, url: String, name: String, sha256: String?, size: Long?, progress: (Long, Long) -> Unit): File {
     cancelled = false
+    // Only Muse's own GitHub releases, over HTTPS, and only with a fingerprint to check.
+    if (!url.startsWith(RELEASES)) throw SecurityException("Updates come only from Muse's GitHub releases")
+    val expected = sha256?.removePrefix("sha256:")?.lowercase()
+    if (expected.isNullOrEmpty()) throw SecurityException("This release has no fingerprint to check it against")
     val directory = File(context.cacheDir, "updates").apply { mkdirs() }
     // Only the newest download is kept.
     directory.listFiles()?.forEach { it.delete() }
-    val file = File(directory, name.replace(Regex("[^A-Za-z0-9._-]"), "_"))
+    // A plain file name inside updates/: no slashes, never "." or "..".
+    val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_").takeIf { it.endsWith(".apk") && it.trim('.').isNotEmpty() } ?: "Muse-update.apk"
+    val file = File(directory, safeName)
     val partial = File(directory, "${file.name}.part")
     val connection = (URL(url).openConnection() as HttpURLConnection).apply {
       connectTimeout = 15_000
@@ -66,9 +74,8 @@ internal object UpdateInstaller {
         }
       }
       if (size != null && size > 0 && received != size) throw IllegalStateException("The download was incomplete")
-      val expected = sha256?.removePrefix("sha256:")?.lowercase()
       val actual = digest.digest().joinToString("") { "%02x".format(it) }
-      if (!expected.isNullOrEmpty() && expected != actual) throw SecurityException("The download does not match the release")
+      if (expected != actual) throw SecurityException("The download does not match the release")
       if (!partial.renameTo(file)) throw IllegalStateException("Could not save the update")
       return file
     } catch (error: Throwable) {

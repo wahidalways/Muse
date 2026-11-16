@@ -10,13 +10,13 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  Pressable,
   Text,
   View,
   useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { FlashList } from '@shopify/flash-list';
 // The gesture-handler ScrollView takes part in touch arbitration, so a sideways
 // drag on the smart lists shelf scrolls the shelf instead of switching tabs.
@@ -24,10 +24,11 @@ import { ScrollView } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, {
   FadeIn,
+  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { ListeningEvent, MusicTrack } from '../types';
@@ -86,7 +87,8 @@ import { formatListeningTime, formatTimeAgo } from '../utils/format';
 import { hapticSelection } from '../utils/haptics';
 import { useBarScroll } from '../motion/barScroll';
 import { useAppStyles } from '../theme/styles';
-import { EASE_OUT, POP_IN, PUSH_IN, useNavDirection } from '../motion/motion';
+import { EASE_OUT, POP_IN, useNavDirection } from '../motion/motion';
+import { openFromTouch } from '../motion/origin';
 import { ConfirmSheet, type ConfirmRequest } from '../components/ConfirmSheet';
 
 /** Where you are inside Collections (tab id 'more'). An empty stack is its main page. */
@@ -218,10 +220,10 @@ const songsMeta = (prefix: string | null, tracks: MusicTrack[]) =>
     .join(' · ');
 
 const PAGE_IN = FadeIn.duration(200).easing(EASE_OUT);
-const PRESSED = { transform: [{ scale: 0.97 }] };
 const HERO_SIZE = 220;
 const HERO_RADIUS = 18;
-const FLIGHT = { duration: 380, easing: EASE_OUT };
+/** The cover's flight into the header: a spring, so it settles like the rest of the flow motion. */
+const FLIGHT = { duration: 480, dampingRatio: 0.86, reduceMotion: ReduceMotion.System } as const;
 const NO_TRACKS: MusicTrack[] = [];
 
 type ViewNode = ComponentRef<typeof View>;
@@ -339,7 +341,7 @@ export function MoreTab({
   const hasLanding = flight?.to != null;
   useEffect(() => {
     if (hasLanding) {
-      landed.set(withTiming(1, FLIGHT, (finished) => {
+      landed.set(withSpring(1, FLIGHT, (finished) => {
         if (finished) {
           scheduleOnRN(endFlight);
         }
@@ -474,7 +476,7 @@ export function MoreTab({
     <View ref={rootRef} collapsable={false} style={{ flex: 1 }}>
       <Animated.View
         key={stack.length}
-        entering={flight ? PAGE_IN : direction === 'forward' ? PUSH_IN : direction === 'back' ? POP_IN : PAGE_IN}
+        entering={flight ? PAGE_IN : direction === 'forward' ? openFromTouch() : direction === 'back' ? POP_IN : PAGE_IN}
         style={{ flex: 1 }}
       >
         {page}
@@ -533,7 +535,7 @@ function SortControl({
           hapticSelection();
           onReverse();
         }}
-        style={({ pressed }) => [styles.librarySortReverse, pressed && styles.librarySortChipPressed]}
+        style={[styles.librarySortReverse]}
       >
         <ControlIcon name={direction === 'ascending' ? 'sort-up' : 'sort-down'} size={14} tone="accent" />
       </Pressable>
@@ -545,7 +547,7 @@ function SortControl({
           hapticSelection();
           onOpen();
         }}
-        style={({ pressed }) => [styles.librarySortLink, pressed && styles.librarySortChipPressed]}
+        style={[styles.librarySortLink]}
       >
         <Text numberOfLines={1} style={styles.librarySortButtonText}>
           {choice.label}
@@ -710,7 +712,7 @@ function CollectionsHome({
           accessibilityRole="button"
           accessibilityLabel={`See all ${playlists.length} playlists`}
           onPress={() => onPush({ kind: 'playlists' })}
-          style={({ pressed }) => [styles.collRow, styles.collSeeAll, pressed && styles.librarySortChipPressed]}
+          style={[styles.collRow, styles.collSeeAll]}
         >
           {/* First songs only: an empty playlist has none, and undefined crashed the collage. */}
           <CoverCollage tracks={behind.flatMap((item) => item.songs.slice(0, 1))} size={52} radius={10} />
@@ -751,7 +753,7 @@ function CollectionsHome({
           accessibilityRole="button"
           accessibilityLabel={`${entry.title}, ${entry.count}`}
           onPress={() => onPush(entry.kind === 'folders' ? { kind: 'folders' } : { kind: 'groups', group: entry.kind })}
-          style={({ pressed }) => [styles.collRow, pressed && styles.librarySortChipPressed]}
+          style={[styles.collRow]}
         >
           <CoverCollage tracks={entry.covers} size={52} radius={10} />
           <View style={styles.collRowCopy}>
@@ -794,7 +796,7 @@ function CollectionsHome({
               accessibilityRole="button"
               accessibilityLabel="New playlist"
               onPress={() => setIsNaming(true)}
-              style={({ pressed }) => [styles.collTile, { width: tile }, pressed && PRESSED]}
+              style={[styles.collTile, { width: tile }]}
             >
               <View style={[styles.collNewTile, { width: tile, height: tile }]}>
                 <ControlIcon name="plus" size={30} tone="accent" />
@@ -879,7 +881,7 @@ const PlaylistTile = memo(function PlaylistTile({
         hapticSelection();
         onMenu(playlist.id);
       }}
-      style={({ pressed }) => [styles.collTile, { width, marginLeft }, pressed && PRESSED]}
+      style={[styles.collTile, { width, marginLeft }]}
     >
       <View ref={cover} collapsable={false}>
         <PlaylistCover playlist={playlist} tracks={songs} size={width} radius={14} />
@@ -911,7 +913,7 @@ const SmartTile = memo(function SmartTile({ id, title, icon, tracks, onOpen }: {
       onPress={() =>
         onOpen({ kind: 'smart', id }, cover.current, (size) => <CoverCollage tracks={tracks} size={size} radius={HERO_RADIUS} emptyIcon={icon} />)
       }
-      style={({ pressed }) => [styles.collSmart, pressed && PRESSED]}
+      style={[styles.collSmart]}
     >
       <View ref={cover} collapsable={false} style={empty && styles.collFaded}>
         <CoverCollage tracks={tracks} size={132} radius={14} emptyIcon={icon} />
@@ -936,7 +938,7 @@ function PageTop({ onPop, onMore }: { onPop: () => void; onMore?: () => void }) 
         accessibilityLabel="Back"
         hitSlop={8}
         onPress={onPop}
-        style={({ pressed }) => [styles.collNavButton, pressed && PRESSED]}
+        style={[styles.collNavButton]}
       >
         <ControlIcon name="back" size={20} />
       </Pressable>
@@ -946,7 +948,7 @@ function PageTop({ onPop, onMore }: { onPop: () => void; onMore?: () => void }) 
           accessibilityLabel="Playlist options"
           hitSlop={8}
           onPress={onMore}
-          style={({ pressed }) => [styles.collNavButton, pressed && PRESSED]}
+          style={[styles.collNavButton]}
         >
           <ControlIcon name="more" size={20} />
         </Pressable>
@@ -1025,7 +1027,7 @@ const GroupRow = memo(function GroupRow({ group, kind, onOpen }: { group: TrackG
       onPress={() =>
         onOpen(route, cover.current, (size) => <CoverCollage tracks={group.tracks} size={size} radius={HERO_RADIUS} />)
       }
-      style={({ pressed }) => [styles.collRow, pressed && styles.librarySortChipPressed]}
+      style={[styles.collRow]}
     >
       <View ref={cover} collapsable={false}>
         <CoverCollage tracks={group.tracks} size={56} radius={12} />
@@ -1086,6 +1088,8 @@ function SongsPage({
   onDoneEditing?: () => void;
 }) {
   const barScroll = useBarScroll();
+  /** A song is being dragged in the playlist editor: the page holds still. */
+  const [reordering, setReordering] = useState(false);
   const styles = useAppStyles();
   const favorites = useFavoriteIds();
   const heroRef = useRef<ViewNode>(null);
@@ -1128,7 +1132,7 @@ function SongsPage({
               accessibilityRole="button"
               accessibilityLabel={`Play ${title}`}
               onPress={() => playAll(false)}
-              style={({ pressed }) => [styles.primaryButton, styles.collHeroButton, pressed && styles.primaryButtonPressed]}
+              style={[styles.primaryButton, styles.collHeroButton]}
             >
               <Ionicons accessible={false} name="play" size={18} color={String(styles.primaryButtonLabel.color)} />
               <Text style={styles.primaryButtonLabel}>Play</Text>
@@ -1137,7 +1141,7 @@ function SongsPage({
               accessibilityRole="button"
               accessibilityLabel={`Shuffle ${title}`}
               onPress={() => playAll(true)}
-              style={({ pressed }) => [styles.moreActionSoft, styles.collHeroButton, pressed && PRESSED]}
+              style={[styles.moreActionSoft, styles.collHeroButton]}
             >
               <ControlIcon name="shuffle" size={16} tone="accent" />
               <Text style={styles.homeLinkLabel}>Shuffle</Text>
@@ -1150,7 +1154,7 @@ function SongsPage({
               <Pressable
                 accessibilityRole="button"
                 onPress={onAdd}
-                style={({ pressed }) => [styles.moreActionSoft, styles.collHeroButton, styles.collHeroAdd, pressed && PRESSED]}
+                style={[styles.moreActionSoft, styles.collHeroButton, styles.collHeroAdd]}
               >
                 <ControlIcon name="plus" size={16} tone="accent" />
                 <Text style={styles.homeLinkLabel}>Add songs</Text>
@@ -1169,7 +1173,7 @@ function SongsPage({
             <Pressable
               accessibilityRole="button"
               onPress={onAdd}
-              style={({ pressed }) => [styles.libraryShuffle, styles.libraryShuffleFirst, pressed && styles.librarySortChipPressed]}
+              style={[styles.libraryShuffle, styles.libraryShuffleFirst]}
             >
               <ControlIcon name="plus" size={15} tone="accent" />
               <Text style={styles.libraryShuffleText}>Add songs</Text>
@@ -1182,7 +1186,7 @@ function SongsPage({
               accessibilityRole="button"
               onPress={onDoneEditing}
               hitSlop={{ top: 4, bottom: 4 }}
-              style={({ pressed }) => [styles.librarySortLink, pressed && styles.librarySortChipPressed]}
+              style={[styles.librarySortLink]}
             >
               <Text style={styles.libraryShuffleText}>Done</Text>
             </Pressable>
@@ -1201,6 +1205,7 @@ function SongsPage({
             onSelect={(index) => shown[index] && playRow(shown[index])}
             onMove={(from, to) => shown[from] && shown[to] && movePlaylistTrack(playlist.id, shown[from].id, shown[to].id)}
             onRemove={(index) => shown[index] && removeFromPlaylist(playlist.id, shown[index].id)}
+            onDraggingChange={setReordering}
           />
         </View>
       ) : null}
@@ -1218,6 +1223,8 @@ function SongsPage({
         onScroll={barScroll}
         scrollEventThrottle={32}
         ListHeaderComponent={header}
+        // Still while a song is dragged in the playlist editor, so the drag keeps the finger.
+        scrollEnabled={!reordering}
         renderItem={({ item }) => {
           const isCurrent = item.id === currentTrackId;
           return (

@@ -2,7 +2,7 @@ import { File } from 'expo-file-system';
 import { useEffect, useMemo } from 'react';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 
-import { getCoverThumb } from '../../modules/muse-audio-metadata';
+import { getCoverThumb, getWidgetCover } from '../../modules/muse-audio-metadata';
 import { getSongCover } from '../library/covers';
 import { getGoalSummary, getStreaks } from '../history/stats';
 import { getPlaybackController } from '../playback/PlaybackController';
@@ -14,7 +14,14 @@ import { localDay } from './today';
 /** Changes this close together redraw the widgets once. */
 const SETTLE_MS = 400;
 
-/** A song's cover as a data URI for the widgets (they cannot read files): the cover Muse shows, list size. */
+/** The last cover handed to the widgets, so play and pause do not read it again. */
+let lastCover: { uri: string; data: string | null } | null = null;
+
+/**
+ * A song's cover as a data URI for the widgets (they cannot read files): the
+ * cover Muse shows, as a small copy. Widgets decode it at full size once per
+ * redraw, and a picked cover can be 3000 px (36 MB).
+ */
 async function coverData(track: MusicTrack): Promise<string | null> {
   try {
     const own = getSongCover(track.id);
@@ -25,8 +32,15 @@ async function coverData(track: MusicTrack): Promise<string | null> {
     if (!uri || !uri.startsWith('file://')) {
       return null;
     }
-    const base64 = await new File(uri).base64();
-    return `data:image/${uri.toLowerCase().endsWith('.png') ? 'png' : 'jpeg'};base64,${base64}`;
+    if (lastCover?.uri === uri) {
+      return lastCover.data;
+    }
+    const small = await getWidgetCover(uri);
+    const data = small
+      ? `data:image/${small.toLowerCase().endsWith('.png') ? 'png' : 'jpeg'};base64,${await new File(small).base64()}`
+      : null;
+    lastCover = { uri, data };
+    return data;
   } catch {
     return null;
   }

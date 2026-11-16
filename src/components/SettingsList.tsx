@@ -1,9 +1,10 @@
 import { Children, Fragment, useEffect, type ComponentProps, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useAppStyles } from '../theme/styles';
-import { EASE_OUT } from '../motion/motion';
+import { GLIDE_SPRING } from '../motion/motion';
 import { hapticSelection } from '../utils/haptics';
 import { ControlIcon, opticalSize } from './icons';
 
@@ -29,7 +30,8 @@ export const TILE = {
   slate: '#64748B',
 } as const;
 
-const SWITCH_TIMING = { duration: 180, easing: EASE_OUT };
+/** The thumb stretches this much wider halfway across, like a drop of liquid. */
+const THUMB_STRETCH = 8;
 
 export function SettingsSection({
   title,
@@ -225,11 +227,14 @@ export function SettingsSwitchRow({
   // Starts where it rests, so opening Settings does not animate it.
   const on = useSharedValue(shown ? 1 : 0);
   useEffect(() => {
-    on.set(withTiming(shown ? 1 : 0, SWITCH_TIMING));
+    on.set(withSpring(shown ? 1 : 0, GLIDE_SPRING));
   }, [on, shown]);
-  const thumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: on.get() * 20 }],
-  }));
+  // Width on the thumb only: it has no children, so nothing else re-lays out.
+  const thumbStyle = useAnimatedStyle(() => {
+    const q = Math.min(1, Math.max(0, on.get()));
+    const extra = THUMB_STRETCH * 4 * q * (1 - q);
+    return { width: 27 + extra, transform: [{ translateX: on.get() * 20 - extra / 2 }] };
+  });
   return (
     <Pressable
       accessibilityRole="switch"

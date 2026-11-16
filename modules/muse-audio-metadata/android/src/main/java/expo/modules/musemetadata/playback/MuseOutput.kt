@@ -11,6 +11,7 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
+import androidx.media3.exoplayer.audio.DefaultAudioSink.AudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutput
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import expo.modules.musemetadata.formats.PcmConverter
@@ -127,8 +128,23 @@ object MuseOutput {
  */
 internal class MuseAudioOutputProvider(
   context: Context,
-  private val inner: AudioTrackAudioOutputProvider = AudioTrackAudioOutputProvider.Builder(context).build(),
+  private val inner: AudioTrackAudioOutputProvider =
+    AudioTrackAudioOutputProvider.Builder(context).setAudioTrackBufferSizeProvider(BUFFER_SIZES).build(),
 ) : ForwardingAudioOutputProvider(inner) {
+  private companion object {
+    /** Muse's fastest speed (SPEED_OPTIONS in src/library/trackSpeeds.ts). */
+    const val MAX_SPEED = 2.0
+
+    // Speed goes to Android's track, so Media3 sizes the track for its 8x limit:
+    // 2 s of audio at 1x, filled before sound starts after play or a seek. Sized
+    // for Muse's 2x instead, Media3's own minimum (250 ms at that speed) is kept.
+    val BUFFER_SIZES = AudioTrackBufferSizeProvider { minBuffer, encoding, outputMode, frameSize, sampleRate, bitrate, maxSpeed ->
+      AudioTrackBufferSizeProvider.DEFAULT.getBufferSizeInBytes(
+        minBuffer, encoding, outputMode, frameSize, sampleRate, bitrate, minOf(maxSpeed, MAX_SPEED),
+      )
+    }
+  }
+
   private class Plan(val encoding: Int, val device: AudioDeviceInfo?, val dop: Boolean, val silence: Boolean)
 
   /** The plan for each output config handed out (OutputConfig is a value type). */

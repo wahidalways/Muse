@@ -1,5 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { SettingsRow, SettingsSection } from '../components/SettingsList';
 import { setPreference, usePreferences } from '../settings/preferences';
