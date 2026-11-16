@@ -158,10 +158,18 @@ index 0000000..d8b1bec
 +  }
 +}
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 53c36f7..38a3707 100644
+index 53c36f7..94f216c 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -61,6 +61,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -25,6 +25,7 @@ import androidx.media3.session.MediaStyleNotificationHelper
+ import androidx.media3.session.SessionCommand
+ import expo.modules.audio.AudioLockScreenOptions
+ import expo.modules.audio.LockScreenPlayable
++import expo.modules.audio.MuseHooks
+ import expo.modules.audio.Metadata
+ import expo.modules.audio.PlayRequestingPlayer
+ import expo.modules.audio.getPlaybackServiceErrorMessage
+@@ -61,6 +62,9 @@ class AudioControlsService : MediaSessionService() {
        weakContext = value?.let { WeakReference(it) }
      }
  
@@ -171,7 +179,7 @@ index 53c36f7..38a3707 100644
    var playsInSilentMode: Boolean = true
    var playbackListener: Player.Listener? = null
  
-@@ -94,6 +97,7 @@ class AudioControlsService : MediaSessionService() {
+@@ -94,6 +98,7 @@ class AudioControlsService : MediaSessionService() {
          ACTION_SEEK_BACKWARD -> seekBackward()
          ACTION_NEXT_TRACK -> nextTrack()
          ACTION_PREVIOUS_TRACK -> previousTrack()
@@ -179,7 +187,7 @@ index 53c36f7..38a3707 100644
        }
      }
  
-@@ -123,7 +127,7 @@ class AudioControlsService : MediaSessionService() {
+@@ -123,7 +128,7 @@ class AudioControlsService : MediaSessionService() {
  
    private fun buildPlaceholderNotification(): Notification =
      NotificationCompat.Builder(this, CHANNEL_ID)
@@ -188,7 +196,7 @@ index 53c36f7..38a3707 100644
        .setContentTitle("‎")
        .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
        .setSilent(true)
-@@ -134,6 +138,15 @@ class AudioControlsService : MediaSessionService() {
+@@ -134,6 +139,15 @@ class AudioControlsService : MediaSessionService() {
      super.onCreate()
      audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
      createNotificationChannelIfNeeded()
@@ -204,7 +212,7 @@ index 53c36f7..38a3707 100644
    }
  
    private fun shouldPlayInSilentMode(): Boolean {
-@@ -143,20 +156,19 @@ class AudioControlsService : MediaSessionService() {
+@@ -143,20 +157,19 @@ class AudioControlsService : MediaSessionService() {
    private fun createNotificationChannelIfNeeded() {
      val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -233,7 +241,7 @@ index 53c36f7..38a3707 100644
      return PendingIntent.getActivity(
        this,
        0,
-@@ -179,7 +191,7 @@ class AudioControlsService : MediaSessionService() {
+@@ -179,7 +192,7 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return null
  
      val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -242,7 +250,7 @@ index 53c36f7..38a3707 100644
        // If the title is null or empty string android sets the notification to "<AppName> is running..." we want to keep the notification empty so we \u200E to keep the text empty.
        .setContentTitle(currentMetadata?.title ?: "\u200E")
        .setContentText(currentMetadata?.artist)
-@@ -262,6 +274,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -262,6 +275,9 @@ class AudioControlsService : MediaSessionService() {
          compactViewIndices.add(currentIndex)
        }
  
@@ -252,7 +260,7 @@ index 53c36f7..38a3707 100644
        style.setShowActionsInCompactView(*compactViewIndices.toIntArray())
      }
  
-@@ -354,6 +369,8 @@ class AudioControlsService : MediaSessionService() {
+@@ -354,6 +370,8 @@ class AudioControlsService : MediaSessionService() {
        )
      }
  
@@ -261,7 +269,7 @@ index 53c36f7..38a3707 100644
      session.setCustomLayout(mediaButtons)
      session.setMediaButtonPreferences(mediaButtons)
    }
-@@ -391,8 +408,16 @@ class AudioControlsService : MediaSessionService() {
+@@ -391,8 +409,16 @@ class AudioControlsService : MediaSessionService() {
            e
          )
        }
@@ -278,7 +286,7 @@ index 53c36f7..38a3707 100644
      }
    }
  
-@@ -598,8 +623,17 @@ class AudioControlsService : MediaSessionService() {
+@@ -598,8 +624,17 @@ class AudioControlsService : MediaSessionService() {
  
        artworkLoadJob = scope.launch {
          try {
@@ -297,7 +305,7 @@ index 53c36f7..38a3707 100644
            }
  
            if (isActive) {
-@@ -641,11 +675,13 @@ class AudioControlsService : MediaSessionService() {
+@@ -641,11 +676,13 @@ class AudioControlsService : MediaSessionService() {
      val notificationManager: NotificationManager =
        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
      notificationManager.cancel(notificationId)
